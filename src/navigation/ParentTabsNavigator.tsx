@@ -3,6 +3,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ParentOverviewScreen } from "@/screens/parent/ParentOverviewScreen";
 import { ParentChildrenScreen } from "@/screens/parent/ParentChildrenScreen";
 import { ParentSettingsScreen } from "@/screens/parent/ParentSettingsScreen";
+import { ParentSubmissionsScreen } from "@/screens/parent/ParentSubmissionsScreen";
 import { ParentTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 
@@ -17,13 +18,20 @@ export function ParentTabsNavigator() {
         tabBarInactiveTintColor: colors.subtext,
         tabBarIcon: ({ color, size }) => {
           const iconName =
-            route.name === "Overview" ? "view-dashboard-outline" : route.name === "Children" ? "account-group-outline" : "cog-outline";
+            route.name === "Overview"
+              ? "view-dashboard-outline"
+              : route.name === "Children"
+                ? "account-group-outline"
+                : route.name === "Review"
+                  ? "camera-account"
+                  : "cog-outline";
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Overview" component={ParentOverviewScreen} />
       <Tab.Screen name="Children" component={ParentChildrenScreen} />
+      <Tab.Screen name="Review" component={ParentSubmissionsScreen} options={{ title: "Chore Reviews" }} />
       <Tab.Screen name="Settings" component={ParentSettingsScreen} />
     </Tab.Navigator>
   );

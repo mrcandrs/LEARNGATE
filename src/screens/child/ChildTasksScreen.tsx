@@ -6,6 +6,7 @@ import { TaskListItem } from "@/components/TaskListItem";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
+import { pickTaskPhotoFromCamera, uploadTaskEvidencePhoto } from "@/services/taskEvidence";
 
 type ChildTaskRow = {
   id: string;
@@ -22,9 +23,22 @@ function getActionLabel(task: ChildTaskRow) {
     return "Done";
   }
   if (task.category === "chore" && task.requires_camera) {
+    if (task.status === "submitted") {
+      return "Waiting";
+    }
     return "Verify";
   }
   return "Complete";
+}
+
+function isActionDisabled(task: ChildTaskRow) {
+  if (task.status === "completed") {
+    return true;
+  }
+  if (task.category === "chore" && task.requires_camera && task.status === "submitted") {
+    return true;
+  }
+  return false;
 }
 
 export function ChildTasksScreen() {
@@ -34,6 +48,7 @@ export function ChildTasksScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
 
   const loadTasks = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -82,34 +97,88 @@ export function ChildTasksScreen() {
     void loadTasks();
   }, [loadTasks]);
 
-  const completeTask = async (task: ChildTaskRow) => {
+  const completeTaskWithoutCamera = async (task: ChildTaskRow) => {
     if (!supabase || !childId || task.status === "completed") {
       return;
     }
     setError(null);
-    const nextStatus = task.category === "chore" && task.requires_camera ? "submitted" : "completed";
-    const updatePayload: { status: string; completed_at?: string } = { status: nextStatus };
-    if (nextStatus === "completed") {
-      updatePayload.completed_at = new Date().toISOString();
-    }
 
-    const { error: updateError } = await supabase.from("tasks").update(updatePayload).eq("id", task.id);
+    const { error: updateError } = await supabase
+      .from("tasks")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", task.id);
+
     if (updateError) {
       setError(updateError.message);
       return;
     }
 
-    if (nextStatus === "completed") {
+    await supabase.from("activity_logs").insert({
+      child_id: childId,
+      type: "task_completed",
+      points: task.xp_reward,
+      metadata: { task_id: task.id, title: task.title },
+    });
+
+    setSnackbar("Task completed!");
+    await loadTasks();
+  };
+
+  const verifyChoreWithCamera = async (task: ChildTaskRow) => {
+    if (!supabase || !childId) {
+      return;
+    }
+    setError(null);
+    setUploadingTaskId(task.id);
+
+    try {
+      const uri = await pickTaskPhotoFromCamera();
+      if (!uri) {
+        return;
+      }
+
+      const path = await uploadTaskEvidencePhoto({ childId, taskId: task.id, localUri: uri });
+
+      const { error: insertError } = await supabase.from("task_submissions").insert({
+        task_id: task.id,
+        child_id: childId,
+        image_url: path,
+        status: "submitted",
+      });
+
+      if (insertError) {
+        setError(insertError.message);
+        return;
+      }
+
+      const { error: taskUpdateError } = await supabase.from("tasks").update({ status: "submitted" }).eq("id", task.id);
+
+      if (taskUpdateError) {
+        setError(taskUpdateError.message);
+        return;
+      }
+
       await supabase.from("activity_logs").insert({
         child_id: childId,
-        type: "task_completed",
-        points: task.xp_reward,
-        metadata: { task_id: task.id, title: task.title },
+        type: "chore_submitted",
+        points: 0,
+        metadata: { task_id: task.id, title: task.title, storage_path: path },
       });
-    }
 
-    setSnackbar(nextStatus === "submitted" ? "Task submitted for verification." : "Task completed!");
-    await loadTasks();
+      setSnackbar("Photo submitted for parent review.");
+      await loadTasks();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not verify chore.");
+    } finally {
+      setUploadingTaskId(null);
+    }
+  };
+
+  const onTaskAction = (task: ChildTaskRow) => {
+    if (task.category === "chore" && task.requires_camera) {
+      return verifyChoreWithCamera(task);
+    }
+    return completeTaskWithoutCamera(task);
   };
 
   const learningTasks = tasks.filter((task) => task.category === "learning");
@@ -121,7 +190,7 @@ export function ChildTasksScreen() {
         Daily Missions
       </Text>
       <Text variant="bodyMedium" style={styles.subtitle}>
-        Complete 3 tasks to unlock games.
+        Complete tasks to earn stars. Chores with a camera need a photo for your parent to approve.
       </Text>
       {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -139,8 +208,9 @@ export function ChildTasksScreen() {
             subtitle={`Status: ${task.status}`}
             reward={`+${task.xp_reward}`}
             actionLabel={actionLabel}
-            actionDisabled={task.status === "completed" || task.status === "submitted"}
-            onActionPress={() => void completeTask(task)}
+            actionDisabled={isActionDisabled(task)}
+            actionLoading={uploadingTaskId === task.id}
+            onActionPress={() => void onTaskAction(task)}
           />
         );
       })}
@@ -158,12 +228,13 @@ export function ChildTasksScreen() {
             subtitle={task.requires_camera ? "Camera verification needed" : `Status: ${task.status}`}
             reward={`+${task.xp_reward}`}
             actionLabel={actionLabel}
-            actionDisabled={task.status === "completed" || task.status === "submitted"}
-            onActionPress={() => void completeTask(task)}
+            actionDisabled={isActionDisabled(task)}
+            actionLoading={uploadingTaskId === task.id}
+            onActionPress={() => void onTaskAction(task)}
           />
         );
       })}
-      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
+      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={2200}>
         {snackbar ?? ""}
       </Snackbar>
     </ScreenContainer>

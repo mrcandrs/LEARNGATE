@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { Button, Card, Text } from "react-native-paper";
 import { colors } from "@/theme/theme";
 
@@ -9,9 +9,18 @@ type TaskListItemProps = {
   actionLabel: string;
   onActionPress?: () => void;
   actionDisabled?: boolean;
+  actionLoading?: boolean;
 };
 
-export function TaskListItem({ title, subtitle, reward, actionLabel, onActionPress, actionDisabled }: TaskListItemProps) {
+export function TaskListItem({
+  title,
+  subtitle,
+  reward,
+  actionLabel,
+  onActionPress,
+  actionDisabled,
+  actionLoading,
+}: TaskListItemProps) {
   return (
     <Card style={styles.card}>
       <Card.Content style={styles.content}>
@@ -28,9 +37,13 @@ export function TaskListItem({ title, subtitle, reward, actionLabel, onActionPre
             {reward}
           </Text>
           {onActionPress ? (
-            <Button mode="text" compact onPress={onActionPress} disabled={actionDisabled} labelStyle={styles.actionLabel}>
-              {actionLabel}
-            </Button>
+            actionLoading ? (
+              <ActivityIndicator size="small" color={colors.primaryDark} />
+            ) : (
+              <Button mode="text" compact onPress={onActionPress} disabled={actionDisabled} labelStyle={styles.actionLabel}>
+                {actionLabel}
+              </Button>
+            )
           ) : (
             <Text variant="labelLarge" style={styles.actionLabel}>
               {actionLabel}

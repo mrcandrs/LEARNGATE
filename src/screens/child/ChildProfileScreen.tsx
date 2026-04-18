@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet } from "react-native";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
@@ -15,7 +16,7 @@ type ChildProfile = {
 };
 
 export function ChildProfileScreen() {
-  const { isSupabaseConfigured } = useAuth();
+  const { isSupabaseConfigured, signOut } = useAuth();
   const [profile, setProfile] = useState<ChildProfile | null>(null);
   const [completedTasks, setCompletedTasks] = useState(0);
   const [gamesPlayed, setGamesPlayed] = useState(0);
@@ -124,6 +125,8 @@ export function ChildProfileScreen() {
           {achievements.length === 0 ? <Text>No achievements yet.</Text> : achievements.map((badge) => <Text key={badge}>{badge}</Text>)}
         </Card.Content>
       </Card>
+
+      <PrimaryButton label="Sign Out" onPress={() => void signOut()} mode="outlined" />
     </ScreenContainer>
   );
 }

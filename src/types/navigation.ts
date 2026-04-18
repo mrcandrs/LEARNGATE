@@ -9,6 +9,7 @@ export type ParentTabParamList = {
   Overview: undefined;
   Children: undefined;
   Settings: undefined;
+  Review: undefined;
 };
 
 export type ChildTabParamList = {

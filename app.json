@@ -27,7 +27,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow LEARNGATE to use your camera so you can verify completed chores with a photo."
+        }
+      ]
     ]
   }
 }
