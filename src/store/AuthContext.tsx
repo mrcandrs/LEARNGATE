@@ -20,6 +20,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let mounted = true;
 
+    async function resolveModeFromProfile(userId: string): Promise<AppMode> {
+      if (!supabase) {
+        return "auth";
+      }
+
+      const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+      if (error || !data?.role) {
+        return "auth";
+      }
+
+      return data.role === "child" ? "child" : "parent";
+    }
+
     async function bootstrap() {
       if (!supabase) {
         setIsBootstrapping(false);
@@ -31,15 +44,33 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      setAppMode(data.session ? "parent" : "auth");
+      if (!data.session) {
+        setAppMode("auth");
+        setIsBootstrapping(false);
+        return;
+      }
+
+      const nextMode = await resolveModeFromProfile(data.session.user.id);
+      if (!mounted) {
+        return;
+      }
+      setAppMode(nextMode);
       setIsBootstrapping(false);
     }
 
-    bootstrap();
+    void bootstrap();
 
-    const { data: authListener } = supabase?.auth.onAuthStateChange((_event, session) => {
-      setAppMode(session ? "parent" : "auth");
-    }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
+    const { data: authListener } =
+      supabase?.auth.onAuthStateChange((_event, session) => {
+        if (!session) {
+          setAppMode("auth");
+          return;
+        }
+
+        void resolveModeFromProfile(session.user.id).then((nextMode) => {
+          setAppMode(nextMode);
+        });
+      }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
 
     return () => {
       mounted = false;

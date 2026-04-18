@@ -1,6 +1,7 @@
 export type AuthStackParamList = {
   RoleSelect: undefined;
   ParentLogin: undefined;
+  ParentSignUp: undefined;
   ChildAccess: undefined;
 };
 
