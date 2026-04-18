@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { colors } from "@/theme/theme";
+import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
+import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
-
-type ChildSummary = {
-  id: string;
-  name: string;
-  age: number;
-  difficulty_level: number;
-  stars: number;
-  daily_limit_minutes: number;
-};
+import { useChildProfile } from "@/hooks/useChildProfile";
+import { formatAppError } from "@/utils/errors";
 
 type TaskPreview = {
   id: string;
@@ -22,142 +17,251 @@ type TaskPreview = {
 
 export function ChildHomeScreen() {
   const { isSupabaseConfigured } = useAuth();
-  const [child, setChild] = useState<ChildSummary | null>(null);
+  const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskPreview[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHomeData = useCallback(async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      setIsLoading(false);
-      return;
-    }
+  const loadHomeData = useCallback(
+    async (fromPull = false) => {
+      if (!isSupabaseConfigured || !supabase || !child) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
 
-    setIsLoading(true);
-    setError(null);
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
+      if (fromPull) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
 
-    if (userError || !user) {
-      setError("Unable to resolve child session.");
-      setIsLoading(false);
-      return;
-    }
+      const { data: pendingTasks, error: tasksError } = await supabase
+        .from("tasks")
+        .select("id, title")
+        .eq("child_id", child.id)
+        .in("status", ["pending", "in_progress"])
+        .order("created_at", { ascending: true })
+        .limit(3);
 
-    const { data: childRow, error: childError } = await supabase
-      .from("children")
-      .select("id, name, age, difficulty_level, stars, daily_limit_minutes")
-      .eq("child_user_id", user.id)
-      .maybeSingle();
+      if (tasksError) {
+        setError(formatAppError(tasksError));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setTasks((pendingTasks as TaskPreview[]) ?? []);
 
-    if (childError || !childRow) {
-      setError("No child profile linked to this account.");
-      setIsLoading(false);
-      return;
-    }
+      const { count, error: countError } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("child_id", child.id)
+        .eq("status", "completed");
 
-    setChild(childRow as ChildSummary);
-
-    const { data: pendingTasks, error: tasksError } = await supabase
-      .from("tasks")
-      .select("id, title")
-      .eq("child_id", childRow.id)
-      .in("status", ["pending", "in_progress"])
-      .order("created_at", { ascending: true })
-      .limit(3);
-
-    if (tasksError) {
-      setError(tasksError.message);
-      setIsLoading(false);
-      return;
-    }
-    setTasks((pendingTasks as TaskPreview[]) ?? []);
-
-    const { count, error: countError } = await supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("child_id", childRow.id)
-      .eq("status", "completed");
-
-    if (countError) {
-      setError(countError.message);
-      setIsLoading(false);
-      return;
-    }
-    setCompletedCount(count ?? 0);
-    setIsLoading(false);
-  }, [isSupabaseConfigured]);
+      if (countError) {
+        setError(formatAppError(countError));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setCompletedCount(count ?? 0);
+      setLoading(false);
+      setRefreshing(false);
+    },
+    [isSupabaseConfigured, child]
+  );
 
   useEffect(() => {
-    void loadHomeData();
-  }, [loadHomeData]);
+    if (child) {
+      void loadHomeData(false);
+    } else if (!profileLoading) {
+      setLoading(false);
+    }
+  }, [child, profileLoading, loadHomeData]);
+
+  const onRefresh = useCallback(() => {
+    void refreshProfile();
+    void loadHomeData(true);
+  }, [refreshProfile, loadHomeData]);
+
+  const showError = profileError ?? error;
 
   return (
-    <ScreenContainer scroll>
-      {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
+      <View style={styles.content}>
+        {child ? (
+          <ChildDashboardHeader
+            name={child.name}
+            level={child.difficulty_level}
+            stars={child.stars}
+            dailyLimitMinutes={child.daily_limit_minutes}
+            avatarUrl={child.avatar_url}
+          />
+        ) : null}
 
-      <Card style={styles.headerCard}>
-        <Card.Content>
-          <Text variant="headlineSmall" style={styles.headerTitle}>
-            Hello, {child?.name ?? "Learner"}!
-          </Text>
-          <Text variant="bodyMedium" style={styles.headerSub}>
-            Level {child?.difficulty_level ?? 1} • {child?.stars ?? 0} stars •{" "}
-            {Math.round((child?.daily_limit_minutes ?? 120) / 60)}h left
-          </Text>
-        </Card.Content>
-      </Card>
+        <View style={styles.pad}>
+          {profileLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+          {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
 
-      <Card style={styles.streakCard}>
-        <Card.Content>
-          <Text variant="titleLarge" style={styles.streakTitle}>
-            Keep Going!
-          </Text>
-          <Text>Completed tasks: {completedCount}</Text>
-        </Card.Content>
-      </Card>
+          <Card style={styles.streakCard}>
+            <Card.Content style={styles.streakInner}>
+              <MaterialCommunityIcons name="fire" size={40} color="#FFFFFF" />
+              <View style={styles.streakText}>
+                <Text variant="titleLarge" style={styles.streakTitle}>
+                  Keep your streak!
+                </Text>
+                <Text variant="bodyMedium" style={styles.streakSub}>
+                  {completedCount} tasks completed so far. Keep learning daily.
+                </Text>
+              </View>
+              <View style={styles.streakBadge}>
+                <Text variant="labelLarge" style={styles.streakBadgeText}>
+                  {completedCount}
+                </Text>
+              </View>
+            </Card.Content>
+          </Card>
 
-      <Text variant="headlineSmall" style={styles.sectionTitle}>
-        Today's Tasks
-      </Text>
-      <Card>
-        <Card.Content style={styles.listBlock}>
-          {tasks.length === 0 ? <Text>No pending tasks yet.</Text> : tasks.map((task) => <Text key={task.id}>{task.title}</Text>)}
-        </Card.Content>
-      </Card>
+          <Text variant="titleLarge" style={styles.sectionTitle}>
+            Today&apos;s Tasks
+          </Text>
+          <Card style={styles.taskCard}>
+            <Card.Content style={styles.listBlock}>
+              {loading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+              {!loading && tasks.length === 0 ? (
+                <Text style={styles.emptyText}>No pending tasks yet. You&apos;re all caught up!</Text>
+              ) : (
+                tasks.map((task) => (
+                  <View key={task.id} style={styles.taskRow}>
+                    <MaterialCommunityIcons name="book-open-variant" size={22} color={colors.primary} />
+                    <Text variant="bodyLarge" style={styles.taskTitle}>
+                      {task.title}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </Card.Content>
+          </Card>
+
+          <Text variant="titleLarge" style={styles.sectionTitle}>
+            Recommended Games
+          </Text>
+          <View style={styles.gameRow}>
+            <Card style={[styles.gameMini, { backgroundColor: colors.info }]}>
+              <Text style={styles.gameMiniTitle}>ABC</Text>
+              <Text variant="labelMedium" style={styles.gameMiniSub}>
+                Alphabet Adventure
+              </Text>
+              <Text variant="bodySmall" style={styles.xp}>
+                +50 XP
+              </Text>
+            </Card>
+            <Card style={[styles.gameMini, { backgroundColor: colors.primary }]}>
+              <Text style={styles.gameMiniTitle}>#</Text>
+              <Text variant="labelMedium" style={styles.gameMiniSub}>
+                Number Train
+              </Text>
+              <Text variant="bodySmall" style={styles.xp}>
+                +50 XP
+              </Text>
+            </Card>
+          </View>
+        </View>
+      </View>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  headerCard: {
-    backgroundColor: colors.primary,
+  content: {
+    flex: 1,
   },
-  headerTitle: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-  headerSub: {
-    color: "#EAFBEF",
-    marginTop: 4,
+  pad: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
   },
   streakCard: {
-    backgroundColor: "#F5B614",
+    backgroundColor: colors.streak,
+    borderRadius: radii.md,
+    ...shadows.card,
+  },
+  streakInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  streakText: {
+    flex: 1,
   },
   streakTitle: {
     color: "#FFFFFF",
     fontWeight: "700",
   },
+  streakSub: {
+    color: "rgba(255,255,255,0.95)",
+    marginTop: 4,
+  },
+  streakBadge: {
+    backgroundColor: "rgba(255,255,255,0.25)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+  },
+  streakBadgeText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
   sectionTitle: {
     color: colors.text,
     fontWeight: "700",
+    marginTop: 4,
+  },
+  taskCard: {
+    borderRadius: radii.md,
+    ...shadows.card,
   },
   listBlock: {
+    gap: 12,
+  },
+  taskRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+  },
+  taskTitle: {
+    color: colors.text,
+    flex: 1,
+  },
+  emptyText: {
+    color: colors.subtext,
+  },
+  gameRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  gameMini: {
+    flex: 1,
+    minHeight: 100,
+    padding: 12,
+    borderRadius: radii.md,
+    justifyContent: "space-between",
+  },
+  gameMiniTitle: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  gameMiniSub: {
+    color: "rgba(255,255,255,0.95)",
+    marginTop: 4,
+  },
+  xp: {
+    color: "rgba(255,255,255,0.9)",
+    marginTop: 8,
   },
   errorText: {
     color: "#B91C1C",

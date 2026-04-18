@@ -13,9 +13,13 @@ export function ChildTabsNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: true,
+        headerShown: false,
         tabBarActiveTintColor: colors.primaryDark,
         tabBarInactiveTintColor: colors.subtext,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+        },
         tabBarIcon: ({ color, size }) => {
           const iconName =
             route.name === "Home"
@@ -29,7 +33,7 @@ export function ChildTabsNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={ChildHomeScreen} />
+      <Tab.Screen name="Home" component={ChildHomeScreen} options={{ title: "Home" }} />
       <Tab.Screen name="Games" component={ChildGamesScreen} />
       <Tab.Screen name="Tasks" component={ChildTasksScreen} />
       <Tab.Screen name="MyStuff" component={ChildProfileScreen} options={{ title: "My Stuff" }} />

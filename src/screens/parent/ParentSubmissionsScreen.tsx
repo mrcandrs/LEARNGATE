@@ -3,10 +3,11 @@ import { Image, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Card, Dialog, Portal, Snackbar, Text, TextInput } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { colors } from "@/theme/theme";
+import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { getEvidenceSignedUrl } from "@/services/taskEvidence";
+import { formatAppError } from "@/utils/errors";
 
 type SubmissionRow = {
   id: string;
@@ -30,18 +31,24 @@ export function ParentSubmissionsScreen() {
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<SubmissionRow | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
-  const loadSubmissions = useCallback(async () => {
+  const loadSubmissions = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
-    setIsLoading(true);
+    if (fromPull) {
+      setRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
     const { data, error: qError } = await supabase
       .from("task_submissions")
@@ -52,8 +59,9 @@ export function ParentSubmissionsScreen() {
       .order("created_at", { ascending: false });
 
     if (qError) {
-      setError(qError.message);
+      setError(formatAppError(qError));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -86,10 +94,15 @@ export function ParentSubmissionsScreen() {
     );
     setImageUrls(urlMap);
     setIsLoading(false);
+    setRefreshing(false);
   }, [isSupabaseConfigured]);
 
   useEffect(() => {
-    void loadSubmissions();
+    void loadSubmissions(false);
+  }, [loadSubmissions]);
+
+  const onRefresh = useCallback(() => {
+    void loadSubmissions(true);
   }, [loadSubmissions]);
 
   const approve = async (row: SubmissionRow) => {
@@ -104,7 +117,7 @@ export function ParentSubmissionsScreen() {
       error: userError,
     } = await supabase.auth.getUser();
     if (userError || !user) {
-      setError("Not signed in.");
+      setError(formatAppError(userError ?? new Error("Not signed in.")));
       setBusyId(null);
       return;
     }
@@ -121,7 +134,7 @@ export function ParentSubmissionsScreen() {
       .eq("id", row.id);
 
     if (subErr) {
-      setError(subErr.message);
+      setError(formatAppError(subErr));
       setBusyId(null);
       return;
     }
@@ -132,7 +145,7 @@ export function ParentSubmissionsScreen() {
       .eq("id", row.task_id);
 
     if (taskErr) {
-      setError(taskErr.message);
+      setError(formatAppError(taskErr));
       setBusyId(null);
       return;
     }
@@ -145,7 +158,7 @@ export function ParentSubmissionsScreen() {
       .eq("id", row.child_id);
 
     if (starErr) {
-      setError(starErr.message);
+      setError(formatAppError(starErr));
       setBusyId(null);
       return;
     }
@@ -160,7 +173,7 @@ export function ParentSubmissionsScreen() {
 
     setSnackbar("Submission approved.");
     setBusyId(null);
-    await loadSubmissions();
+    await loadSubmissions(false);
   };
 
   const confirmReject = async () => {
@@ -175,7 +188,7 @@ export function ParentSubmissionsScreen() {
       error: userError,
     } = await supabase.auth.getUser();
     if (userError || !user) {
-      setError("Not signed in.");
+      setError(formatAppError(userError ?? new Error("Not signed in.")));
       setBusyId(null);
       return;
     }
@@ -193,14 +206,14 @@ export function ParentSubmissionsScreen() {
       .eq("id", target.id);
 
     if (subErr) {
-      setError(subErr.message);
+      setError(formatAppError(subErr));
       setBusyId(null);
       return;
     }
 
     const { error: taskErr } = await supabase.from("tasks").update({ status: "pending" }).eq("id", target.task_id);
     if (taskErr) {
-      setError(taskErr.message);
+      setError(formatAppError(taskErr));
       setBusyId(null);
       return;
     }
@@ -217,22 +230,24 @@ export function ParentSubmissionsScreen() {
     setRejectNote("");
     setSnackbar("Submission rejected. Child can try again.");
     setBusyId(null);
-    await loadSubmissions();
+    await loadSubmissions(false);
   };
 
   return (
-    <ScreenContainer scroll>
-      <Text variant="headlineMedium" style={styles.title}>
-        Chore Reviews
+    <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
+      <Text variant="titleMedium" style={styles.kicker}>
+        Pending reviews
       </Text>
       <Text variant="bodyMedium" style={styles.subtitle}>
         Approve or reject photo evidence submitted by your child.
       </Text>
 
-      {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {rows.length === 0 && !isLoading ? <Text>No submissions waiting for review.</Text> : null}
+      {rows.length === 0 && !isLoading ? (
+        <Text style={styles.emptyText}>No submissions waiting for review.</Text>
+      ) : null}
 
       <View style={styles.list}>
         {rows.map((row) => (
@@ -268,7 +283,7 @@ export function ParentSubmissionsScreen() {
         ))}
       </View>
 
-      <PrimaryButton label="Refresh" onPress={() => void loadSubmissions()} mode="text" />
+      <PrimaryButton label="Refresh" onPress={() => void loadSubmissions(false)} mode="text" />
 
       <Portal>
         <Dialog visible={Boolean(rejectTarget)} onDismiss={() => setRejectTarget(null)}>
@@ -292,9 +307,9 @@ export function ParentSubmissionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    color: colors.text,
-    fontWeight: "700",
+  kicker: {
+    color: colors.subtext,
+    marginBottom: 4,
   },
   subtitle: {
     color: colors.subtext,
@@ -305,6 +320,12 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 12,
+    borderRadius: radii.md,
+    ...shadows.card,
+  },
+  emptyText: {
+    color: colors.subtext,
+    lineHeight: 20,
   },
   cardBody: {
     gap: 8,
@@ -312,7 +333,7 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: 200,
-    borderRadius: 8,
+    borderRadius: radii.sm,
     backgroundColor: colors.border,
   },
   meta: {

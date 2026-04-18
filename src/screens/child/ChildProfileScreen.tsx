@@ -1,147 +1,244 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet } from "react-native";
-import { ActivityIndicator, Card, Text } from "react-native-paper";
+import type { ComponentProps } from "react";
+import { Image, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Avatar, Card, Text } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { colors } from "@/theme/theme";
+import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
+import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
-
-type ChildProfile = {
-  id: string;
-  name: string;
-  age: number;
-  difficulty_level: number;
-  stars: number;
-};
+import { useChildProfile } from "@/hooks/useChildProfile";
+import { formatAppError } from "@/utils/errors";
 
 export function ChildProfileScreen() {
   const { isSupabaseConfigured, signOut } = useAuth();
-  const [profile, setProfile] = useState<ChildProfile | null>(null);
+  const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [completedTasks, setCompletedTasks] = useState(0);
   const [gamesPlayed, setGamesPlayed] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadProfile = useCallback(async () => {
-    if (!isSupabaseConfigured || !supabase) {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
+  const loadStats = useCallback(
+    async (fromPull = false) => {
+      if (!isSupabaseConfigured || !supabase || !child) {
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-    if (userError || !user) {
-      setError("Unable to resolve child session.");
-      setIsLoading(false);
-      return;
-    }
+      if (fromPull) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
 
-    const { data: child, error: childError } = await supabase
-      .from("children")
-      .select("id, name, age, difficulty_level, stars")
-      .eq("child_user_id", user.id)
-      .maybeSingle();
+      const { count, error: tasksCountError } = await supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("child_id", child.id)
+        .eq("status", "completed");
+      if (tasksCountError) {
+        setError(formatAppError(tasksCountError));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setCompletedTasks(count ?? 0);
 
-    if (childError || !child) {
-      setError("No child profile linked to this account.");
-      setIsLoading(false);
-      return;
-    }
-    setProfile(child as ChildProfile);
-
-    const { count, error: tasksCountError } = await supabase
-      .from("tasks")
-      .select("id", { count: "exact", head: true })
-      .eq("child_id", child.id)
-      .eq("status", "completed");
-    if (tasksCountError) {
-      setError(tasksCountError.message);
-      setIsLoading(false);
-      return;
-    }
-    setCompletedTasks(count ?? 0);
-
-    // Placeholder metric until a games history table is introduced.
-    const { count: activityCount } = await supabase
-      .from("activity_logs")
-      .select("id", { count: "exact", head: true })
-      .eq("child_id", child.id)
-      .eq("type", "game_played");
-    setGamesPlayed(activityCount ?? 0);
-    setIsLoading(false);
-  }, [isSupabaseConfigured]);
+      const { count: activityCount } = await supabase
+        .from("activity_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("child_id", child.id)
+        .eq("type", "game_played");
+      setGamesPlayed(activityCount ?? 0);
+      setLoading(false);
+      setRefreshing(false);
+    },
+    [isSupabaseConfigured, child]
+  );
 
   useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+    if (child) {
+      void loadStats(false);
+    } else if (!profileLoading) {
+      setLoading(false);
+    }
+  }, [child, profileLoading, loadStats]);
+
+  const onRefresh = useCallback(() => {
+    void refreshProfile();
+    void loadStats(true);
+  }, [refreshProfile, loadStats]);
 
   const achievements = useMemo(() => {
-    const badges: string[] = [];
-    if ((profile?.stars ?? 0) > 0) {
-      badges.push("First Star");
+    type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+    const badges: { icon: IconName; label: string }[] = [];
+    if ((child?.stars ?? 0) > 0) {
+      badges.push({ icon: "star", label: "First Star" });
     }
-    if ((profile?.stars ?? 0) >= 200) {
-      badges.push("Star Collector");
+    if ((child?.stars ?? 0) >= 200) {
+      badges.push({ icon: "star-circle", label: "Star Collector" });
     }
     if (completedTasks >= 10) {
-      badges.push("Task Finisher");
+      badges.push({ icon: "trophy", label: "Task Finisher" });
     }
     if (completedTasks >= 50) {
-      badges.push("Learning Champ");
+      badges.push({ icon: "book-open-page-variant", label: "Learning Champ" });
     }
     return badges;
-  }, [completedTasks, profile?.stars]);
+  }, [completedTasks, child?.stars]);
+
+  const showError = profileError ?? error;
 
   return (
-    <ScreenContainer scroll>
-      {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
+      {child ? (
+        <ChildDashboardHeader
+          name={child.name}
+          level={child.difficulty_level}
+          stars={child.stars}
+          dailyLimitMinutes={child.daily_limit_minutes}
+          avatarUrl={child.avatar_url}
+        />
+      ) : null}
 
-      <Text variant="headlineMedium" style={styles.title}>
-        {profile?.name ?? "Child Profile"}
-      </Text>
-      <Text variant="bodyLarge" style={styles.subtitle}>
-        Age {profile?.age ?? "-"} - Level {profile?.difficulty_level ?? "-"}
-      </Text>
+      <View style={styles.pad}>
+        {profileLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
 
-      <Card>
-        <Card.Title title="Learning Stats" />
-        <Card.Content style={styles.statsList}>
-          <Text>Total Learning Time: --</Text>
-          <Text>Tasks Completed: {completedTasks}</Text>
-          <Text>Games Played: {gamesPlayed}</Text>
-          <Text>Stars Earned: {profile?.stars ?? 0}</Text>
-        </Card.Content>
-      </Card>
+        <View style={styles.identity}>
+          {child?.avatar_url ? (
+            <Image source={{ uri: child.avatar_url }} style={styles.bigAvatar} />
+          ) : (
+            <Avatar.Icon size={120} icon="account" style={styles.bigAvatarPlaceholder} color={colors.primary} />
+          )}
+          <Text variant="headlineSmall" style={styles.name}>
+            {child?.name ?? "Profile"}
+          </Text>
+          <Text variant="bodyLarge" style={styles.subtitle}>
+            Age {child?.age ?? "—"} · Level {child?.difficulty_level ?? "—"}
+          </Text>
+        </View>
 
-      <Card>
-        <Card.Title title="Achievements" />
-        <Card.Content style={styles.statsList}>
-          {achievements.length === 0 ? <Text>No achievements yet.</Text> : achievements.map((badge) => <Text key={badge}>{badge}</Text>)}
-        </Card.Content>
-      </Card>
+        <Card style={styles.card}>
+          <Card.Title title="Learning Stats" titleStyle={styles.cardTitle} />
+          <Card.Content style={styles.statsList}>
+            {loading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+            <StatRow label="Total Learning Time" value="—" />
+            <StatRow label="Tasks Completed" value={String(completedTasks)} />
+            <StatRow label="Games Played" value={String(gamesPlayed)} />
+            <StatRow label="Stars Earned" value={String(child?.stars ?? 0)} />
+          </Card.Content>
+        </Card>
 
-      <PrimaryButton label="Sign Out" onPress={() => void signOut()} mode="outlined" />
+        <Card style={styles.card}>
+          <Card.Title title="Achievements" titleStyle={styles.cardTitle} />
+          <Card.Content style={styles.badgeGrid}>
+            {achievements.length === 0 ? (
+              <Text style={styles.emptyAch}>Complete tasks to unlock achievements.</Text>
+            ) : (
+              achievements.map((b) => (
+                <View key={b.label} style={styles.badge}>
+                  <MaterialCommunityIcons name={b.icon} size={22} color={colors.primary} />
+                  <Text variant="labelSmall" style={styles.badgeLabel}>
+                    {b.label}
+                  </Text>
+                </View>
+              ))
+            )}
+          </Card.Content>
+        </Card>
+
+        <PrimaryButton label="Sign Out" onPress={() => void signOut()} mode="outlined" />
+      </View>
     </ScreenContainer>
   );
 }
 
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statRow}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={styles.statValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  title: {
-    color: colors.text,
+  pad: {
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+    gap: 12,
+  },
+  identity: {
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  bigAvatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.border,
+  },
+  bigAvatarPlaceholder: {
+    backgroundColor: colors.background,
+  },
+  name: {
     fontWeight: "700",
+    color: colors.text,
+    marginTop: 12,
   },
   subtitle: {
     color: colors.subtext,
-    marginBottom: 8,
+    marginTop: 4,
+  },
+  card: {
+    borderRadius: radii.md,
+    ...shadows.card,
+  },
+  cardTitle: {
+    fontWeight: "700",
+    color: colors.text,
   },
   statsList: {
+    gap: 12,
+  },
+  statRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  statLabel: {
+    color: colors.subtext,
+    flex: 1,
+  },
+  statValue: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+  badgeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 10,
+  },
+  badge: {
+    width: "47%",
+    backgroundColor: "#F3F4F6",
+    borderRadius: radii.sm,
+    padding: 12,
+    alignItems: "center",
+    gap: 6,
+  },
+  badgeLabel: {
+    textAlign: "center",
+    color: colors.text,
+  },
+  emptyAch: {
+    color: colors.subtext,
   },
   errorText: {
     color: "#B91C1C",

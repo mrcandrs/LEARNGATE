@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 import { ActivityIndicator, Card, Divider, Snackbar, Switch, Text, TextInput } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { colors } from "@/theme/theme";
+import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { formatAppError } from "@/utils/errors";
 
 type ChildSummary = {
   id: string;
@@ -34,24 +35,32 @@ export function ParentSettingsScreen() {
   const [taskRequirementsInput, setTaskRequirementsInput] = useState("");
   const [rewardMultiplierInput, setRewardMultiplierInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    setIsLoading(true);
+    if (fromPull) {
+      setRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
     const {
       data: { user },
+      error: userError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      setError("Unable to resolve parent user.");
+    if (userError || !user) {
+      setError(formatAppError(userError ?? new Error("Not signed in.")));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -62,8 +71,9 @@ export function ParentSettingsScreen() {
       .order("created_at", { ascending: true });
 
     if (childrenError) {
-      setError(childrenError.message);
+      setError(formatAppError(childrenError));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -79,6 +89,7 @@ export function ParentSettingsScreen() {
       setTaskRequirementsInput("");
       setRewardMultiplierInput("");
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -89,8 +100,9 @@ export function ParentSettingsScreen() {
       .maybeSingle();
 
     if (rulesError) {
-      setError(rulesError.message);
+      setError(formatAppError(rulesError));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -109,10 +121,15 @@ export function ParentSettingsScreen() {
     setTaskRequirementsInput(String(loadedRule.unlock_after_task_count));
     setRewardMultiplierInput(String(loadedRule.reward_multiplier));
     setIsLoading(false);
+    setRefreshing(false);
   }, [isSupabaseConfigured, selectedChildId]);
 
   useEffect(() => {
-    void loadSettings();
+    void loadSettings(false);
+  }, [loadSettings]);
+
+  const onRefresh = useCallback(() => {
+    void loadSettings(true);
   }, [loadSettings]);
 
   const selectedChild = children.find((child) => child.id === selectedChildId);
@@ -148,24 +165,24 @@ export function ParentSettingsScreen() {
 
     const { error: upsertError } = await supabase.from("screen_rules").upsert(payload, { onConflict: "child_id" });
     if (upsertError) {
-      setError(upsertError.message);
+      setError(formatAppError(upsertError));
       return;
     }
     setSnackbar("Parent settings saved successfully.");
-    await loadSettings();
+    await loadSettings(false);
   };
 
   return (
-    <ScreenContainer scroll>
-      <Text variant="headlineMedium" style={styles.title}>
-        Parent Settings
+    <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
+      <Text variant="titleMedium" style={styles.kicker}>
+        Screen time rules, learning defaults, and notifications per child.
       </Text>
 
-      {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {children.length > 0 ? (
-        <Card>
+        <Card style={styles.card}>
           <Card.Title title="Selected Child" />
           <Card.Content style={styles.block}>
             {children.map((child) => (
@@ -182,7 +199,7 @@ export function ParentSettingsScreen() {
         <Text>No child profile found yet. Add a child first in Manage Children.</Text>
       )}
 
-      <Card>
+      <Card style={styles.card}>
         <Card.Title title="Screen Time Controls" />
         <Card.Content style={styles.block}>
           <Text>Daily Time Limit: {selectedChild ? `${selectedChild.daily_limit_minutes} minutes` : "N/A"}</Text>
@@ -201,7 +218,7 @@ export function ParentSettingsScreen() {
         </Card.Content>
       </Card>
 
-      <Card>
+      <Card style={styles.card}>
         <Card.Title title="Learning Settings" />
         <Card.Content style={styles.block}>
           <Text>Default Difficulty: {selectedChild ? `Level ${selectedChild.difficulty_level}` : "N/A"}</Text>
@@ -226,7 +243,7 @@ export function ParentSettingsScreen() {
         </Card.Content>
       </Card>
 
-      <Card>
+      <Card style={styles.card}>
         <Card.Title title="Notifications" />
         <Card.Content style={styles.block}>
           <Text>Daily Report</Text>
@@ -246,7 +263,7 @@ export function ParentSettingsScreen() {
       </Card>
 
       <PrimaryButton label="Save Settings" onPress={() => void saveRules()} disabled={!rule} />
-      <PrimaryButton label="Refresh" onPress={() => void loadSettings()} mode="text" />
+      <PrimaryButton label="Refresh" onPress={() => void loadSettings(false)} mode="text" />
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
         {snackbar ?? ""}
       </Snackbar>
@@ -255,9 +272,13 @@ export function ParentSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    color: colors.text,
-    fontWeight: "700",
+  kicker: {
+    color: colors.subtext,
+    marginBottom: 4,
+  },
+  card: {
+    borderRadius: radii.md,
+    ...shadows.card,
   },
   block: {
     gap: 10,

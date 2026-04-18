@@ -6,6 +6,8 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
+import { formatAppError } from "@/utils/errors";
+import { radii, shadows } from "@/theme/theme";
 
 type ChildRow = {
   id: string;
@@ -30,18 +32,24 @@ export function ParentChildrenScreen() {
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ChildDraft>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
 
-  const loadChildren = useCallback(async () => {
+  const loadChildren = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setChildren([]);
       setDrafts({});
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
-    setIsLoading(true);
+    if (fromPull) {
+      setRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
     const {
       data: { user },
@@ -49,8 +57,9 @@ export function ParentChildrenScreen() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setError("Unable to resolve parent user.");
+      setError(formatAppError(userError ?? new Error("Not signed in.")));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -61,8 +70,9 @@ export function ParentChildrenScreen() {
       .order("created_at", { ascending: true });
 
     if (childrenError) {
-      setError(childrenError.message);
+      setError(formatAppError(childrenError));
       setIsLoading(false);
+      setRefreshing(false);
       return;
     }
 
@@ -79,10 +89,11 @@ export function ParentChildrenScreen() {
     setChildren(rows);
     setDrafts(nextDrafts);
     setIsLoading(false);
+    setRefreshing(false);
   }, [isSupabaseConfigured]);
 
   useEffect(() => {
-    void loadChildren();
+    void loadChildren(false);
   }, [loadChildren]);
 
   const isEmpty = useMemo(() => !isLoading && children.length === 0, [children.length, isLoading]);
@@ -116,27 +127,31 @@ export function ParentChildrenScreen() {
       .eq("id", childId);
 
     if (updateError) {
-      setError(updateError.message);
+      setError(formatAppError(updateError));
       return;
     }
     setSnackbar("Child settings saved successfully.");
-    await loadChildren();
+    await loadChildren(false);
   };
 
+  const onRefresh = useCallback(() => {
+    void loadChildren(true);
+  }, [loadChildren]);
+
   return (
-    <ScreenContainer scroll>
-      <Text variant="headlineMedium" style={styles.title}>
-        Manage Children
+    <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
+      <Text variant="titleMedium" style={styles.kicker}>
+        Edit limits, difficulty, and bedtime for each child.
       </Text>
 
-      {isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {isEmpty ? <Text>No children found for this parent account yet.</Text> : null}
 
       {children.map((child) => {
         const draft = drafts[child.id] ?? child;
         return (
-          <Card key={child.id}>
+          <Card key={child.id} style={styles.childCard}>
             <Card.Title title={child.name} subtitle={`Age ${child.age} - ${child.stars} stars`} />
             <Card.Content style={styles.cardContent}>
               <TextInput
@@ -200,9 +215,13 @@ export function ParentChildrenScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    color: colors.text,
-    fontWeight: "700",
+  kicker: {
+    color: colors.subtext,
+    marginBottom: 8,
+  },
+  childCard: {
+    borderRadius: radii.md,
+    ...shadows.card,
   },
   cardContent: {
     gap: 10,
