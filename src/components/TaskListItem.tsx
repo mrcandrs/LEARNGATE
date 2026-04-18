@@ -1,5 +1,5 @@
 import { StyleSheet, View } from "react-native";
-import { Card, Text } from "react-native-paper";
+import { Button, Card, Text } from "react-native-paper";
 import { colors } from "@/theme/theme";
 
 type TaskListItemProps = {
@@ -7,9 +7,11 @@ type TaskListItemProps = {
   subtitle: string;
   reward: string;
   actionLabel: string;
+  onActionPress?: () => void;
+  actionDisabled?: boolean;
 };
 
-export function TaskListItem({ title, subtitle, reward, actionLabel }: TaskListItemProps) {
+export function TaskListItem({ title, subtitle, reward, actionLabel, onActionPress, actionDisabled }: TaskListItemProps) {
   return (
     <Card style={styles.card}>
       <Card.Content style={styles.content}>
@@ -25,9 +27,15 @@ export function TaskListItem({ title, subtitle, reward, actionLabel }: TaskListI
           <Text variant="bodyMedium" style={styles.reward}>
             {reward}
           </Text>
-          <Text variant="labelLarge" style={styles.actionLabel}>
-            {actionLabel}
-          </Text>
+          {onActionPress ? (
+            <Button mode="text" compact onPress={onActionPress} disabled={actionDisabled} labelStyle={styles.actionLabel}>
+              {actionLabel}
+            </Button>
+          ) : (
+            <Text variant="labelLarge" style={styles.actionLabel}>
+              {actionLabel}
+            </Text>
+          )}
         </View>
       </Card.Content>
     </Card>
