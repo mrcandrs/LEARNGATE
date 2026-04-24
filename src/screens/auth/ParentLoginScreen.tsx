@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text, TextInput } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -9,6 +9,8 @@ import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
 import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
+import { signInWithGoogleOAuth } from "@/services/googleOAuth";
+import { formatAppError } from "@/utils/errors";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
 
@@ -18,6 +20,21 @@ export function ParentLoginScreen({ navigation }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+
+  const handleGoogle = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      setError("Configure Supabase to use Google sign-in.");
+      return;
+    }
+    setError(null);
+    setGoogleBusy(true);
+    const { error: oauthError } = await signInWithGoogleOAuth(supabase);
+    setGoogleBusy(false);
+    if (oauthError) {
+      setError(formatAppError(oauthError));
+    }
+  };
 
   const handleContinue = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -39,7 +56,7 @@ export function ParentLoginScreen({ navigation }: Props) {
     setIsSubmitting(false);
 
     if (signInError) {
-      setError(signInError.message);
+      setError(formatAppError(signInError));
     }
   };
 
@@ -53,49 +70,64 @@ export function ParentLoginScreen({ navigation }: Props) {
           Parent Login
         </Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          Sign in with your account to manage your child&apos;s learning journey.
+          Sign in to manage your child&apos;s learning journey, tasks, and screen time.
         </Text>
       </View>
 
       {isSupabaseConfigured ? (
-        <View style={styles.form}>
-          <TextInput
-            label="Email"
-            mode="outlined"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <TextInput
-            label="Password"
-            mode="outlined"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-        </View>
-      ) : null}
+        <View style={styles.card}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign in with Google"
+            disabled={googleBusy || isSubmitting}
+            onPress={() => void handleGoogle()}
+            style={({ pressed }) => [styles.googleBtn, (pressed || googleBusy) && styles.googleBtnPressed]}
+          >
+            <View style={styles.googleIconWrap}>
+              <MaterialCommunityIcons name="google" size={22} color="#EA4335" />
+            </View>
+            <Text style={styles.googleLabel}>{googleBusy ? "Opening Google…" : "Continue with Google"}</Text>
+            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.subtext} />
+          </Pressable>
 
-      {isSupabaseConfigured ? (
-        <View style={styles.googleCard}>
-          <PrimaryButton
-            label="Sign in with Google (coming soon)"
-            mode="outlined"
-            onPress={() => setError("Connect Google in Supabase Auth, then wire signInWithOAuth here.")}
-          />
-          <Text variant="bodySmall" style={styles.orText}>
-            or use email & password below
-          </Text>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text variant="labelSmall" style={styles.dividerText}>
+              or with email
+            </Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <View style={styles.form}>
+            <TextInput
+              label="Email"
+              mode="outlined"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+            />
+            <TextInput
+              label="Password"
+              mode="outlined"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              outlineColor={colors.border}
+              activeOutlineColor={colors.primary}
+            />
+          </View>
         </View>
       ) : null}
 
       <PrimaryButton
         label={isSupabaseConfigured ? "Sign In" : "Continue in Demo Mode"}
         onPress={() => void handleContinue()}
-        disabled={isSubmitting}
+        disabled={isSubmitting || googleBusy}
       />
 
       {isSupabaseConfigured ? (
@@ -145,23 +177,61 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 8,
   },
-  form: {
-    gap: 10,
-    marginBottom: 8,
-  },
-  googleCard: {
+  card: {
     backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: 12,
-    gap: 8,
+    borderRadius: radii.lg,
+    padding: 16,
+    gap: 14,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  orText: {
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#FFFFFF",
+  },
+  googleBtnPressed: {
+    opacity: 0.88,
+  },
+  googleIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F9FAFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
     color: colors.subtext,
-    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  form: {
+    gap: 10,
   },
   warning: {
     marginTop: 8,

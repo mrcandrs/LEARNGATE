@@ -1,7 +1,7 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ChildHomeScreen } from "@/screens/child/ChildHomeScreen";
-import { ChildGamesScreen } from "@/screens/child/ChildGamesScreen";
+import { ChildGamesStackNavigator } from "@/navigation/ChildGamesStackNavigator";
 import { ChildTasksScreen } from "@/screens/child/ChildTasksScreen";
 import { ChildProfileScreen } from "@/screens/child/ChildProfileScreen";
 import { ChildTabParamList } from "@/types/navigation";
@@ -34,7 +34,7 @@ export function ChildTabsNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={ChildHomeScreen} options={{ title: "Home" }} />
-      <Tab.Screen name="Games" component={ChildGamesScreen} />
+      <Tab.Screen name="Games" component={ChildGamesStackNavigator} options={{ headerShown: false }} />
       <Tab.Screen name="Tasks" component={ChildTasksScreen} />
       <Tab.Screen name="MyStuff" component={ChildProfileScreen} options={{ title: "My Stuff" }} />
     </Tab.Navigator>

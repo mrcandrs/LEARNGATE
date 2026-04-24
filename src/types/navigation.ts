@@ -1,3 +1,6 @@
+import type { NavigatorScreenParams } from "@react-navigation/native";
+import type { GameId } from "@/data/childGames";
+
 export type AuthStackParamList = {
   RoleSelect: undefined;
   ParentLogin: undefined;
@@ -12,9 +15,16 @@ export type ParentTabParamList = {
   Review: undefined;
 };
 
+export type ChildGamesStackParamList = {
+  GamesList: undefined;
+  GamePlay: { gameId: GameId; title: string };
+};
+
 export type ChildTabParamList = {
   Home: undefined;
-  Games: undefined;
+  Games: NavigatorScreenParams<ChildGamesStackParamList> | undefined;
   Tasks: undefined;
   MyStuff: undefined;
 };
+
+export type { GameId };

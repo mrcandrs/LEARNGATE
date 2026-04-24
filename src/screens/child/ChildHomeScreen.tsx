@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NavigationProp } from "@react-navigation/native";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -9,6 +11,8 @@ import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
+import { CHILD_GAME_CATALOG } from "@/data/childGames";
+import type { ChildTabParamList } from "@/types/navigation";
 
 type TaskPreview = {
   id: string;
@@ -16,6 +20,7 @@ type TaskPreview = {
 };
 
 export function ChildHomeScreen() {
+  const navigation = useNavigation<NavigationProp<ChildTabParamList>>();
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskPreview[]>([]);
@@ -150,24 +155,33 @@ export function ChildHomeScreen() {
             Recommended Games
           </Text>
           <View style={styles.gameRow}>
-            <Card style={[styles.gameMini, { backgroundColor: colors.info }]}>
-              <Text style={styles.gameMiniTitle}>ABC</Text>
-              <Text variant="labelMedium" style={styles.gameMiniSub}>
-                Alphabet Adventure
-              </Text>
-              <Text variant="bodySmall" style={styles.xp}>
-                +50 XP
-              </Text>
-            </Card>
-            <Card style={[styles.gameMini, { backgroundColor: colors.primary }]}>
-              <Text style={styles.gameMiniTitle}>#</Text>
-              <Text variant="labelMedium" style={styles.gameMiniSub}>
-                Number Train
-              </Text>
-              <Text variant="bodySmall" style={styles.xp}>
-                +50 XP
-              </Text>
-            </Card>
+            {CHILD_GAME_CATALOG.slice(0, 2).map((game) => (
+              <Pressable
+                key={game.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Play ${game.title}`}
+                style={({ pressed }) => [styles.gameMiniWrap, pressed && styles.gameMiniPressed]}
+                onPress={() =>
+                  navigation.navigate("Games", {
+                    screen: "GamePlay",
+                    params: { gameId: game.id, title: game.title },
+                  })
+                }
+              >
+                <Card style={[styles.gameMini, { backgroundColor: game.color }, shadows.card]}>
+                  <View style={styles.gameMiniTop}>
+                    <Text style={styles.gameMiniTitle}>{game.glyph}</Text>
+                    <MaterialCommunityIcons name="play-circle" size={26} color="rgba(255,255,255,0.95)" />
+                  </View>
+                  <Text variant="labelMedium" style={styles.gameMiniSub}>
+                    {game.title}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.xp}>
+                    +50 XP
+                  </Text>
+                </Card>
+              </Pressable>
+            ))}
           </View>
         </View>
       </View>
@@ -243,11 +257,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
+  gameMiniWrap: {
+    flex: 1,
+  },
+  gameMiniPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
+  },
   gameMini: {
     flex: 1,
-    minHeight: 100,
+    minHeight: 108,
     padding: 12,
     borderRadius: radii.md,
+    justifyContent: "space-between",
+  },
+  gameMiniTop: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
   },
   gameMiniTitle: {
