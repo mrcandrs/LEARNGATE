@@ -120,14 +120,19 @@ export function ChildTasksScreen() {
       return;
     }
 
-    await supabase.from("activity_logs").insert({
-      child_id: child.id,
-      type: "task_completed",
-      points: task.xp_reward,
-      metadata: { task_id: task.id, title: task.title },
+    const { error: awardError } = await supabase.rpc("award_child_points", {
+      p_child_id: child.id,
+      p_points: task.xp_reward,
+      p_event_type: "task_completed",
+      p_metadata: { task_id: task.id, title: task.title, source: "child_task" },
     });
+    if (awardError) {
+      setError(formatAppError(awardError));
+      return;
+    }
 
     setSnackbar("Task completed!");
+    await refreshProfile();
     await loadTasks(false);
   };
 

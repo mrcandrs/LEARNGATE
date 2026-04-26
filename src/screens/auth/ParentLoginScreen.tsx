@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text, TextInput } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { AuthStackParamList } from "@/types/navigation";
@@ -84,7 +84,7 @@ export function ParentLoginScreen({ navigation }: Props) {
             style={({ pressed }) => [styles.googleBtn, (pressed || googleBusy) && styles.googleBtnPressed]}
           >
             <View style={styles.googleIconWrap}>
-              <MaterialCommunityIcons name="google" size={22} color="#EA4335" />
+              <FontAwesome6 name="google" size={20} color="#EA4335" />
             </View>
             <Text style={styles.googleLabel}>{googleBusy ? "Opening Google…" : "Continue with Google"}</Text>
             <MaterialCommunityIcons name="chevron-right" size={22} color={colors.subtext} />

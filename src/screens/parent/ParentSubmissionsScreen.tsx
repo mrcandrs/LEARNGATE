@@ -150,26 +150,17 @@ export function ParentSubmissionsScreen() {
       return;
     }
 
-    const { data: childRow } = await supabase.from("children").select("stars").eq("id", row.child_id).maybeSingle();
-    const currentStars = childRow?.stars ?? 0;
-    const { error: starErr } = await supabase
-      .from("children")
-      .update({ stars: currentStars + xp })
-      .eq("id", row.child_id);
-
-    if (starErr) {
-      setError(formatAppError(starErr));
+    const { error: awardError } = await supabase.rpc("award_child_points", {
+      p_child_id: row.child_id,
+      p_points: xp,
+      p_event_type: "task_completed",
+      p_metadata: { task_id: row.task_id, submission_id: row.id, source: "chore_approved" },
+    });
+    if (awardError) {
+      setError(formatAppError(awardError));
       setBusyId(null);
       return;
     }
-
-    await supabase.from("activity_logs").insert({
-      child_id: row.child_id,
-      actor_profile_id: user.id,
-      type: "task_completed",
-      points: xp,
-      metadata: { task_id: row.task_id, submission_id: row.id, source: "chore_approved" },
-    });
 
     setSnackbar("Submission approved.");
     setBusyId(null);
@@ -218,13 +209,17 @@ export function ParentSubmissionsScreen() {
       return;
     }
 
-    await supabase.from("activity_logs").insert({
-      child_id: target.child_id,
-      actor_profile_id: user.id,
-      type: "task_rejected",
-      points: 0,
-      metadata: { task_id: target.task_id, submission_id: target.id, note: rejectNote.trim() || null },
+    const { error: rejectLogError } = await supabase.rpc("award_child_points", {
+      p_child_id: target.child_id,
+      p_points: 0,
+      p_event_type: "task_rejected",
+      p_metadata: { task_id: target.task_id, submission_id: target.id, note: rejectNote.trim() || null },
     });
+    if (rejectLogError) {
+      setError(formatAppError(rejectLogError));
+      setBusyId(null);
+      return;
+    }
 
     setRejectTarget(null);
     setRejectNote("");

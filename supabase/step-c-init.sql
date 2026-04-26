@@ -243,6 +243,45 @@ $$;
 revoke all on function public.get_child_login_credentials(text, text) from public;
 grant execute on function public.get_child_login_credentials(text, text) to anon, authenticated;
 
+create or replace function public.award_child_points(
+  p_child_id uuid,
+  p_points int,
+  p_event_type text,
+  p_metadata jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  is_allowed boolean;
+  safe_points int := greatest(0, coalesce(p_points, 0));
+begin
+  select exists (
+    select 1
+    from public.children c
+    where c.id = p_child_id
+      and (c.child_user_id = auth.uid() or c.parent_id = auth.uid())
+  )
+  into is_allowed;
+
+  if not is_allowed then
+    raise exception 'Not allowed to award points for this child.';
+  end if;
+
+  update public.children
+  set stars = stars + safe_points
+  where id = p_child_id;
+
+  insert into public.activity_logs (child_id, actor_profile_id, type, points, metadata)
+  values (p_child_id, auth.uid(), p_event_type, safe_points, coalesce(p_metadata, '{}'::jsonb));
+end;
+$$;
+
+revoke all on function public.award_child_points(uuid, int, text, jsonb) from public;
+grant execute on function public.award_child_points(uuid, int, text, jsonb) to authenticated;
+
 -- 13) RLS policies: tasks
 drop policy if exists "tasks_parent_full_access" on public.tasks;
 create policy "tasks_parent_full_access"
