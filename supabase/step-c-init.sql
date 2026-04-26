@@ -17,6 +17,9 @@ create table if not exists public.children (
   id uuid primary key default gen_random_uuid(),
   parent_id uuid not null references public.profiles (id) on delete cascade,
   child_user_id uuid unique references public.profiles (id) on delete set null,
+  login_email text unique,
+  login_secret text,
+  auth_pin text not null default '000000' check (auth_pin ~ '^[0-9]{6}$'),
   name text not null,
   age int not null check (age > 0 and age < 18),
   avatar_url text,
@@ -142,7 +145,10 @@ begin
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'full_name', new.email),
-    'parent'
+    case
+      when coalesce(new.raw_user_meta_data->>'role', 'parent') = 'child' then 'child'
+      else 'parent'
+    end
   )
   on conflict (id) do nothing;
   return new;
@@ -217,6 +223,25 @@ to authenticated
 using (
   child_user_id = auth.uid()
 );
+
+create or replace function public.get_child_login_credentials(p_child_name text, p_pin text)
+returns table (login_email text, login_secret text)
+language sql
+security definer
+set search_path = public
+as $$
+  select c.login_email, c.login_secret
+  from public.children c
+  where lower(c.name) = lower(trim(p_child_name))
+    and c.auth_pin = trim(p_pin)
+    and c.child_user_id is not null
+    and c.login_email is not null
+    and c.login_secret is not null
+  limit 1;
+$$;
+
+revoke all on function public.get_child_login_credentials(text, text) from public;
+grant execute on function public.get_child_login_credentials(text, text) to anon, authenticated;
 
 -- 13) RLS policies: tasks
 drop policy if exists "tasks_parent_full_access" on public.tasks;
