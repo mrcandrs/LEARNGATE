@@ -53,7 +53,7 @@ export function ChildProfileScreen() {
         .from("activity_logs")
         .select("id", { count: "exact", head: true })
         .eq("child_id", child.id)
-        .eq("type", "game_played");
+        .in("type", ["game_played", "game_completed"]);
       setGamesPlayed(activityCount ?? 0);
       setLoading(false);
       setRefreshing(false);

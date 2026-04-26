@@ -36,7 +36,7 @@ create table if not exists public.children (
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
   child_id uuid not null references public.children (id) on delete cascade,
-  category text not null check (category in ('learning', 'chore')),
+  category text not null check (category in ('learning', 'exercise', 'chore')),
   title text not null,
   description text,
   xp_reward int not null default 0 check (xp_reward >= 0),

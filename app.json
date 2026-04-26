@@ -35,6 +35,12 @@
     "plugins": [
       "expo-font",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow LEARNGATE to use your camera for physical exercise activities."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Allow LEARNGATE to use your camera so you can verify completed chores with a photo."

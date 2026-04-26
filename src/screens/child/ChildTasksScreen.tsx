@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -11,20 +13,26 @@ import { useAuth } from "@/store/AuthContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { pickTaskPhotoFromCamera, uploadTaskEvidencePhoto } from "@/services/taskEvidence";
 import { formatAppError } from "@/utils/errors";
+import type { ChildTasksStackParamList } from "@/types/navigation";
+import type { ExerciseId } from "@/data/exercises";
 
 type ChildTaskRow = {
   id: string;
   child_id: string;
-  category: "learning" | "chore";
+  category: "learning" | "exercise" | "chore";
   title: string;
   xp_reward: number;
   requires_camera: boolean;
   status: "pending" | "in_progress" | "submitted" | "approved" | "rejected" | "completed";
+  description: string | null;
 };
 
 function getActionLabel(task: ChildTaskRow) {
   if (task.status === "completed") {
     return "Done";
+  }
+  if (task.category === "exercise") {
+    return "Start";
   }
   if (task.category === "chore" && task.requires_camera) {
     if (task.status === "submitted") {
@@ -39,6 +47,9 @@ function isActionDisabled(task: ChildTaskRow) {
   if (task.status === "completed") {
     return true;
   }
+  if (task.category === "exercise") {
+    return false;
+  }
   if (task.category === "chore" && task.requires_camera && task.status === "submitted") {
     return true;
   }
@@ -46,6 +57,7 @@ function isActionDisabled(task: ChildTaskRow) {
 }
 
 export function ChildTasksScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<ChildTasksStackParamList, "TasksList">>();
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<ChildTaskRow[]>([]);
@@ -72,7 +84,7 @@ export function ChildTasksScreen() {
 
       const { data, error: tasksError } = await supabase
         .from("tasks")
-        .select("id, child_id, category, title, xp_reward, requires_camera, status")
+        .select("id, child_id, category, title, xp_reward, requires_camera, status, description")
         .eq("child_id", child.id)
         .in("status", ["pending", "in_progress", "submitted", "completed"])
         .order("created_at", { ascending: true });
@@ -187,6 +199,21 @@ export function ChildTasksScreen() {
   };
 
   const onTaskAction = (task: ChildTaskRow) => {
+    if (task.category === "exercise") {
+      let exerciseId: ExerciseId = "jumping";
+      if (task.description) {
+        try {
+          const parsed = JSON.parse(task.description);
+          if (parsed?.exerciseId === "squats" || parsed?.exerciseId === "jumping") {
+            exerciseId = parsed.exerciseId;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      navigation.navigate("ExerciseSession", { taskId: task.id, exerciseId, title: task.title });
+      return;
+    }
     if (task.category === "chore" && task.requires_camera) {
       return verifyChoreWithCamera(task);
     }
@@ -194,6 +221,7 @@ export function ChildTasksScreen() {
   };
 
   const learningTasks = tasks.filter((task) => task.category === "learning");
+  const exerciseTasks = tasks.filter((task) => task.category === "exercise");
   const choreTasks = tasks.filter((task) => task.category === "chore");
   const pendingCount = tasks.filter((t) => t.status === "pending" || t.status === "in_progress").length;
   const totalActive = tasks.filter((t) => t.status !== "completed").length;
@@ -255,6 +283,25 @@ export function ChildTasksScreen() {
               actionLabel={actionLabel}
               actionDisabled={isActionDisabled(task)}
               actionLoading={uploadingTaskId === task.id}
+              onActionPress={() => void onTaskAction(task)}
+            />
+          );
+        })}
+
+        <Text variant="titleLarge" style={styles.sectionTitle}>
+          Physical Exercises
+        </Text>
+        {exerciseTasks.length === 0 ? <Text style={styles.empty}>No physical exercises right now.</Text> : null}
+        {exerciseTasks.map((task) => {
+          const actionLabel = getActionLabel(task);
+          return (
+            <TaskListItem
+              key={task.id}
+              title={task.title}
+              subtitle={`Reps required · +${task.xp_reward} stars`}
+              reward={`+${task.xp_reward}`}
+              actionLabel={actionLabel}
+              actionDisabled={isActionDisabled(task)}
               onActionPress={() => void onTaskAction(task)}
             />
           );

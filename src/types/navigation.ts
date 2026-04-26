@@ -1,5 +1,6 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { GameId } from "@/data/childGames";
+import type { ExerciseId } from "@/data/exercises";
 
 export type AuthStackParamList = {
   RoleSelect: undefined;
@@ -20,10 +21,15 @@ export type ChildGamesStackParamList = {
   GamePlay: { gameId: GameId; title: string };
 };
 
+export type ChildTasksStackParamList = {
+  TasksList: undefined;
+  ExerciseSession: { taskId: string; exerciseId: ExerciseId; title: string };
+};
+
 export type ChildTabParamList = {
   Home: undefined;
   Games: NavigatorScreenParams<ChildGamesStackParamList> | undefined;
-  Tasks: undefined;
+  Tasks: NavigatorScreenParams<ChildTasksStackParamList> | undefined;
   MyStuff: undefined;
 };
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Card, Chip, Divider, Snackbar, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Card, Chip, Dialog, Divider, Portal, Snackbar, Text, TextInput } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/theme";
@@ -11,6 +11,7 @@ import { useAuth } from "@/store/AuthContext";
 import { formatAppError } from "@/utils/errors";
 import { radii, shadows } from "@/theme/theme";
 import { env } from "@/config/env";
+import { EXERCISES, type ExerciseId } from "@/data/exercises";
 
 type ChildRow = {
   id: string;
@@ -51,6 +52,11 @@ export function ParentChildrenScreen() {
   const [searchText, setSearchText] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [sortAscending, setSortAscending] = useState(true);
+  const [exerciseTarget, setExerciseTarget] = useState<ChildRow | null>(null);
+  const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping");
+  const [exerciseReps, setExerciseReps] = useState("10");
+  const [exercisePoints, setExercisePoints] = useState("20");
+  const [assigning, setAssigning] = useState(false);
 
   const loadChildren = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -275,6 +281,64 @@ export function ParentChildrenScreen() {
     await loadChildren(false);
   };
 
+  const openAssignExercise = (child: ChildRow) => {
+    const def = EXERCISES[0];
+    setExerciseTarget(child);
+    setExerciseId(def.id);
+    setExerciseReps(String(def.defaultReps));
+    setExercisePoints(String(def.defaultPoints));
+  };
+
+  const assignExercise = async () => {
+    if (!supabase || !exerciseTarget) {
+      return;
+    }
+    setError(null);
+
+    const reps = Number(exerciseReps);
+    const pts = Number(exercisePoints);
+    if (Number.isNaN(reps) || reps <= 0 || reps > 999) {
+      setError("Exercise reps must be a valid number.");
+      return;
+    }
+    if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
+      setError("Exercise points must be a valid number.");
+      return;
+    }
+
+    const {
+      data: { user },
+      error: uError,
+    } = await supabase.auth.getUser();
+    if (uError || !user) {
+      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      return;
+    }
+
+    setAssigning(true);
+    const def = EXERCISES.find((e) => e.id === exerciseId) ?? EXERCISES[0];
+    const payload = {
+      child_id: exerciseTarget.id,
+      category: "exercise",
+      title: def.title,
+      description: JSON.stringify({ exerciseId, targetReps: reps, minutes: def.defaultMinutes }),
+      xp_reward: pts,
+      requires_camera: false,
+      status: "pending",
+      created_by: user.id,
+    };
+    const { error: insError } = await supabase.from("tasks").insert(payload);
+    setAssigning(false);
+
+    if (insError) {
+      setError(formatAppError(insError));
+      return;
+    }
+
+    setExerciseTarget(null);
+    setSnackbar(`Exercise assigned: ${def.title} (${reps} reps)`);
+  };
+
   const onRefresh = useCallback(() => {
     void loadChildren(true);
   }, [loadChildren]);
@@ -376,6 +440,7 @@ export function ParentChildrenScreen() {
               <Text variant="labelLarge" style={styles.sectionLabel}>
                 Learning & Screen Controls
               </Text>
+              <PrimaryButton label="Assign Physical Exercise" mode="outlined" onPress={() => openAssignExercise(child)} />
               <TextInput
                 label="Daily Screen Limit (minutes)"
                 mode="outlined"
@@ -432,6 +497,50 @@ export function ParentChildrenScreen() {
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
         {snackbar ?? ""}
       </Snackbar>
+
+      <Portal>
+        <Dialog visible={Boolean(exerciseTarget)} onDismiss={() => setExerciseTarget(null)}>
+          <Dialog.Title>Assign physical exercise</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={styles.helper}>
+              Assign an exercise to {exerciseTarget?.name ?? "child"}.
+            </Text>
+            <View style={styles.chipRow}>
+              {EXERCISES.map((ex) => (
+                <Chip
+                  key={ex.id}
+                  selected={exerciseId === ex.id}
+                  onPress={() => {
+                    setExerciseId(ex.id);
+                    setExerciseReps(String(ex.defaultReps));
+                    setExercisePoints(String(ex.defaultPoints));
+                  }}
+                >
+                  {ex.title}
+                </Chip>
+              ))}
+            </View>
+            <TextInput
+              label="Target reps"
+              mode="outlined"
+              value={exerciseReps}
+              keyboardType="number-pad"
+              onChangeText={(v) => setExerciseReps(v.replace(/[^0-9]/g, "").slice(0, 3))}
+            />
+            <TextInput
+              label="Reward points (stars)"
+              mode="outlined"
+              value={exercisePoints}
+              keyboardType="number-pad"
+              onChangeText={(v) => setExercisePoints(v.replace(/[^0-9]/g, "").slice(0, 4))}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" mode="text" onPress={() => setExerciseTarget(null)} />
+            <PrimaryButton label={assigning ? "Assigning..." : "Assign"} onPress={() => void assignExercise()} disabled={assigning} />
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScreenContainer>
   );
 }
