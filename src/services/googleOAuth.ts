@@ -58,6 +58,9 @@ export async function signInWithGoogleOAuth(supabase: SupabaseClient): Promise<{
     options: {
       redirectTo,
       skipBrowserRedirect: true,
+      queryParams: {
+        prompt: "select_account",
+      },
     },
   });
 
