@@ -12,6 +12,8 @@ import { formatAppError } from "@/utils/errors";
 import { radii, shadows } from "@/theme/theme";
 import { env } from "@/config/env";
 import { EXERCISES, type ExerciseId } from "@/data/exercises";
+import { CHILD_GAME_CATALOG } from "@/data/childGames";
+import type { GameId } from "@/data/childGames";
 
 type ChildRow = {
   id: string;
@@ -57,6 +59,14 @@ export function ParentChildrenScreen() {
   const [exerciseReps, setExerciseReps] = useState("10");
   const [exercisePoints, setExercisePoints] = useState("20");
   const [assigning, setAssigning] = useState(false);
+  const [learningTarget, setLearningTarget] = useState<ChildRow | null>(null);
+  const [learningGameId, setLearningGameId] = useState<GameId>("alphabet");
+  const [learningPoints, setLearningPoints] = useState("30");
+  const [choreTarget, setChoreTarget] = useState<ChildRow | null>(null);
+  const [choreTitle, setChoreTitle] = useState("");
+  const [chorePoints, setChorePoints] = useState("30");
+  const [assigningLearning, setAssigningLearning] = useState(false);
+  const [assigningChore, setAssigningChore] = useState(false);
 
   const loadChildren = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -339,6 +349,103 @@ export function ParentChildrenScreen() {
     setSnackbar(`Exercise assigned: ${def.title} (${reps} reps)`);
   };
 
+  const openAssignLearning = (child: ChildRow) => {
+    setLearningTarget(child);
+    setLearningGameId("alphabet");
+    setLearningPoints("30");
+  };
+
+  const assignLearning = async () => {
+    if (!supabase || !learningTarget) {
+      return;
+    }
+    setError(null);
+    const pts = Number(learningPoints);
+    if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
+      setError("Learning points must be a valid number.");
+      return;
+    }
+    const {
+      data: { user },
+      error: uError,
+    } = await supabase.auth.getUser();
+    if (uError || !user) {
+      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      return;
+    }
+
+    const game = CHILD_GAME_CATALOG.find((g) => g.id === learningGameId) ?? CHILD_GAME_CATALOG[0];
+    setAssigningLearning(true);
+    const payload = {
+      child_id: learningTarget.id,
+      category: "learning",
+      title: game.title,
+      description: JSON.stringify({ gameId: game.id }),
+      xp_reward: pts,
+      requires_camera: false,
+      status: "pending",
+      created_by: user.id,
+    };
+    const { error: insError } = await supabase.from("tasks").insert(payload);
+    setAssigningLearning(false);
+    if (insError) {
+      setError(formatAppError(insError));
+      return;
+    }
+    setLearningTarget(null);
+    setSnackbar(`Learning task assigned: ${game.title}`);
+  };
+
+  const openAssignChore = (child: ChildRow) => {
+    setChoreTarget(child);
+    setChoreTitle("");
+    setChorePoints("30");
+  };
+
+  const assignChore = async () => {
+    if (!supabase || !choreTarget) {
+      return;
+    }
+    setError(null);
+    if (!choreTitle.trim()) {
+      setError("Chore title is required.");
+      return;
+    }
+    const pts = Number(chorePoints);
+    if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
+      setError("Chore points must be a valid number.");
+      return;
+    }
+    const {
+      data: { user },
+      error: uError,
+    } = await supabase.auth.getUser();
+    if (uError || !user) {
+      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      return;
+    }
+
+    setAssigningChore(true);
+    const payload = {
+      child_id: choreTarget.id,
+      category: "chore",
+      title: choreTitle.trim(),
+      description: JSON.stringify({ requiresPhoto: true }),
+      xp_reward: pts,
+      requires_camera: true,
+      status: "pending",
+      created_by: user.id,
+    };
+    const { error: insError } = await supabase.from("tasks").insert(payload);
+    setAssigningChore(false);
+    if (insError) {
+      setError(formatAppError(insError));
+      return;
+    }
+    setChoreTarget(null);
+    setSnackbar(`Chore assigned: ${choreTitle.trim()}`);
+  };
+
   const onRefresh = useCallback(() => {
     void loadChildren(true);
   }, [loadChildren]);
@@ -440,6 +547,10 @@ export function ParentChildrenScreen() {
               <Text variant="labelLarge" style={styles.sectionLabel}>
                 Learning & Screen Controls
               </Text>
+              <View style={styles.assignRow}>
+                <PrimaryButton label="Assign Learning Game" mode="outlined" onPress={() => openAssignLearning(child)} />
+                <PrimaryButton label="Assign Household Chore" mode="outlined" onPress={() => openAssignChore(child)} />
+              </View>
               <PrimaryButton label="Assign Physical Exercise" mode="outlined" onPress={() => openAssignExercise(child)} />
               <TextInput
                 label="Daily Screen Limit (minutes)"
@@ -540,6 +651,54 @@ export function ParentChildrenScreen() {
             <PrimaryButton label={assigning ? "Assigning..." : "Assign"} onPress={() => void assignExercise()} disabled={assigning} />
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog visible={Boolean(learningTarget)} onDismiss={() => setLearningTarget(null)}>
+          <Dialog.Title>Assign learning game</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={styles.helper}>
+              Choose a mini-game your child must complete to earn rewards.
+            </Text>
+            <View style={styles.chipRow}>
+              {CHILD_GAME_CATALOG.map((g) => (
+                <Chip key={g.id} selected={learningGameId === g.id} onPress={() => setLearningGameId(g.id)}>
+                  {g.title}
+                </Chip>
+              ))}
+            </View>
+            <TextInput
+              label="Reward points (stars)"
+              mode="outlined"
+              value={learningPoints}
+              keyboardType="number-pad"
+              onChangeText={(v) => setLearningPoints(v.replace(/[^0-9]/g, "").slice(0, 4))}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" mode="text" onPress={() => setLearningTarget(null)} />
+            <PrimaryButton label={assigningLearning ? "Assigning..." : "Assign"} onPress={() => void assignLearning()} disabled={assigningLearning} />
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog visible={Boolean(choreTarget)} onDismiss={() => setChoreTarget(null)}>
+          <Dialog.Title>Assign household chore</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={styles.helper}>
+              Child will submit a photo, and you will approve or reject it.
+            </Text>
+            <TextInput label="Chore title" mode="outlined" value={choreTitle} onChangeText={setChoreTitle} />
+            <TextInput
+              label="Reward points (stars)"
+              mode="outlined"
+              value={chorePoints}
+              keyboardType="number-pad"
+              onChangeText={(v) => setChorePoints(v.replace(/[^0-9]/g, "").slice(0, 4))}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" mode="text" onPress={() => setChoreTarget(null)} />
+            <PrimaryButton label={assigningChore ? "Assigning..." : "Assign"} onPress={() => void assignChore()} disabled={assigningChore} />
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </ScreenContainer>
   );
@@ -568,6 +727,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  assignRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,

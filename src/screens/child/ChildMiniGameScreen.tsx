@@ -278,7 +278,7 @@ function createNumberRound(gameId: Props["route"]["params"]["gameId"], settings:
 }
 
 export function ChildMiniGameScreen({ route, navigation }: Props) {
-  const { gameId } = route.params;
+  const { gameId, taskId } = route.params;
   const { child, refresh } = useChildProfile();
   const difficultyLevel = child?.difficulty_level ?? 5;
   const settings = useMemo(() => getGameSettings(difficultyLevel, gameId), [difficultyLevel, gameId]);
@@ -361,7 +361,15 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     async function award() {
-      if (!done || rewardSaved || !child || !supabase || xpEarned <= 0) {
+      if (!done || rewardSaved || !child || !supabase) {
+        return;
+      }
+      // If this game run is tied to a Learning Task, the task completion path awards points.
+      if (taskId) {
+        setRewardSaved(true);
+        return;
+      }
+      if (xpEarned <= 0) {
         return;
       }
       setIsSavingReward(true);
@@ -381,7 +389,58 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       await refresh();
     }
     void award();
-  }, [done, rewardSaved, child, xpEarned, gameId, score, settings.rounds, difficultyLevel, refresh]);
+  }, [done, rewardSaved, child, xpEarned, gameId, score, settings.rounds, difficultyLevel, refresh, taskId]);
+
+  useEffect(() => {
+    async function completeLearningTask() {
+      if (!done || !taskId || !supabase || !child || rewardSaved) {
+        return;
+      }
+      setSaveError(null);
+      setIsSavingReward(true);
+
+      const { data: task, error: taskError } = await supabase
+        .from("tasks")
+        .select("xp_reward, status")
+        .eq("id", taskId)
+        .maybeSingle();
+
+      if (taskError || !task) {
+        setIsSavingReward(false);
+        setSaveError(formatAppError(taskError ?? new Error("Could not load learning task.")));
+        return;
+      }
+
+      if (task.status !== "completed") {
+        const { error: updateError } = await supabase
+          .from("tasks")
+          .update({ status: "completed", completed_at: new Date().toISOString() })
+          .eq("id", taskId);
+        if (updateError) {
+          setIsSavingReward(false);
+          setSaveError(formatAppError(updateError));
+          return;
+        }
+
+        const { error: awardError } = await supabase.rpc("award_child_points", {
+          p_child_id: child.id,
+          p_points: task.xp_reward ?? 0,
+          p_event_type: "learning_completed",
+          p_metadata: { task_id: taskId, game_id: gameId, score, rounds: settings.rounds, source: "learning_task" },
+        });
+        if (awardError) {
+          setIsSavingReward(false);
+          setSaveError(formatAppError(awardError));
+          return;
+        }
+      }
+
+      setIsSavingReward(false);
+      setRewardSaved(true);
+      await refresh(true);
+    }
+    void completeLearningTask();
+  }, [done, taskId, child, gameId, score, settings.rounds, refresh, rewardSaved]);
 
   if (done) {
     return (
@@ -396,7 +455,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
               Score: {score} / {settings.rounds}
             </Text>
             <Text variant="bodyMedium" style={styles.summaryXp}>
-              +{xpEarned} XP earned this round
+              {taskId ? "Completing learning task..." : `+${xpEarned} XP earned this round`}
             </Text>
             {isSavingReward ? (
               <Text variant="bodySmall" style={styles.summaryMeta}>

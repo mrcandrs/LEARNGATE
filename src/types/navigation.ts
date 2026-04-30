@@ -18,7 +18,7 @@ export type ParentTabParamList = {
 
 export type ChildGamesStackParamList = {
   GamesList: undefined;
-  GamePlay: { gameId: GameId; title: string };
+  GamePlay: { gameId: GameId; title: string; taskId?: string };
 };
 
 export type ChildTasksStackParamList = {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NavigationProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -15,6 +16,8 @@ import { pickTaskPhotoFromCamera, uploadTaskEvidencePhoto } from "@/services/tas
 import { formatAppError } from "@/utils/errors";
 import type { ChildTasksStackParamList } from "@/types/navigation";
 import type { ExerciseId } from "@/data/exercises";
+import type { ChildTabParamList } from "@/types/navigation";
+import type { GameId } from "@/data/childGames";
 
 type ChildTaskRow = {
   id: string;
@@ -25,11 +28,15 @@ type ChildTaskRow = {
   requires_camera: boolean;
   status: "pending" | "in_progress" | "submitted" | "approved" | "rejected" | "completed";
   description: string | null;
+  completed_at?: string | null;
 };
 
 function getActionLabel(task: ChildTaskRow) {
   if (task.status === "completed") {
     return "Done";
+  }
+  if (task.category === "learning") {
+    return "Play";
   }
   if (task.category === "exercise") {
     return "Start";
@@ -58,6 +65,7 @@ function isActionDisabled(task: ChildTaskRow) {
 
 export function ChildTasksScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ChildTasksStackParamList, "TasksList">>();
+  const tabNav = useNavigation<NavigationProp<ChildTabParamList>>();
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<ChildTaskRow[]>([]);
@@ -84,7 +92,7 @@ export function ChildTasksScreen() {
 
       const { data, error: tasksError } = await supabase
         .from("tasks")
-        .select("id, child_id, category, title, xp_reward, requires_camera, status, description")
+        .select("id, child_id, category, title, xp_reward, requires_camera, status, description, completed_at")
         .eq("child_id", child.id)
         .in("status", ["pending", "in_progress", "submitted", "completed"])
         .order("created_at", { ascending: true });
@@ -199,6 +207,23 @@ export function ChildTasksScreen() {
   };
 
   const onTaskAction = (task: ChildTaskRow) => {
+    if (task.category === "learning") {
+      let gameId: GameId = "alphabet";
+      if (task.description) {
+        try {
+          const parsed = JSON.parse(task.description);
+          const candidate = parsed?.gameId;
+          if (candidate) {
+            gameId = candidate as GameId;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const title = task.title;
+      tabNav.navigate("Games", { screen: "GamePlay", params: { gameId, title, taskId: task.id } });
+      return;
+    }
     if (task.category === "exercise") {
       let exerciseId: ExerciseId = "jumping";
       if (task.description) {
@@ -220,9 +245,11 @@ export function ChildTasksScreen() {
     return completeTaskWithoutCamera(task);
   };
 
-  const learningTasks = tasks.filter((task) => task.category === "learning");
-  const exerciseTasks = tasks.filter((task) => task.category === "exercise");
-  const choreTasks = tasks.filter((task) => task.category === "chore");
+  const activeTasks = tasks.filter((task) => task.status !== "completed");
+  const completedTasks = tasks.filter((task) => task.status === "completed");
+  const learningTasks = activeTasks.filter((task) => task.category === "learning");
+  const exerciseTasks = activeTasks.filter((task) => task.category === "exercise");
+  const choreTasks = activeTasks.filter((task) => task.category === "chore");
   const pendingCount = tasks.filter((t) => t.status === "pending" || t.status === "in_progress").length;
   const totalActive = tasks.filter((t) => t.status !== "completed").length;
 
@@ -278,7 +305,7 @@ export function ChildTasksScreen() {
             <TaskListItem
               key={task.id}
               title={task.title}
-              subtitle={`Status: ${task.status}`}
+              subtitle={`Required game · +${task.xp_reward} stars`}
               reward={`+${task.xp_reward}`}
               actionLabel={actionLabel}
               actionDisabled={isActionDisabled(task)}
@@ -326,6 +353,22 @@ export function ChildTasksScreen() {
             />
           );
         })}
+
+        <Text variant="titleLarge" style={styles.sectionTitle}>
+          Completed
+        </Text>
+        {completedTasks.length === 0 ? <Text style={styles.empty}>No completed tasks yet today.</Text> : null}
+        {completedTasks.map((task) => (
+          <View key={task.id} style={styles.doneWrap}>
+            <TaskListItem
+              title={task.title}
+              subtitle="Completed"
+              reward={`+${task.xp_reward}`}
+              actionLabel="Done"
+              actionDisabled
+            />
+          </View>
+        ))}
         <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={2200}>
           {snackbar ?? ""}
         </Snackbar>
@@ -389,6 +432,9 @@ const styles = StyleSheet.create({
   empty: {
     color: colors.subtext,
     marginBottom: 8,
+  },
+  doneWrap: {
+    opacity: 0.55,
   },
   errorText: {
     color: "#B91C1C",
