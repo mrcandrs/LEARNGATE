@@ -41,6 +41,12 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow LEARNGATE to share child location for parent safety monitoring."
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "cameraPermission": "Allow LEARNGATE to use your camera so you can verify completed chores with a photo."

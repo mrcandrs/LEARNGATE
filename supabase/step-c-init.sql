@@ -28,6 +28,8 @@ create table if not exists public.children (
   bedtime_start time not null default '20:00',
   bedtime_end time not null default '07:00',
   stars int not null default 0 check (stars >= 0),
+  is_online boolean not null default false,
+  last_seen_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -87,6 +89,19 @@ create table if not exists public.activity_logs (
   created_at timestamptz not null default now()
 );
 
+-- 7) Child location snapshots for parent safety monitoring
+create table if not exists public.child_locations (
+  id uuid primary key default gen_random_uuid(),
+  child_id uuid not null references public.children (id) on delete cascade,
+  lat double precision not null,
+  lng double precision not null,
+  accuracy_m double precision,
+  speed_mps double precision,
+  heading_deg double precision,
+  captured_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
 -- 7) Helpful indexes
 create index if not exists idx_children_parent_id on public.children(parent_id);
 create index if not exists idx_tasks_child_id on public.tasks(child_id);
@@ -96,6 +111,31 @@ create index if not exists idx_task_submissions_task_id on public.task_submissio
 create index if not exists idx_task_submissions_child_id on public.task_submissions(child_id);
 create index if not exists idx_activity_logs_child_id on public.activity_logs(child_id);
 create index if not exists idx_activity_logs_created_at on public.activity_logs(created_at desc);
+create index if not exists idx_child_locations_child_id on public.child_locations(child_id);
+create index if not exists idx_child_locations_captured_at on public.child_locations(captured_at desc);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'children'
+  ) then
+    alter publication supabase_realtime add table public.children;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'child_locations'
+  ) then
+    alter publication supabase_realtime add table public.child_locations;
+  end if;
+end $$;
 
 -- 8) updated_at trigger helper
 create or replace function public.set_updated_at()
@@ -167,6 +207,7 @@ alter table public.tasks enable row level security;
 alter table public.task_submissions enable row level security;
 alter table public.screen_rules enable row level security;
 alter table public.activity_logs enable row level security;
+alter table public.child_locations enable row level security;
 
 -- 11) RLS policies: profiles
 drop policy if exists "profiles_select_own" on public.profiles;
@@ -281,6 +322,23 @@ $$;
 
 revoke all on function public.award_child_points(uuid, int, text, jsonb) from public;
 grant execute on function public.award_child_points(uuid, int, text, jsonb) to authenticated;
+
+create or replace function public.set_child_online_status(p_is_online boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.children
+  set is_online = coalesce(p_is_online, false),
+      last_seen_at = now()
+  where child_user_id = auth.uid();
+end;
+$$;
+
+revoke all on function public.set_child_online_status(boolean) from public;
+grant execute on function public.set_child_online_status(boolean) to authenticated;
 
 -- 13) RLS policies: tasks
 drop policy if exists "tasks_parent_full_access" on public.tasks;
@@ -448,6 +506,63 @@ using (
     select 1 from public.children c
     where c.id = activity_logs.child_id
       and c.child_user_id = auth.uid()
+  )
+);
+
+-- 18) RLS policies: child_locations
+drop policy if exists "child_locations_parent_select" on public.child_locations;
+create policy "child_locations_parent_select"
+on public.child_locations
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.children c
+    where c.id = child_locations.child_id
+      and c.parent_id = auth.uid()
+  )
+);
+
+drop policy if exists "child_locations_child_select_own" on public.child_locations;
+create policy "child_locations_child_select_own"
+on public.child_locations
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.children c
+    where c.id = child_locations.child_id
+      and c.child_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "child_locations_child_insert_own" on public.child_locations;
+create policy "child_locations_child_insert_own"
+on public.child_locations
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.children c
+    where c.id = child_locations.child_id
+      and c.child_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "child_locations_parent_delete_own" on public.child_locations;
+create policy "child_locations_parent_delete_own"
+on public.child_locations
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.children c
+    where c.id = child_locations.child_id
+      and c.parent_id = auth.uid()
   )
 );
 

@@ -4,6 +4,7 @@ import { ParentOverviewScreen } from "@/screens/parent/ParentOverviewScreen";
 import { ParentChildrenScreen } from "@/screens/parent/ParentChildrenScreen";
 import { ParentSettingsScreen } from "@/screens/parent/ParentSettingsScreen";
 import { ParentSubmissionsScreen } from "@/screens/parent/ParentSubmissionsScreen";
+import { ParentLocationScreen } from "@/screens/parent/ParentLocationScreen";
 import { ParentTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 import { ParentHeaderLogout } from "@/navigation/ParentHeaderLogout";
@@ -13,6 +14,7 @@ const Tab = createBottomTabNavigator<ParentTabParamList>();
 const PARENT_TITLES: Record<keyof ParentTabParamList, string> = {
   Overview: "Parent Dashboard",
   Children: "Manage Children",
+  Location: "Safety Location",
   Review: "Chore Reviews",
   Settings: "Settings",
 };
@@ -40,6 +42,8 @@ export function ParentTabsNavigator() {
               ? "view-dashboard-outline"
               : route.name === "Children"
                 ? "account-group-outline"
+                : route.name === "Location"
+                  ? "map-marker-radius-outline"
                 : route.name === "Review"
                   ? "camera-account"
                   : "cog-outline";
@@ -49,6 +53,7 @@ export function ParentTabsNavigator() {
     >
       <Tab.Screen name="Overview" component={ParentOverviewScreen} />
       <Tab.Screen name="Children" component={ParentChildrenScreen} />
+      <Tab.Screen name="Location" component={ParentLocationScreen} />
       <Tab.Screen name="Review" component={ParentSubmissionsScreen} />
       <Tab.Screen name="Settings" component={ParentSettingsScreen} />
     </Tab.Navigator>

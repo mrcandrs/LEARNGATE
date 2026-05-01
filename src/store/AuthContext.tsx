@@ -1,6 +1,7 @@
 import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from "react";
 import { AppMode, UserRole } from "@/types/app";
 import { supabase } from "@/services/supabase";
+import { setChildOnlineStatus } from "@/services/childPresence";
 import { isSupabaseConfigured } from "@/config/env";
 
 type AuthContextValue = {
@@ -54,6 +55,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!mounted) {
         return;
       }
+      if (nextMode === "child") {
+        void setChildOnlineStatus(true);
+      }
       setAppMode(nextMode);
       setIsBootstrapping(false);
     }
@@ -68,6 +72,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         void resolveModeFromProfile(session.user.id).then((nextMode) => {
+          if (nextMode === "child") {
+            void setChildOnlineStatus(true);
+          }
           setAppMode(nextMode);
         });
       }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
@@ -86,6 +93,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       selectRole: (role: UserRole) => setAppMode(role),
       signOut: async () => {
         if (supabase) {
+          await setChildOnlineStatus(false);
           await supabase.auth.signOut();
         }
         setAppMode("auth");

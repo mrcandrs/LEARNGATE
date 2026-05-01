@@ -6,10 +6,13 @@ import { ChildTasksStackNavigator } from "@/navigation/ChildTasksStackNavigator"
 import { ChildProfileScreen } from "@/screens/child/ChildProfileScreen";
 import { ChildTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
+import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
 
 export function ChildTabsNavigator() {
+  useChildLocationTracking();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
