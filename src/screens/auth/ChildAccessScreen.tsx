@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Text, TextInput } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/store/AuthContext";
 import { colors, radii, shadows } from "@/theme/theme";
@@ -16,6 +15,8 @@ export function ChildAccessScreen() {
   const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successToastVisible, setSuccessToastVisible] = useState(false);
+  const lastAttemptRef = useRef<string | null>(null);
 
   const handleChildSignIn = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -30,9 +31,13 @@ export function ChildAccessScreen() {
 
     setError(null);
     setIsSubmitting(true);
+    const normalizedName = childName.trim();
+    const normalizedPin = pin.trim();
+    const attemptKey = `${normalizedName.toLowerCase()}::${normalizedPin}`;
+    lastAttemptRef.current = attemptKey;
     const { data: creds, error: credsError } = await supabase.rpc("get_child_login_credentials", {
-      p_child_name: childName.trim(),
-      p_pin: pin.trim(),
+      p_child_name: normalizedName,
+      p_pin: normalizedPin,
     });
     const loginCreds = Array.isArray(creds) ? creds[0] : null;
     if (credsError || !loginCreds?.login_email || !loginCreds?.login_secret) {
@@ -51,9 +56,37 @@ export function ChildAccessScreen() {
       return;
     }
 
+    setSuccessToastVisible(true);
     setIsSubmitting(false);
     // App mode will be resolved by AuthContext via profiles.role.
   };
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || isSubmitting) {
+      return;
+    }
+    const normalizedName = childName.trim();
+    const normalizedPin = pin.trim();
+    const isReady = normalizedName.length > 0 && normalizedPin.length === 6;
+    if (!isReady) {
+      return;
+    }
+    const nextAttempt = `${normalizedName.toLowerCase()}::${normalizedPin}`;
+    if (lastAttemptRef.current === nextAttempt) {
+      return;
+    }
+    void handleChildSignIn();
+  }, [childName, pin, isSupabaseConfigured, isSubmitting]);
+
+  useEffect(() => {
+    if (!successToastVisible) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSuccessToastVisible(false);
+    }, 1600);
+    return () => clearTimeout(timer);
+  }, [successToastVisible]);
 
   return (
     <ScreenContainer scroll>
@@ -70,6 +103,14 @@ export function ChildAccessScreen() {
         <Text variant="bodyLarge" style={styles.subtitle}>
           Enter your child name and parent PIN.
         </Text>
+        {successToastVisible ? (
+          <View style={styles.successToast}>
+            <MaterialCommunityIcons name="check-circle" size={16} color="#15803D" />
+            <Text variant="labelMedium" style={styles.successToastText}>
+              Logged in successfully
+            </Text>
+          </View>
+        ) : null}
 
         {isSupabaseConfigured ? (
           <View style={styles.formCard}>
@@ -100,12 +141,14 @@ export function ChildAccessScreen() {
             />
           </View>
         ) : null}
-
-        <PrimaryButton
-          label={isSupabaseConfigured ? "Sign In as Child" : "Continue as Child (Demo)"}
-          onPress={() => void handleChildSignIn()}
-          disabled={isSubmitting}
-        />
+        {isSubmitting ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text variant="bodySmall" style={styles.loadingText}>
+              Signing in...
+            </Text>
+          </View>
+        ) : null}
 
         {error ? (
           <Text variant="bodySmall" style={styles.errorText}>
@@ -151,6 +194,22 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     marginBottom: 2,
   },
+  successToast: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  successToastText: {
+    color: "#15803D",
+    fontWeight: "700",
+  },
   formCard: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -159,6 +218,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
+  },
+  loadingRow: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  loadingText: {
+    color: colors.subtext,
   },
   errorText: {
     color: "#B91C1C",
