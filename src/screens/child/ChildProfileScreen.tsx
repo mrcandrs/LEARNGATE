@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentProps } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Avatar, Card, Chip, Text } from "react-native-paper";
+import { ActivityIndicator, Avatar, Card, Chip, Switch, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -12,6 +12,7 @@ import { useAuth } from "@/store/AuthContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
 import { pickChildAvatarFromLibrary, uploadChildAvatar } from "@/services/childAvatar";
+import { useAudioGuidance } from "@/store/AudioGuidanceContext";
 
 type PointsHistoryItem = {
   id: string;
@@ -24,6 +25,7 @@ type PointsFilter = "all" | "games" | "tasks" | "chores" | "exercise";
 export function ChildProfileScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
+  const audio = useAudioGuidance();
   const [completedTasks, setCompletedTasks] = useState(0);
   const [gamesPlayed, setGamesPlayed] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -157,6 +159,38 @@ export function ChildProfileScreen() {
     }
   };
 
+  const audioCard = (
+    <Card style={styles.card}>
+      <Card.Content>
+        <View style={styles.audioRow}>
+          <View style={{ flex: 1 }}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Audio Guide
+            </Text>
+            <Text variant="bodySmall" style={{ color: colors.subtext }}>
+              Read questions out loud to help you focus.
+            </Text>
+          </View>
+          <Switch value={audio.enabled} onValueChange={audio.setEnabled} />
+        </View>
+        <View style={styles.audioChips}>
+          <Chip selected={audio.rate <= 0.86} onPress={() => audio.setRate(0.84)} style={styles.filterChip}>
+            Slow
+          </Chip>
+          <Chip selected={audio.rate > 0.86 && audio.rate < 0.98} onPress={() => audio.setRate(0.92)} style={styles.filterChip}>
+            Normal
+          </Chip>
+          <Chip selected={audio.rate >= 0.98} onPress={() => audio.setRate(1.05)} style={styles.filterChip}>
+            Fast
+          </Chip>
+          <Chip onPress={() => audio.speak("Hi! Let’s learn together.")} style={styles.filterChip}>
+            Test
+          </Chip>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
   return (
     <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
       {child ? (
@@ -191,6 +225,8 @@ export function ChildProfileScreen() {
             Age {child?.age ?? "—"} · Level {child?.difficulty_level ?? "—"}
           </Text>
         </View>
+
+        {audioCard}
 
         <Card style={styles.card}>
           <Card.Title title="Learning Stats" titleStyle={styles.cardTitle} />
@@ -286,6 +322,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
+  audioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  audioChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
   bigAvatar: {
     width: 120,
     height: 120,
@@ -311,6 +358,13 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontWeight: "700",
     color: colors.text,
+  },
+  sectionTitle: {
+    fontWeight: "800",
+    color: colors.text,
+  },
+  filterChip: {
+    backgroundColor: "#F3F4F6",
   },
   statsList: {
     gap: 12,

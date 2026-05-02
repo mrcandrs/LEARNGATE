@@ -8,11 +8,15 @@ import { ChildTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { ChildHeaderLogout } from "@/navigation/ChildHeaderLogout";
+import { useAuth } from "@/store/AuthContext";
+import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
 
 export function ChildTabsNavigator() {
   useChildLocationTracking();
+  const { appMode } = useAuth();
+  useChildHeartbeat({ enabled: appMode === "child", intervalMs: 60_000 });
 
   return (
     <Tab.Navigator

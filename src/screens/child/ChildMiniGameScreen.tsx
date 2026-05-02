@@ -10,6 +10,7 @@ import { colors, radii, shadows } from "@/theme/theme";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
+import { useAudioGuidance } from "@/store/AudioGuidanceContext";
 
 type Props = NativeStackScreenProps<ChildGamesStackParamList, "GamePlay">;
 
@@ -280,6 +281,7 @@ function createNumberRound(gameId: Props["route"]["params"]["gameId"], settings:
 export function ChildMiniGameScreen({ route, navigation }: Props) {
   const { gameId, taskId } = route.params;
   const { child, loading: profileLoading, error: profileError, refresh } = useChildProfile();
+  const audio = useAudioGuidance();
   const difficultyLevel = child?.difficulty_level ?? 5;
   const settings = useMemo(() => getGameSettings(difficultyLevel, gameId), [difficultyLevel, gameId]);
   const [round, setRound] = useState(0);
@@ -328,6 +330,42 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
     const tf = settings.sciencePool[round % settings.sciencePool.length];
     return { mode: "tf", ...tf } as ScienceRound;
   }, [gameId, round, settings]);
+
+  const spokenPrompt = useMemo(() => {
+    if (profileLoading || profileError || done) {
+      return null;
+    }
+    if (gameId === "science") {
+      if (!scienceRound) return null;
+      return scienceRound.mode === "mcq" ? scienceRound.q : scienceRound.q;
+    }
+    if (gameId === "alphabet") {
+      return alphabetRound?.prompt ?? null;
+    }
+    if (gameId === "colors") {
+      return colorRound?.prompt ?? null;
+    }
+    if (gameId === "shapes") {
+      return shapeRound?.prompt ?? null;
+    }
+    return numberRound?.prompt ?? null;
+  }, [alphabetRound, colorRound, done, gameId, numberRound, profileError, profileLoading, scienceRound, shapeRound]);
+
+  useEffect(() => {
+    if (!spokenPrompt) return;
+    audio.speak(spokenPrompt);
+  }, [spokenPrompt, audio]);
+
+  useEffect(() => {
+    if (!feedback) return;
+    audio.speak(feedback);
+  }, [feedback, audio]);
+
+  useEffect(() => {
+    return () => {
+      audio.stop();
+    };
+  }, [audio]);
 
   const advance = useCallback(
     (correct: boolean) => {

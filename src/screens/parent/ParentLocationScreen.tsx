@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
-import { ActivityIndicator, Card, Text } from "react-native-paper";
+import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { useAuth } from "@/store/AuthContext";
 import { supabase } from "@/services/supabase";
@@ -41,6 +41,7 @@ export function ParentLocationScreen() {
   const { isSupabaseConfigured } = useAuth();
   const mapRef = useRef<MapView | null>(null);
   const markerAnimationRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+  const silenceRef = useRef<Record<string, boolean>>({});
   const [children, setChildren] = useState<ChildOption[]>([]);
   const [parentId, setParentId] = useState<string | null>(null);
   const [latestByChild, setLatestByChild] = useState<Record<string, LocationRow>>({});
@@ -50,6 +51,7 @@ export function ParentLocationScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedChildId, setFocusedChildId] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
 
   const loadChildren = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -116,6 +118,29 @@ export function ParentLocationScreen() {
       }
     }
     setLatestByChild(map);
+  }, [children]);
+
+  useEffect(() => {
+    if (!children.length) {
+      silenceRef.current = {};
+      return;
+    }
+    const THRESHOLD_MS = 3 * 60_000;
+    const tick = () => {
+      const now = Date.now();
+      for (const c of children) {
+        const lastSeen = c.last_seen_at ? new Date(c.last_seen_at).getTime() : 0;
+        const silent = !lastSeen || now - lastSeen > THRESHOLD_MS;
+        const prev = silenceRef.current[c.id] ?? false;
+        silenceRef.current[c.id] = silent;
+        if (silent && !prev) {
+          setSnackbar(`No heartbeat from ${c.name} (3+ minutes).`);
+        }
+      }
+    };
+    tick();
+    const t = setInterval(tick, 30_000);
+    return () => clearInterval(t);
   }, [children]);
 
   const handleRefresh = useCallback(async () => {
@@ -475,6 +500,9 @@ export function ParentLocationScreen() {
           </Card>
         </View>
       </View>
+      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={4500}>
+        {snackbar ?? ""}
+      </Snackbar>
     </ScreenContainer>
   );
 }

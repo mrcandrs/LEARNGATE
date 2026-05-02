@@ -12,6 +12,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/poppins";
 import { AuthProvider } from "./src/store/AuthContext";
+import { AudioGuidanceProvider } from "./src/store/AudioGuidanceContext";
 
 WebBrowser.maybeCompleteAuthSession();
 import { RootNavigator } from "./src/navigation/RootNavigator";
@@ -35,9 +36,11 @@ export default function App() {
 
   return (
     <PaperProvider theme={appTheme}>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <AudioGuidanceProvider>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </AudioGuidanceProvider>
     </PaperProvider>
   );
 }
