@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Card, Text } from "react-native-paper";
@@ -288,9 +288,15 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+  const lastSpokenRoundRef = useRef<number | null>(null);
+  const promptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSavingReward, setIsSavingReward] = useState(false);
   const [rewardSaved, setRewardSaved] = useState(false);
+  const awardInFlightRef = useRef(false);
+  const taskCompleteInFlightRef = useRef(false);
 
   useEffect(() => {
     setFeedback(null);
@@ -352,37 +358,62 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   }, [alphabetRound, colorRound, done, gameId, numberRound, profileError, profileLoading, scienceRound, shapeRound]);
 
   useEffect(() => {
+    if (promptTimerRef.current) {
+      clearTimeout(promptTimerRef.current);
+      promptTimerRef.current = null;
+    }
     if (!spokenPrompt) return;
-    audio.speak(spokenPrompt);
-  }, [spokenPrompt, audio]);
-
-  useEffect(() => {
-    if (!feedback) return;
-    audio.speak(feedback);
-  }, [feedback, audio]);
+    // If feedback is still showing, let it be spoken first; prompt will speak after feedback clears.
+    if (feedback) return;
+    if (lastSpokenRoundRef.current === round) return;
+    lastSpokenRoundRef.current = round;
+    promptTimerRef.current = setTimeout(() => {
+      audio.speak(spokenPrompt);
+    }, 250);
+  }, [spokenPrompt, audio, feedback, round]);
 
   useEffect(() => {
     return () => {
+      if (promptTimerRef.current) {
+        clearTimeout(promptTimerRef.current);
+        promptTimerRef.current = null;
+      }
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
       audio.stop();
     };
   }, [audio]);
 
   const advance = useCallback(
     (correct: boolean) => {
+      if (locked) {
+        return;
+      }
+      setLocked(true);
       if (correct) {
         setScore((s) => s + 1);
-        setFeedback("Nice!");
+        setFeedback("Correct!");
+        audio.speak("Correct!");
       } else {
-        setFeedback("Try the next one!");
+        setFeedback("Wrong!");
+        audio.speak("Wrong!");
       }
-      const next = round + 1;
-      if (next >= settings.rounds) {
-        setDone(true);
-      } else {
-        setRound(next);
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
       }
+      advanceTimerRef.current = setTimeout(() => {
+        const next = round + 1;
+        if (next >= settings.rounds) {
+          setDone(true);
+        } else {
+          setRound(next);
+        }
+        setLocked(false);
+      }, 700);
     },
-    [round, settings.rounds]
+    [round, settings.rounds, audio, locked]
   );
 
   const restart = () => {
@@ -399,7 +430,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     async function award() {
-      if (!done || rewardSaved || !child || !supabase) {
+      if (!done || rewardSaved || awardInFlightRef.current || !child || !supabase) {
         return;
       }
       // If this game run is tied to a Learning Task, the task completion path awards points.
@@ -410,6 +441,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       if (xpEarned <= 0) {
         return;
       }
+      awardInFlightRef.current = true;
       setIsSavingReward(true);
       setSaveError(null);
       const { error } = await supabase.rpc("award_child_points", {
@@ -421,9 +453,11 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       setIsSavingReward(false);
       if (error) {
         setSaveError(formatAppError(error));
+        awardInFlightRef.current = false;
         return;
       }
       setRewardSaved(true);
+      awardInFlightRef.current = false;
       await refresh();
     }
     void award();
@@ -431,9 +465,10 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     async function completeLearningTask() {
-      if (!done || !taskId || !supabase || !child || rewardSaved) {
+      if (!done || rewardSaved || taskCompleteInFlightRef.current || !taskId || !supabase || !child) {
         return;
       }
+      taskCompleteInFlightRef.current = true;
       setSaveError(null);
       setIsSavingReward(true);
 
@@ -446,6 +481,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       if (taskError || !task) {
         setIsSavingReward(false);
         setSaveError(formatAppError(taskError ?? new Error("Could not load learning task.")));
+        taskCompleteInFlightRef.current = false;
         return;
       }
 
@@ -457,6 +493,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
         if (updateError) {
           setIsSavingReward(false);
           setSaveError(formatAppError(updateError));
+          taskCompleteInFlightRef.current = false;
           return;
         }
 
@@ -469,16 +506,54 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
         if (awardError) {
           setIsSavingReward(false);
           setSaveError(formatAppError(awardError));
+          taskCompleteInFlightRef.current = false;
           return;
         }
       }
 
       setIsSavingReward(false);
       setRewardSaved(true);
+      taskCompleteInFlightRef.current = false;
       await refresh(true);
     }
     void completeLearningTask();
   }, [done, taskId, child, gameId, score, settings.rounds, refresh, rewardSaved]);
+
+  if (done) {
+    return (
+      <ScreenContainer scroll>
+        <Card style={[styles.summaryCard, shadows.card]}>
+          <Card.Content style={styles.summaryInner}>
+            <MaterialCommunityIcons name="trophy" size={56} color={colors.warning} />
+            <Text variant="headlineSmall" style={styles.summaryTitle}>
+              Game complete
+            </Text>
+            <Text variant="titleMedium" style={styles.summaryScore}>
+              Score: {score} / {settings.rounds}
+            </Text>
+            <Text variant="bodyMedium" style={styles.summaryXp}>
+              {taskId ? "Completing learning task..." : `+${xpEarned} XP earned this round`}
+            </Text>
+            {isSavingReward && !rewardSaved ? (
+              <Text variant="bodySmall" style={styles.summaryMeta}>
+                Saving reward...
+              </Text>
+            ) : null}
+            {saveError ? (
+              <Text variant="bodySmall" style={styles.errorText}>
+                {saveError}
+              </Text>
+            ) : null}
+            <Text variant="bodySmall" style={styles.summaryMeta}>
+              {difficultyText}
+            </Text>
+            <PrimaryButton label="Play again" onPress={restart} />
+            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("GamesList")} />
+          </Card.Content>
+        </Card>
+      </ScreenContainer>
+    );
+  }
 
   if (profileLoading) {
     return (
@@ -510,42 +585,6 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
     );
   }
 
-  if (done) {
-    return (
-      <ScreenContainer scroll>
-        <Card style={[styles.summaryCard, shadows.card]}>
-          <Card.Content style={styles.summaryInner}>
-            <MaterialCommunityIcons name="trophy" size={56} color={colors.warning} />
-            <Text variant="headlineSmall" style={styles.summaryTitle}>
-              Game complete
-            </Text>
-            <Text variant="titleMedium" style={styles.summaryScore}>
-              Score: {score} / {settings.rounds}
-            </Text>
-            <Text variant="bodyMedium" style={styles.summaryXp}>
-              {taskId ? "Completing learning task..." : `+${xpEarned} XP earned this round`}
-            </Text>
-            {isSavingReward ? (
-              <Text variant="bodySmall" style={styles.summaryMeta}>
-                Saving reward...
-              </Text>
-            ) : null}
-            {saveError ? (
-              <Text variant="bodySmall" style={styles.errorText}>
-                {saveError}
-              </Text>
-            ) : null}
-            <Text variant="bodySmall" style={styles.summaryMeta}>
-              {difficultyText}
-            </Text>
-            <PrimaryButton label="Play again" onPress={restart} />
-            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("GamesList")} />
-          </Card.Content>
-        </Card>
-      </ScreenContainer>
-    );
-  }
-
   return (
     <ScreenContainer scroll>
       <View style={styles.hud}>
@@ -564,9 +603,16 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       </Text>
 
       {feedback ? (
-        <Text variant="bodyMedium" style={styles.feedback}>
-          {feedback}
-        </Text>
+        <View style={[styles.feedbackBanner, feedback === "Correct!" ? styles.feedbackCorrect : styles.feedbackWrong]}>
+          <MaterialCommunityIcons
+            name={feedback === "Correct!" ? "check-circle" : "close-circle"}
+            size={18}
+            color="#FFFFFF"
+          />
+          <Text variant="bodyMedium" style={styles.feedbackBannerText}>
+            {feedback}
+          </Text>
+        </View>
       ) : null}
 
       {gameId === "alphabet" && alphabetRound ? (
@@ -580,6 +626,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
                 key={ch}
                 style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]}
                 onPress={() => advance(ch === alphabetRound.answer)}
+                disabled={locked}
               >
                 <Text variant="headlineMedium" style={styles.choiceGlyph}>
                   {ch}
@@ -601,6 +648,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
                 key={n}
                 style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]}
                 onPress={() => advance(n === numberRound.answer)}
+                disabled={locked}
               >
                 <Text variant="headlineSmall" style={styles.choiceNum}>
                   {n}
@@ -625,13 +673,19 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
                   accessibilityLabel={c.label}
                   style={({ pressed }) => [styles.colorBlob, { backgroundColor: c.bg }, pressed && styles.choicePressed]}
                   onPress={() => advance(c.id === colorRound.answer)}
+                  disabled={locked}
                 />
               ))}
             </View>
           ) : (
             <View style={styles.choiceGrid}>
               {colorRound.choices.map((choice) => (
-                <Pressable key={choice} style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]} onPress={() => advance(choice === colorRound.answer)}>
+                <Pressable
+                  key={choice}
+                  style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]}
+                  onPress={() => advance(choice === colorRound.answer)}
+                  disabled={locked}
+                >
                   <Text variant="titleMedium" style={styles.choiceNum}>
                     {choice}
                   </Text>
@@ -653,6 +707,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
                 key={s.id}
                 style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]}
                 onPress={() => advance(s.id === shapeRound.answer)}
+                disabled={locked}
               >
                 <Text style={styles.shapeGlyph}>{s.glyph}</Text>
                 <Text variant="labelMedium">{s.label}</Text>
@@ -674,13 +729,18 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
           </Card>
           {scienceRound.mode === "tf" ? (
             <View style={styles.tfRow}>
-              <PrimaryButton label="True" onPress={() => advance(true === scienceRound.a)} />
-              <PrimaryButton label="False" mode="outlined" onPress={() => advance(false === scienceRound.a)} />
+              <PrimaryButton label="True" onPress={() => advance(true === scienceRound.a)} disabled={locked} />
+              <PrimaryButton label="False" mode="outlined" onPress={() => advance(false === scienceRound.a)} disabled={locked} />
             </View>
           ) : (
             <View style={styles.choiceGrid}>
               {scienceRound.choices.map((choice) => (
-                <Pressable key={choice} style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]} onPress={() => advance(choice === scienceRound.answer)}>
+                <Pressable
+                  key={choice}
+                  style={({ pressed }) => [styles.choiceBtn, pressed && styles.choicePressed]}
+                  onPress={() => advance(choice === scienceRound.answer)}
+                  disabled={locked}
+                >
                   <Text variant="titleMedium" style={styles.choiceNum}>
                     {choice}
                   </Text>
@@ -719,6 +779,26 @@ const styles = StyleSheet.create({
   feedback: {
     color: colors.primaryDark,
     textAlign: "center",
+  },
+  feedbackBanner: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.pill,
+    marginTop: 8,
+  },
+  feedbackBannerText: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+  },
+  feedbackCorrect: {
+    backgroundColor: "#16A34A",
+  },
+  feedbackWrong: {
+    backgroundColor: "#DC2626",
   },
   difficultyPill: {
     alignSelf: "center",

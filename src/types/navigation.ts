@@ -27,11 +27,19 @@ export type ChildTasksStackParamList = {
   ExerciseSession: { taskId: string; exerciseId: ExerciseId; title: string };
 };
 
+export type ChildHomeStackParamList = {
+  HomeMain: undefined;
+};
+
+export type ChildProfileStackParamList = {
+  MyStuffMain: undefined;
+};
+
 export type ChildTabParamList = {
-  Home: undefined;
+  Home: NavigatorScreenParams<ChildHomeStackParamList> | undefined;
   Games: NavigatorScreenParams<ChildGamesStackParamList> | undefined;
   Tasks: NavigatorScreenParams<ChildTasksStackParamList> | undefined;
-  MyStuff: undefined;
+  MyStuff: NavigatorScreenParams<ChildProfileStackParamList> | undefined;
 };
 
 export type { GameId };

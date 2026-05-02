@@ -95,7 +95,7 @@ export function ChildHomeScreen() {
   const showError = profileError ?? error;
 
   return (
-    <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
+    <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
       <View style={styles.content}>
         {child ? (
           <ChildDashboardHeader

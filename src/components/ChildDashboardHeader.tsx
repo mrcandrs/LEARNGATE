@@ -1,7 +1,6 @@
 import { Image, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radii, shadows } from "@/theme/theme";
 
 type Props = {
@@ -12,10 +11,8 @@ type Props = {
 };
 
 export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
-  const insets = useSafeAreaInsets();
-
   return (
-    <View style={[styles.outer, { paddingTop: insets.top + 8, marginHorizontal: -16, marginTop: -16 }]}>
+    <View style={styles.outer}>
       <View style={styles.row}>
         <View style={styles.avatarWrap}>
           {avatarUrl ? (
@@ -52,8 +49,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderBottomLeftRadius: radii.lg,
     borderBottomRightRadius: radii.lg,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 16,
+    marginTop: -10,
     marginBottom: 8,
     ...shadows.card,
   },

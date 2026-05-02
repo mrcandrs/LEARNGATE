@@ -17,7 +17,7 @@ export function ChildGamesScreen() {
   const { child } = useChildProfile();
 
   return (
-    <ScreenContainer scroll contentPadding={0}>
+    <ScreenContainer scroll contentPadding={0} includeTopInset={false}>
       {child ? (
         <ChildDashboardHeader
           name={child.name}

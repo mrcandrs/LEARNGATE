@@ -7,6 +7,7 @@ type ScreenContainerProps = PropsWithChildren<{
   scroll?: boolean;
   /** Horizontal padding (default 16). Use 0 for full-bleed headers. */
   contentPadding?: number;
+  includeTopInset?: boolean;
   onRefresh?: () => void;
   refreshing?: boolean;
 }>;
@@ -15,14 +16,16 @@ export function ScreenContainer({
   children,
   scroll = false,
   contentPadding = 16,
+  includeTopInset = true,
   onRefresh,
   refreshing = false,
 }: ScreenContainerProps) {
   const pad = { paddingHorizontal: contentPadding, paddingBottom: 32, paddingTop: contentPadding, gap: 12 };
+  const edges = includeTopInset ? (["top", "left", "right", "bottom"] as const) : (["left", "right", "bottom"] as const);
 
   if (scroll) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={edges}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, pad]}
           refreshControl={
@@ -36,7 +39,7 @@ export function ScreenContainer({
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={edges}>
       <View style={[styles.content, { padding: contentPadding }]}>{children}</View>
     </SafeAreaView>
   );

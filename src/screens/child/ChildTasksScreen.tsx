@@ -256,7 +256,7 @@ export function ChildTasksScreen() {
   const showError = profileError ?? error;
 
   return (
-    <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
+    <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
       {child ? (
         <ChildDashboardHeader
           name={child.name}
