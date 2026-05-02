@@ -7,6 +7,7 @@ import { useAuth } from "@/store/AuthContext";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 import { colors, radii, shadows } from "@/theme/theme";
+import { reverseGeocode } from "@/services/geoapify";
 
 type ChildOption = {
   id: string;
@@ -44,6 +45,7 @@ export function ParentLocationScreen() {
   const [parentId, setParentId] = useState<string | null>(null);
   const [latestByChild, setLatestByChild] = useState<Record<string, LocationRow>>({});
   const [displayedByChild, setDisplayedByChild] = useState<Record<string, { lat: number; lng: number }>>({});
+  const [placeByChild, setPlaceByChild] = useState<Record<string, { capturedAt: string; place: string }>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +291,34 @@ export function ParentLocationScreen() {
     });
   }, [latestByChild]);
 
+  useEffect(() => {
+    let active = true;
+    async function resolvePlaces() {
+      const entries = Object.entries(latestByChild);
+      await Promise.all(
+        entries.map(async ([childId, loc]) => {
+          const existing = placeByChild[childId];
+          if (existing?.capturedAt === loc.captured_at) {
+            return;
+          }
+          const resolved = await reverseGeocode(loc.lat, loc.lng);
+          if (!active) {
+            return;
+          }
+          setPlaceByChild((prev) => ({
+            ...prev,
+            [childId]: { capturedAt: loc.captured_at, place: resolved ?? `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}` },
+          }));
+        })
+      );
+    }
+    void resolvePlaces();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestByChild]);
+
   const childStates: ChildLocationState[] = useMemo(
     () =>
       children.map((child) => ({
@@ -364,10 +394,21 @@ export function ParentLocationScreen() {
                 latitude: (displayedByChild[entry.child.id] ?? { lat: entry.location!.lat, lng: entry.location!.lng }).lat,
                 longitude: (displayedByChild[entry.child.id] ?? { lat: entry.location!.lat, lng: entry.location!.lng }).lng,
               }}
-              pinColor={pinColorForChild(entry.child.id)}
               title={entry.child.name}
               description={`Updated ${new Date(entry.location!.captured_at).toLocaleTimeString()}`}
-            />
+              anchor={{ x: 0.5, y: 1 }}
+            >
+              <View style={styles.markerWrap}>
+                {entry.child.avatar_url ? (
+                  <Image source={{ uri: entry.child.avatar_url }} style={[styles.markerAvatar, { borderColor: pinColorForChild(entry.child.id) }]} />
+                ) : (
+                  <View style={[styles.markerAvatarFallback, { borderColor: pinColorForChild(entry.child.id) }]}>
+                    <Text style={styles.markerLetter}>{entry.child.name.slice(0, 1).toUpperCase()}</Text>
+                  </View>
+                )}
+                <View style={[styles.markerStem, { backgroundColor: pinColorForChild(entry.child.id) }]} />
+              </View>
+            </Marker>
           ))}
         </MapView>
 
@@ -416,15 +457,15 @@ export function ParentLocationScreen() {
                     </View>
                     {entry.location ? (
                       <Text style={styles.meta}>
-                        {isChildOnline(entry) ? "Online" : "Offline"} - Last location{" "}
-                        {new Date(entry.location.captured_at).toLocaleTimeString()}
+                        {isChildOnline(entry) ? "Online" : "Offline"} -{" "}
+                        {(placeByChild[entry.child.id]?.place ?? "Resolving location...").split(",").slice(0, 2).join(",")}
                       </Text>
                     ) : (
                       <Text style={styles.pending}>Offline - Waiting for permission/location</Text>
                     )}
                     {entry.child.last_seen_at ? (
                       <Text style={styles.meta}>
-                        Session seen {new Date(entry.child.last_seen_at).toLocaleTimeString()}
+                        Last login {new Date(entry.child.last_seen_at).toLocaleTimeString()}
                       </Text>
                     ) : null}
                   </Pressable>
@@ -526,6 +567,37 @@ const styles = StyleSheet.create({
   },
   pending: {
     color: colors.subtext,
+  },
+  markerWrap: {
+    alignItems: "center",
+  },
+  markerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
+    backgroundColor: colors.border,
+  },
+  markerAvatarFallback: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 3,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  markerLetter: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#334155",
+  },
+  markerStem: {
+    width: 10,
+    height: 12,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 10,
+    marginTop: -2,
   },
   emptyText: {
     color: colors.subtext,
