@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentProps } from "react";
 import { Image, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Avatar, Card, Text } from "react-native-paper";
+import { ActivityIndicator, Avatar, Card, Chip, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -13,6 +13,14 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
 import { pickChildAvatarFromLibrary, uploadChildAvatar } from "@/services/childAvatar";
 
+type PointsHistoryItem = {
+  id: string;
+  type: string;
+  points: number;
+  created_at: string;
+};
+type PointsFilter = "all" | "games" | "tasks" | "chores" | "exercise";
+
 export function ChildProfileScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
@@ -22,6 +30,8 @@ export function ChildProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [pointsHistory, setPointsHistory] = useState<PointsHistoryItem[]>([]);
+  const [pointsFilter, setPointsFilter] = useState<PointsFilter>("all");
 
   const loadStats = useCallback(
     async (fromPull = false) => {
@@ -57,6 +67,21 @@ export function ChildProfileScreen() {
         .eq("child_id", child.id)
         .in("type", ["game_played", "game_completed"]);
       setGamesPlayed(activityCount ?? 0);
+
+      const { data: pointsRows, error: pointsError } = await supabase
+        .from("activity_logs")
+        .select("id, type, points, created_at")
+        .eq("child_id", child.id)
+        .gt("points", 0)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (pointsError) {
+        setError(formatAppError(pointsError));
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setPointsHistory((pointsRows as PointsHistoryItem[]) ?? []);
       setLoading(false);
       setRefreshing(false);
     },
@@ -95,6 +120,18 @@ export function ChildProfileScreen() {
   }, [completedTasks, child?.stars]);
 
   const showError = profileError ?? error;
+  const filteredPointsHistory = useMemo(() => {
+    if (pointsFilter === "all") {
+      return pointsHistory;
+    }
+    const includeByFilter: Record<Exclude<PointsFilter, "all">, (type: string) => boolean> = {
+      games: (type) => type.includes("game"),
+      tasks: (type) => type.includes("task"),
+      chores: (type) => type.includes("chore"),
+      exercise: (type) => type.includes("exercise"),
+    };
+    return pointsHistory.filter((item) => includeByFilter[pointsFilter](item.type.toLowerCase()));
+  }, [pointsFilter, pointsHistory]);
 
   const handleUploadAvatar = async () => {
     if (!child || !supabase) {
@@ -127,7 +164,6 @@ export function ChildProfileScreen() {
           name={child.name}
           level={child.difficulty_level}
           stars={child.stars}
-          dailyLimitMinutes={child.daily_limit_minutes}
           avatarUrl={child.avatar_url}
         />
       ) : null}
@@ -178,6 +214,48 @@ export function ChildProfileScreen() {
                   <MaterialCommunityIcons name={b.icon} size={22} color={colors.primary} />
                   <Text variant="labelSmall" style={styles.badgeLabel}>
                     {b.label}
+                  </Text>
+                </View>
+              ))
+            )}
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card}>
+          <Card.Title title="Points History" titleStyle={styles.cardTitle} />
+          <Card.Content style={styles.statsList}>
+            <View style={styles.filterRow}>
+              <Chip selected={pointsFilter === "all"} onPress={() => setPointsFilter("all")}>
+                All
+              </Chip>
+              <Chip selected={pointsFilter === "games"} onPress={() => setPointsFilter("games")}>
+                Games
+              </Chip>
+              <Chip selected={pointsFilter === "tasks"} onPress={() => setPointsFilter("tasks")}>
+                Tasks
+              </Chip>
+              <Chip selected={pointsFilter === "chores"} onPress={() => setPointsFilter("chores")}>
+                Chores
+              </Chip>
+              <Chip selected={pointsFilter === "exercise"} onPress={() => setPointsFilter("exercise")}>
+                Exercise
+              </Chip>
+            </View>
+            {filteredPointsHistory.length === 0 ? (
+              <Text style={styles.emptyAch}>No points history yet. Complete tasks and games to earn points.</Text>
+            ) : (
+              filteredPointsHistory.slice(0, 8).map((item) => (
+                <View key={item.id} style={styles.pointsRow}>
+                  <View style={styles.pointsText}>
+                    <Text variant="bodyMedium" style={styles.pointsType}>
+                      {item.type.replace(/_/g, " ")}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.pointsTime}>
+                      {new Date(item.created_at).toLocaleString()}
+                    </Text>
+                  </View>
+                  <Text variant="titleSmall" style={styles.pointsValue}>
+                    +{item.points}
                   </Text>
                 </View>
               ))
@@ -269,6 +347,34 @@ const styles = StyleSheet.create({
   },
   emptyAch: {
     color: colors.subtext,
+  },
+  pointsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#F8FAFC",
+    borderRadius: radii.sm,
+    padding: 10,
+    gap: 10,
+  },
+  pointsText: {
+    flex: 1,
+  },
+  pointsType: {
+    color: colors.text,
+    textTransform: "capitalize",
+  },
+  pointsTime: {
+    color: colors.subtext,
+  },
+  pointsValue: {
+    color: colors.primaryDark,
+    fontWeight: "800",
+  },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   errorText: {
     color: "#B91C1C",

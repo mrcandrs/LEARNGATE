@@ -102,7 +102,6 @@ export function ChildHomeScreen() {
             name={child.name}
             level={child.difficulty_level}
             stars={child.stars}
-            dailyLimitMinutes={child.daily_limit_minutes}
             avatarUrl={child.avatar_url}
           />
         ) : null}

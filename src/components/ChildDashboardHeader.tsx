@@ -8,13 +8,11 @@ type Props = {
   name: string;
   level: number;
   stars: number;
-  dailyLimitMinutes: number;
   avatarUrl?: string | null;
 };
 
-export function ChildDashboardHeader({ name, level, stars, dailyLimitMinutes, avatarUrl }: Props) {
+export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
   const insets = useSafeAreaInsets();
-  const hoursLeft = Math.max(1, Math.round(dailyLimitMinutes / 60));
 
   return (
     <View style={[styles.outer, { paddingTop: insets.top + 8, marginHorizontal: -16, marginTop: -16 }]}>
@@ -43,12 +41,6 @@ export function ChildDashboardHeader({ name, level, stars, dailyLimitMinutes, av
               </Text>
             </View>
           </View>
-        </View>
-        <View style={styles.timePill}>
-          <MaterialCommunityIcons name="timer-outline" size={16} color="#E5E7EB" />
-          <Text variant="labelSmall" style={styles.timeText}>
-            {hoursLeft}h left
-          </Text>
         </View>
       </View>
     </View>
@@ -109,18 +101,5 @@ const styles = StyleSheet.create({
   },
   pillText: {
     color: "#F9FAFB",
-  },
-  timePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0,0,0,0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-  },
-  timeText: {
-    color: "#F3F4F6",
-    fontWeight: "600",
   },
 });

@@ -279,7 +279,7 @@ function createNumberRound(gameId: Props["route"]["params"]["gameId"], settings:
 
 export function ChildMiniGameScreen({ route, navigation }: Props) {
   const { gameId, taskId } = route.params;
-  const { child, refresh } = useChildProfile();
+  const { child, loading: profileLoading, error: profileError, refresh } = useChildProfile();
   const difficultyLevel = child?.difficulty_level ?? 5;
   const settings = useMemo(() => getGameSettings(difficultyLevel, gameId), [difficultyLevel, gameId]);
   const [round, setRound] = useState(0);
@@ -441,6 +441,36 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
     }
     void completeLearningTask();
   }, [done, taskId, child, gameId, score, settings.rounds, refresh, rewardSaved]);
+
+  if (profileLoading) {
+    return (
+      <ScreenContainer scroll>
+        <Card style={[styles.summaryCard, shadows.card]}>
+          <Card.Content style={styles.summaryInner}>
+            <MaterialCommunityIcons name="gamepad-variant-outline" size={42} color={colors.primary} />
+            <Text variant="titleMedium" style={styles.summaryTitle}>
+              Preparing your difficulty...
+            </Text>
+          </Card.Content>
+        </Card>
+      </ScreenContainer>
+    );
+  }
+
+  if (!child) {
+    return (
+      <ScreenContainer scroll>
+        <Card style={[styles.summaryCard, shadows.card]}>
+          <Card.Content style={styles.summaryInner}>
+            <Text variant="bodyMedium" style={styles.errorText}>
+              {profileError ?? "Could not load child profile. Please go back and try again."}
+            </Text>
+            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("GamesList")} />
+          </Card.Content>
+        </Card>
+      </ScreenContainer>
+    );
+  }
 
   if (done) {
     return (
