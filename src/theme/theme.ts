@@ -1,4 +1,5 @@
 import { MD3LightTheme } from "react-native-paper";
+import { configureFonts } from "react-native-paper";
 import { Platform } from "react-native";
 
 /** Wireframe-aligned tokens (parent green, child accents). */
@@ -45,4 +46,5 @@ export const appTheme = {
     background: colors.background,
     surface: colors.card,
   },
+  fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }),
 };
