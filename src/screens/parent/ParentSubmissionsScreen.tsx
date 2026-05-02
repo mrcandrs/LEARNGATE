@@ -278,8 +278,6 @@ export function ParentSubmissionsScreen() {
         ))}
       </View>
 
-      <PrimaryButton label="Refresh" onPress={() => void loadSubmissions(false)} mode="text" />
-
       <Portal>
         <Dialog visible={Boolean(rejectTarget)} onDismiss={() => setRejectTarget(null)}>
           <Dialog.Title>Reject submission</Dialog.Title>

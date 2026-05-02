@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
-import { ActivityIndicator, Card, Divider, Snackbar, Switch, Text, TextInput } from "react-native-paper";
+import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Card, Divider, Menu, Snackbar, Switch, Text, TextInput } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
@@ -30,6 +31,7 @@ export function ParentSettingsScreen() {
   const { isSupabaseConfigured } = useAuth();
   const [children, setChildren] = useState<ChildSummary[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [childMenuVisible, setChildMenuVisible] = useState(false);
   const [rule, setRule] = useState<ScreenRule | null>(null);
   const [blockedAppsInput, setBlockedAppsInput] = useState("");
   const [taskRequirementsInput, setTaskRequirementsInput] = useState("");
@@ -185,14 +187,42 @@ export function ParentSettingsScreen() {
         <Card style={styles.card}>
           <Card.Title title="Selected Child" />
           <Card.Content style={styles.block}>
-            {children.map((child) => (
-              <PrimaryButton
-                key={child.id}
-                label={child.name}
-                mode={child.id === selectedChildId ? "contained" : "outlined"}
-                onPress={() => setSelectedChildId(child.id)}
-              />
-            ))}
+            <Menu
+              visible={childMenuVisible}
+              onDismiss={() => setChildMenuVisible(false)}
+              anchor={
+                <Pressable
+                  onPress={() => setChildMenuVisible(true)}
+                  style={styles.pickerRow}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select child"
+                >
+                  <View style={styles.pickerLeft}>
+                    <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
+                    <View style={styles.pickerTextWrap}>
+                      <Text variant="labelMedium" style={styles.pickerLabel}>
+                        Child
+                      </Text>
+                      <Text variant="titleSmall" style={styles.pickerValue}>
+                        {selectedChild ? selectedChild.name : "Select child"}
+                      </Text>
+                    </View>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+                </Pressable>
+              }
+            >
+              {children.map((child) => (
+                <Menu.Item
+                  key={child.id}
+                  title={child.name}
+                  onPress={() => {
+                    setSelectedChildId(child.id);
+                    setChildMenuVisible(false);
+                  }}
+                />
+              ))}
+            </Menu>
           </Card.Content>
         </Card>
       ) : (
@@ -263,7 +293,6 @@ export function ParentSettingsScreen() {
       </Card>
 
       <PrimaryButton label="Save Settings" onPress={() => void saveRules()} disabled={!rule} />
-      <PrimaryButton label="Refresh" onPress={() => void loadSettings(false)} mode="text" />
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
         {snackbar ?? ""}
       </Snackbar>
@@ -282,6 +311,33 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: 10,
+  },
+  pickerRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  pickerTextWrap: {
+    flex: 1,
+  },
+  pickerLabel: {
+    color: colors.subtext,
+  },
+  pickerValue: {
+    color: colors.text,
+    fontWeight: "700",
   },
   errorText: {
     color: "#B91C1C",

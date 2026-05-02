@@ -1,10 +1,10 @@
 import { Pressable, StyleSheet, View } from "react-native";
+import { useState } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Dialog, Portal, Text } from "react-native-paper";
-import { useState } from "react";
 import { useAuth } from "@/store/AuthContext";
 
-export function ParentHeaderLogout() {
+export function ChildHeaderLogout() {
   const { signOut } = useAuth();
   const [confirmVisible, setConfirmVisible] = useState(false);
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Keyboard, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Text, TextInput } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -77,6 +77,12 @@ export function ChildAccessScreen() {
     }
     void handleChildSignIn();
   }, [childName, pin, isSupabaseConfigured, isSubmitting]);
+
+  useEffect(() => {
+    if (pin.trim().length === 6) {
+      Keyboard.dismiss();
+    }
+  }, [pin]);
 
   useEffect(() => {
     if (!successToastVisible) {

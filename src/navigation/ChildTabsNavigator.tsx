@@ -7,6 +7,7 @@ import { ChildProfileScreen } from "@/screens/child/ChildProfileScreen";
 import { ChildTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
+import { ChildHeaderLogout } from "@/navigation/ChildHeaderLogout";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
 
@@ -16,7 +17,12 @@ export function ChildTabsNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: false,
+        headerShown: true,
+        headerStyle: { backgroundColor: colors.primaryDark },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "700" },
+        headerShadowVisible: false,
+        headerRight: () => <ChildHeaderLogout />,
         tabBarActiveTintColor: colors.primaryDark,
         tabBarInactiveTintColor: colors.subtext,
         tabBarStyle: {

@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { ActivityIndicator, Card, Text } from "react-native-paper";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Card, Menu, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { StatCard } from "@/components/StatCard";
-import { PrimaryButton } from "@/components/PrimaryButton";
 import { useAuth } from "@/store/AuthContext";
 import { colors, radii, shadows } from "@/theme/theme";
 import { ParentStat } from "@/types/app";
@@ -39,10 +38,12 @@ const STAT_ICONS: Record<string, { icon: IconName; color: string }> = {
 };
 
 export function ParentOverviewScreen() {
-  const { signOut, isSupabaseConfigured } = useAuth();
+  const { isSupabaseConfigured } = useAuth();
   const [stats, setStats] = useState<ParentStat[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [insights, setInsights] = useState<ChildInsight[]>([]);
+  const [insightsMenuVisible, setInsightsMenuVisible] = useState(false);
+  const [selectedInsightChildId, setSelectedInsightChildId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,6 +253,9 @@ export function ParentOverviewScreen() {
     ]);
     setActivity(recentActivity);
     setInsights(nextInsights);
+    setSelectedInsightChildId((prev) =>
+      prev && nextInsights.some((i) => i.childId === prev) ? prev : nextInsights[0]?.childId ?? null
+    );
     setIsLoading(false);
     setRefreshing(false);
   }, [isSupabaseConfigured]);
@@ -263,6 +267,11 @@ export function ParentOverviewScreen() {
   const onRefresh = useCallback(() => {
     void loadDashboard(true);
   }, [loadDashboard]);
+
+  const selectedInsight = useMemo(
+    () => insights.find((i) => i.childId === selectedInsightChildId) ?? insights[0] ?? null,
+    [insights, selectedInsightChildId]
+  );
 
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
@@ -317,35 +326,69 @@ export function ParentOverviewScreen() {
           {insights.length === 0 ? (
             <Text style={styles.emptyText}>Complete a few child tasks to unlock analytics recommendations.</Text>
           ) : (
-            insights.map((insight) => (
-              <View key={insight.childId} style={styles.insightRow}>
-                <Text variant="titleSmall" style={styles.insightName}>
-                  {insight.childName}
-                </Text>
-                <Text variant="bodySmall" style={styles.insightSummary}>
-                  {insight.summary}
-                </Text>
-                <Text variant="bodySmall" style={styles.insightSummary}>
-                  {insight.latestTaskLine}
-                </Text>
-                <Text variant="bodySmall" style={styles.insightFocus}>
-                  {insight.focusAreas}
-                </Text>
-                <Text variant="bodyMedium" style={styles.insightRecommendation}>
-                  {insight.recommendation}
-                </Text>
-                <Text variant="bodyMedium" style={styles.insightStep}>
-                  {insight.nextBestStep}
-                </Text>
-              </View>
-            ))
+            <>
+              <Menu
+                visible={insightsMenuVisible}
+                onDismiss={() => setInsightsMenuVisible(false)}
+                anchor={
+                  <Pressable
+                    onPress={() => setInsightsMenuVisible(true)}
+                    style={styles.pickerRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select child for insights"
+                  >
+                    <View style={styles.pickerLeft}>
+                      <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
+                      <View style={styles.pickerTextWrap}>
+                        <Text variant="labelMedium" style={styles.pickerLabel}>
+                          Child
+                        </Text>
+                        <Text variant="titleSmall" style={styles.pickerValue}>
+                          {selectedInsight?.childName ?? "Select child"}
+                        </Text>
+                      </View>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+                  </Pressable>
+                }
+              >
+                {insights.map((insight) => (
+                  <Menu.Item
+                    key={insight.childId}
+                    title={insight.childName}
+                    onPress={() => {
+                      setSelectedInsightChildId(insight.childId);
+                      setInsightsMenuVisible(false);
+                    }}
+                  />
+                ))}
+              </Menu>
+
+              {selectedInsight ? (
+                <View style={styles.insightRow}>
+                  <Text variant="bodySmall" style={styles.insightSummary}>
+                    {selectedInsight.summary}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.insightSummary}>
+                    {selectedInsight.latestTaskLine}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.insightFocus}>
+                    {selectedInsight.focusAreas}
+                  </Text>
+                  <Text variant="bodyMedium" style={styles.insightRecommendation}>
+                    {selectedInsight.recommendation}
+                  </Text>
+                  <Text variant="bodyMedium" style={styles.insightStep}>
+                    {selectedInsight.nextBestStep}
+                  </Text>
+                </View>
+              ) : null}
+            </>
           )}
           <Text style={styles.aiNote}>Recommendations are generated from recent in-app behavior patterns.</Text>
         </Card.Content>
       </Card>
 
-      <PrimaryButton label="Refresh" onPress={() => void loadDashboard(false)} mode="text" />
-      <PrimaryButton label="Sign Out" onPress={() => void signOut()} mode="outlined" />
     </ScreenContainer>
   );
 }
@@ -387,6 +430,33 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     padding: 12,
     gap: 4,
+  },
+  pickerRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  pickerTextWrap: {
+    flex: 1,
+  },
+  pickerLabel: {
+    color: colors.subtext,
+  },
+  pickerValue: {
+    color: colors.text,
+    fontWeight: "700",
   },
   insightName: {
     color: colors.text,

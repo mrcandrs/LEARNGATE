@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Card, Chip, Dialog, Divider, Portal, Snackbar, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Text, TextInput } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/theme";
@@ -46,6 +46,11 @@ export function ParentChildrenScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [pinBusyChildId, setPinBusyChildId] = useState<string | null>(null);
+  const [saveBusyChildId, setSaveBusyChildId] = useState<string | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [childMenuVisible, setChildMenuVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [newChildName, setNewChildName] = useState("");
@@ -120,6 +125,7 @@ export function ParentChildrenScreen() {
     }, {});
     setChildren(rows);
     setDrafts(nextDrafts);
+    setSelectedChildId((prev) => (prev && rows.some((c) => c.id === prev) ? prev : rows[0]?.id ?? null));
     setIsLoading(false);
     setRefreshing(false);
   }, [isSupabaseConfigured]);
@@ -173,6 +179,7 @@ export function ParentChildrenScreen() {
       return;
     }
 
+    setSaveBusyChildId(childId);
     const { error: updateError } = await supabase
       .from("children")
       .update({
@@ -182,6 +189,7 @@ export function ParentChildrenScreen() {
         bedtime_end: draft.bedtime_end,
       })
       .eq("id", childId);
+    setSaveBusyChildId((prev) => (prev === childId ? null : prev));
 
     if (updateError) {
       setError(formatAppError(updateError));
@@ -272,6 +280,7 @@ export function ParentChildrenScreen() {
     setNewChildName("");
     setNewChildAge("");
     setNewChildEmail("");
+    setShowCreateDialog(false);
     setSnackbar(`Child account created. PIN: ${pin}`);
     await loadChildren(false);
   };
@@ -282,7 +291,9 @@ export function ParentChildrenScreen() {
     }
     setError(null);
     const pin = generatePin();
+    setPinBusyChildId(childId);
     const { error: pinError } = await supabase.from("children").update({ auth_pin: pin }).eq("id", childId);
+    setPinBusyChildId((prev) => (prev === childId ? null : prev));
     if (pinError) {
       setError(formatAppError(pinError));
       return;
@@ -450,6 +461,22 @@ export function ParentChildrenScreen() {
     void loadChildren(true);
   }, [loadChildren]);
 
+  const selectedChild = useMemo(() => children.find((c) => c.id === selectedChildId) ?? null, [children, selectedChildId]);
+  const selectedDraft = useMemo(() => {
+    if (!selectedChild) {
+      return null;
+    }
+    const draft = drafts[selectedChild.id];
+    return draft
+      ? draft
+      : {
+          daily_limit_minutes: String(selectedChild.daily_limit_minutes),
+          difficulty_level: String(selectedChild.difficulty_level),
+          bedtime_start: selectedChild.bedtime_start,
+          bedtime_end: selectedChild.bedtime_end,
+        };
+  }, [drafts, selectedChild]);
+
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
@@ -497,119 +524,219 @@ export function ParentChildrenScreen() {
       {!isEmpty && filteredChildren.length === 0 ? (
         <Text style={styles.emptyFiltered}>No child matched "{searchText}".</Text>
       ) : null}
+      {children.length > 0 ? (
+        <Card style={styles.childCard}>
+          <Card.Title title="Selected Child" subtitle="Select one child to view PIN and controls." />
+          <Card.Content style={styles.cardContent}>
+            <Menu
+              visible={childMenuVisible}
+              onDismiss={() => setChildMenuVisible(false)}
+              anchor={
+                <Pressable
+                  onPress={() => setChildMenuVisible(true)}
+                  style={styles.pickerRow}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select child"
+                >
+                  <View style={styles.pickerLeft}>
+                    <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
+                    <View style={styles.pickerTextWrap}>
+                      <Text variant="labelMedium" style={styles.pickerLabel}>
+                        Child
+                      </Text>
+                      <Text variant="titleSmall" style={styles.pickerValue}>
+                        {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
+                      </Text>
+                    </View>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+                </Pressable>
+              }
+            >
+              {filteredChildren.map((child) => (
+                <Menu.Item
+                  key={child.id}
+                  title={child.name}
+                  onPress={() => {
+                    setSelectedChildId(child.id);
+                    setChildMenuVisible(false);
+                  }}
+                />
+              ))}
+            </Menu>
 
-      <Card style={styles.childCard}>
-        <Card.Title title="Create Child Account" subtitle="Parent creates child login + PIN in one step." />
-        <Card.Content style={styles.cardContent}>
-          <Text variant="bodySmall" style={styles.helper}>
-            Use a unique child name so login by name + PIN is easy and accurate.
-          </Text>
-          <TextInput label="Child Name" mode="outlined" value={newChildName} onChangeText={setNewChildName} />
-          <TextInput
-            label="Child Age"
-            mode="outlined"
-            value={newChildAge}
-            keyboardType="number-pad"
-            onChangeText={(value) => setNewChildAge(value.replace(/[^0-9]/g, ""))}
-          />
-          <TextInput
-            label="Child Email"
-            mode="outlined"
-            value={newChildEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setNewChildEmail}
-          />
-          <PrimaryButton label={isCreating ? "Creating..." : "Create Child Account"} onPress={() => void createChildAccount()} disabled={isCreating} />
-        </Card.Content>
-      </Card>
-
-      {filteredChildren.map((child) => {
-        const draft = drafts[child.id] ?? child;
-        return (
-          <Card key={child.id} style={styles.childCard}>
-            <Card.Title title={child.name} subtitle={`Age ${child.age} - ${child.stars} stars`} />
-            <Card.Content style={styles.cardContent}>
-              <View style={styles.pinRow}>
-                <View style={styles.pinLeft}>
-                  <MaterialCommunityIcons name="numeric-6-box-multiple-outline" size={18} color={colors.primaryDark} />
-                  <Text variant="titleSmall" style={styles.pinLabel}>
-                    PIN: {child.auth_pin}
-                  </Text>
+            {selectedChild && selectedDraft ? (
+              <>
+                <Divider />
+                <View style={styles.pinRow}>
+                  <View style={styles.pinLeft}>
+                    <MaterialCommunityIcons name="numeric-6-box-multiple-outline" size={18} color={colors.primaryDark} />
+                    <Text variant="titleSmall" style={styles.pinLabel}>
+                      PIN: {selectedChild.auth_pin}
+                    </Text>
+                  </View>
+                  <View style={styles.inlineBusyWrap}>
+                    {pinBusyChildId === selectedChild.id ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                    <PrimaryButton
+                      label={pinBusyChildId === selectedChild.id ? "Updating..." : "Regenerate PIN"}
+                      mode="text"
+                      onPress={() => void regeneratePin(selectedChild.id)}
+                      disabled={pinBusyChildId === selectedChild.id}
+                    />
+                  </View>
                 </View>
-                <PrimaryButton label="Regenerate PIN" mode="text" onPress={() => void regeneratePin(child.id)} />
-              </View>
-              <Text variant="bodySmall" style={styles.pinHint}>
-                Child signs in using name + this PIN in Child Access.
-              </Text>
-              <Divider />
-              <Text variant="labelLarge" style={styles.sectionLabel}>
-                Learning & Screen Controls
-              </Text>
-              <View style={styles.assignRow}>
-                <PrimaryButton label="Assign Learning Game" mode="outlined" onPress={() => openAssignLearning(child)} />
-                <PrimaryButton label="Assign Household Chore" mode="outlined" onPress={() => openAssignChore(child)} />
-              </View>
-              <PrimaryButton label="Assign Physical Exercise" mode="outlined" onPress={() => openAssignExercise(child)} />
-              <TextInput
-                label="Daily Screen Limit (minutes)"
-                mode="outlined"
-                value={draft.daily_limit_minutes}
-                keyboardType="number-pad"
-                onChangeText={(value) =>
-                  setDrafts((prev) => ({
-                    ...prev,
-                    [child.id]: { ...draft, daily_limit_minutes: value.replace(/[^0-9]/g, "") },
-                  }))
-                }
-              />
-              <Divider />
-              <TextInput
-                label="Learning Difficulty (1-10)"
-                mode="outlined"
-                value={draft.difficulty_level}
-                keyboardType="number-pad"
-                onChangeText={(value) =>
-                  setDrafts((prev) => ({
-                    ...prev,
-                    [child.id]: { ...draft, difficulty_level: value.replace(/[^0-9]/g, "") },
-                  }))
-                }
-              />
-              <Divider />
-              <TextInput
-                label="Bedtime Start (HH:mm)"
-                mode="outlined"
-                value={draft.bedtime_start}
-                onChangeText={(value) =>
-                  setDrafts((prev) => ({
-                    ...prev,
-                    [child.id]: { ...draft, bedtime_start: value },
-                  }))
-                }
-              />
-              <TextInput
-                label="Bedtime End (HH:mm)"
-                mode="outlined"
-                value={draft.bedtime_end}
-                onChangeText={(value) =>
-                  setDrafts((prev) => ({
-                    ...prev,
-                    [child.id]: { ...draft, bedtime_end: value },
-                  }))
-                }
-              />
-              <PrimaryButton label="Save Changes" onPress={() => void saveChild(child.id)} />
-            </Card.Content>
-          </Card>
-        );
-      })}
+                <Text variant="bodySmall" style={styles.pinHint}>
+                  Child signs in using name + this PIN in Child Access.
+                </Text>
+                <Divider />
+                <View style={styles.sectionCard}>
+                  <View style={styles.sectionHeaderRow}>
+                    <MaterialCommunityIcons name="tune-variant" size={18} color={colors.primaryDark} />
+                    <Text variant="labelLarge" style={styles.sectionLabel}>
+                      Learning & Screen Controls
+                    </Text>
+                  </View>
+                  <Text variant="bodySmall" style={styles.helper}>
+                    Assign activities and adjust limits for this child.
+                  </Text>
+
+                  <View style={styles.subSection}>
+                    <Text variant="labelLarge" style={styles.subSectionTitle}>
+                      Assign tasks
+                    </Text>
+                    <View style={styles.assignRow}>
+                      <PrimaryButton label="Learning Game" mode="outlined" onPress={() => openAssignLearning(selectedChild)} />
+                      <PrimaryButton label="Household Chore" mode="outlined" onPress={() => openAssignChore(selectedChild)} />
+                      <PrimaryButton label="Exercise" mode="outlined" onPress={() => openAssignExercise(selectedChild)} />
+                    </View>
+                  </View>
+
+                  <Divider />
+                  <View style={styles.subSection}>
+                    <Text variant="labelLarge" style={styles.subSectionTitle}>
+                      Limits
+                    </Text>
+                    <View style={styles.twoColRow}>
+                      <View style={styles.twoColItem}>
+                        <TextInput
+                          label="Daily limit (min)"
+                          mode="outlined"
+                          value={selectedDraft.daily_limit_minutes}
+                          keyboardType="number-pad"
+                          onChangeText={(value) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [selectedChild.id]: { ...selectedDraft, daily_limit_minutes: value.replace(/[^0-9]/g, "") },
+                            }))
+                          }
+                        />
+                      </View>
+                      <View style={styles.twoColItem}>
+                        <TextInput
+                          label="Difficulty (1-10)"
+                          mode="outlined"
+                          value={selectedDraft.difficulty_level}
+                          keyboardType="number-pad"
+                          onChangeText={(value) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [selectedChild.id]: { ...selectedDraft, difficulty_level: value.replace(/[^0-9]/g, "") },
+                            }))
+                          }
+                        />
+                      </View>
+                    </View>
+                  </View>
+
+                  <Divider />
+                  <View style={styles.subSection}>
+                    <Text variant="labelLarge" style={styles.subSectionTitle}>
+                      Bedtime
+                    </Text>
+                    <View style={styles.twoColRow}>
+                      <View style={styles.twoColItem}>
+                        <TextInput
+                          label="Start (HH:mm)"
+                          mode="outlined"
+                          value={selectedDraft.bedtime_start}
+                          onChangeText={(value) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [selectedChild.id]: { ...selectedDraft, bedtime_start: value },
+                            }))
+                          }
+                        />
+                      </View>
+                      <View style={styles.twoColItem}>
+                        <TextInput
+                          label="End (HH:mm)"
+                          mode="outlined"
+                          value={selectedDraft.bedtime_end}
+                          onChangeText={(value) =>
+                            setDrafts((prev) => ({
+                              ...prev,
+                              [selectedChild.id]: { ...selectedDraft, bedtime_end: value },
+                            }))
+                          }
+                        />
+                      </View>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.saveRow}>
+                  {saveBusyChildId === selectedChild.id ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                  <PrimaryButton
+                    label={saveBusyChildId === selectedChild.id ? "Saving..." : "Save Changes"}
+                    onPress={() => void saveChild(selectedChild.id)}
+                    disabled={saveBusyChildId === selectedChild.id}
+                  />
+                </View>
+              </>
+            ) : null}
+          </Card.Content>
+        </Card>
+      ) : null}
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
         {snackbar ?? ""}
       </Snackbar>
 
+      <PrimaryButton label="Create Child Account" onPress={() => setShowCreateDialog(true)} />
+
       <Portal>
+        <Dialog visible={showCreateDialog} onDismiss={() => setShowCreateDialog(false)}>
+          <Dialog.Title>Create Child Account</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={styles.helper}>
+              Parent creates child login + PIN in one step.
+            </Text>
+            <TextInput label="Child Name" mode="outlined" value={newChildName} onChangeText={setNewChildName} />
+            <TextInput
+              label="Child Age"
+              mode="outlined"
+              value={newChildAge}
+              keyboardType="number-pad"
+              onChangeText={(value) => setNewChildAge(value.replace(/[^0-9]/g, ""))}
+            />
+            <TextInput
+              label="Child Email"
+              mode="outlined"
+              value={newChildEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setNewChildEmail}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" mode="text" onPress={() => setShowCreateDialog(false)} />
+            <PrimaryButton
+              label={isCreating ? "Creating..." : "Create"}
+              onPress={() => void createChildAccount()}
+              disabled={isCreating}
+            />
+          </Dialog.Actions>
+        </Dialog>
+
         <Dialog visible={Boolean(exerciseTarget)} onDismiss={() => setExerciseTarget(null)}>
           <Dialog.Title>Assign physical exercise</Dialog.Title>
           <Dialog.Content>
@@ -738,6 +865,73 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     gap: 10,
+  },
+  pickerRow: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  pickerTextWrap: {
+    flex: 1,
+  },
+  pickerLabel: {
+    color: colors.subtext,
+  },
+  pickerValue: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+  inlineBusyWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  saveRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 6,
+  },
+  sectionCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+    gap: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  subSection: {
+    gap: 8,
+  },
+  subSectionTitle: {
+    color: colors.text,
+    fontWeight: "700",
+  },
+  twoColRow: {
+    flexDirection: "row",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  twoColItem: {
+    flex: 1,
+    minWidth: 160,
   },
   helper: {
     color: colors.subtext,

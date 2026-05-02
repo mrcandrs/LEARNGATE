@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -11,6 +11,7 @@ import { colors, radii, shadows } from "@/theme/theme";
 type ChildOption = {
   id: string;
   name: string;
+  avatar_url: string | null;
   is_online: boolean;
   last_seen_at: string | null;
 };
@@ -30,6 +31,7 @@ type ChildLocationState = {
 type ChildPresenceRow = {
   id: string;
   name: string;
+  avatar_url: string | null;
   is_online: boolean;
   last_seen_at: string | null;
 };
@@ -68,7 +70,7 @@ export function ParentLocationScreen() {
 
     const { data, error: cError } = await supabase
       .from("children")
-      .select("id, name, is_online, last_seen_at")
+      .select("id, name, avatar_url, is_online, last_seen_at")
       .eq("parent_id", user.id)
       .order("created_at", { ascending: true });
     if (cError) {
@@ -79,6 +81,7 @@ export function ParentLocationScreen() {
     const list = ((data as ChildPresenceRow[]) ?? []).map((c) => ({
       id: c.id,
       name: c.name || "Child",
+      avatar_url: c.avatar_url ?? null,
       is_online: Boolean(c.is_online),
       last_seen_at: c.last_seen_at ?? null,
     }));
@@ -208,6 +211,7 @@ export function ParentLocationScreen() {
                 ? {
                     ...child,
                     name: row.name || child.name,
+                    avatar_url: row.avatar_url ?? child.avatar_url,
                     is_online: Boolean(row.is_online),
                     last_seen_at: row.last_seen_at ?? null,
                   }
@@ -394,6 +398,13 @@ export function ParentLocationScreen() {
                     onPress={() => zoomToChild(entry)}
                   >
                     <View style={styles.nameRow}>
+                      {entry.child.avatar_url ? (
+                        <Image source={{ uri: entry.child.avatar_url }} style={styles.childAvatar} />
+                      ) : (
+                        <View style={styles.childAvatarFallback}>
+                          <Text style={styles.childAvatarLetter}>{entry.child.name.slice(0, 1).toUpperCase()}</Text>
+                        </View>
+                      )}
                       <View
                         style={[
                           styles.presenceDot,
@@ -482,6 +493,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  childAvatar: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.border,
+  },
+  childAvatarFallback: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childAvatarLetter: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#475569",
   },
   presenceDot: {
     width: 10,

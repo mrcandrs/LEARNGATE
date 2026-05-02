@@ -11,15 +11,17 @@ import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
+import { pickChildAvatarFromLibrary, uploadChildAvatar } from "@/services/childAvatar";
 
 export function ChildProfileScreen() {
-  const { isSupabaseConfigured, signOut } = useAuth();
+  const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [completedTasks, setCompletedTasks] = useState(0);
   const [gamesPlayed, setGamesPlayed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const loadStats = useCallback(
     async (fromPull = false) => {
@@ -94,6 +96,30 @@ export function ChildProfileScreen() {
 
   const showError = profileError ?? error;
 
+  const handleUploadAvatar = async () => {
+    if (!child || !supabase) {
+      return;
+    }
+    setError(null);
+    try {
+      const localUri = await pickChildAvatarFromLibrary();
+      if (!localUri) {
+        return;
+      }
+      setUploadingAvatar(true);
+      const publicUrl = await uploadChildAvatar({ childId: child.id, localUri });
+      const { error: updateError } = await supabase.from("children").update({ avatar_url: publicUrl }).eq("id", child.id);
+      if (updateError) {
+        throw updateError;
+      }
+      await refreshProfile();
+    } catch (err) {
+      setError(formatAppError(err));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <ScreenContainer scroll contentPadding={0} onRefresh={onRefresh} refreshing={refreshing}>
       {child ? (
@@ -116,6 +142,12 @@ export function ChildProfileScreen() {
           ) : (
             <Avatar.Icon size={120} icon="account" style={styles.bigAvatarPlaceholder} color={colors.primary} />
           )}
+          <PrimaryButton
+            label={uploadingAvatar ? "Uploading..." : "Upload Profile Photo"}
+            mode="text"
+            onPress={() => void handleUploadAvatar()}
+            disabled={uploadingAvatar || !child}
+          />
           <Text variant="headlineSmall" style={styles.name}>
             {child?.name ?? "Profile"}
           </Text>
@@ -152,8 +184,6 @@ export function ChildProfileScreen() {
             )}
           </Card.Content>
         </Card>
-
-        <PrimaryButton label="Sign Out" onPress={() => void signOut()} mode="outlined" />
       </View>
     </ScreenContainer>
   );
