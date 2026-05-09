@@ -2,6 +2,7 @@ import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useSt
 import { AppMode, UserRole } from "@/types/app";
 import { supabase } from "@/services/supabase";
 import { setChildOnlineStatus } from "@/services/childPresence";
+import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { isSupabaseConfigured } from "@/config/env";
 
 type AuthContextValue = {
@@ -59,6 +60,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         void setChildOnlineStatus(true);
       }
       setAppMode(nextMode);
+      if (nextMode !== "auth") {
+        void registerAndSavePushToken();
+      }
       setIsBootstrapping(false);
     }
 
@@ -76,6 +80,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
             void setChildOnlineStatus(true);
           }
           setAppMode(nextMode);
+          if (nextMode !== "auth") {
+            void registerAndSavePushToken();
+          }
         });
       }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
 

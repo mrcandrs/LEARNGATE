@@ -54,6 +54,14 @@
       ],
       "expo-web-browser",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#ffffff",
+          "defaultChannel": "default"
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

@@ -36,15 +36,29 @@ export async function registerForPushNotifications(): Promise<string | null> {
     return null;
   }
 
-  // Android requires a channel for heads-up behavior.
+  // Android channels (remote pushes can target channelId e.g. "tasks").
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
+      name: "General",
       importance: Notifications.AndroidImportance.DEFAULT,
+    });
+    await Notifications.setNotificationChannelAsync("tasks", {
+      name: "Tasks & family updates",
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
 
   return token;
+}
+
+/** Register permission + Expo token and save to Supabase for the signed-in profile (parent or child). */
+export async function registerAndSavePushToken(): Promise<void> {
+  const expoToken = await registerForPushNotifications();
+  if (expoToken) {
+    await upsertMyPushToken(expoToken);
+  }
 }
 
 export async function upsertMyPushToken(expoPushToken: string) {
