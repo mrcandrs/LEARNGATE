@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { Platform } from "react-native";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
+import { syncBlockedPackages } from "@/services/appBlocking";
 import { formatAppError } from "@/utils/errors";
 
 export type ChildProfileRow = {
@@ -14,6 +16,8 @@ export type ChildProfileRow = {
   avatar_url: string | null;
   audio_guide_enabled: boolean;
   audio_guide_rate: number;
+  /** Package names the parent chose to block (from `screen_rules.blocked_apps_json`). */
+  blocked_apps_json: string[];
 };
 
 export function useChildProfile() {
@@ -59,7 +63,22 @@ export function useChildProfile() {
       return;
     }
 
-    setChild(data as ChildProfileRow);
+    const { data: ruleRow, error: ruleError } = await supabase
+      .from("screen_rules")
+      .select("blocked_apps_json")
+      .eq("child_id", data.id)
+      .maybeSingle();
+
+    if (ruleError) {
+      setError(formatAppError(ruleError));
+    }
+
+    const blocked = Array.isArray(ruleRow?.blocked_apps_json) ? ruleRow!.blocked_apps_json : [];
+
+    setChild({
+      ...(data as ChildProfileRow),
+      blocked_apps_json: blocked.filter((p): p is string => typeof p === "string" && p.length > 0),
+    });
     setLoading(false);
   }, [isSupabaseConfigured]);
 
@@ -116,6 +135,14 @@ export function useChildProfile() {
       }
     };
   }, [isSupabaseConfigured, refresh]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !child?.id) {
+      return;
+    }
+    const pkgs = child.blocked_apps_json ?? [];
+    void syncBlockedPackages(pkgs);
+  }, [child?.id, JSON.stringify(child?.blocked_apps_json ?? [])]);
 
   return { child, loading, error, refresh };
 }

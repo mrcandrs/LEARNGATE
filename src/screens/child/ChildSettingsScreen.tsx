@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useCallback, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Button, Chip, Dialog, Portal, Switch, Text } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { blockedPackagesToLabels } from "@/constants/blockedAppPackages";
 import { useAuth } from "@/store/AuthContext";
 import { colors, radii, shadows } from "@/theme/theme";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
@@ -9,6 +11,12 @@ import { useThemeMode } from "@/store/ThemeModeContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
+import {
+  clearBlockedPackagesFromNative,
+  getAccessibilityEnabled,
+  isAppBlockingAvailable,
+  openAccessibilitySettings,
+} from "@/services/appBlocking";
 
 export function ChildSettingsScreen() {
   const { signOut } = useAuth();
@@ -17,6 +25,26 @@ export function ChildSettingsScreen() {
   const themeMode = useThemeMode();
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [accessibilityOn, setAccessibilityOn] = useState<boolean | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "android" || !isAppBlockingAvailable()) {
+        setAccessibilityOn(null);
+        return;
+      }
+      let active = true;
+      void (async () => {
+        const on = await getAccessibilityEnabled();
+        if (active) setAccessibilityOn(on);
+      })();
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const blockedLabels = blockedPackagesToLabels(child?.blocked_apps_json ?? []);
 
   const onToggleAudio = async (next: boolean) => {
     audio.setEnabled(next);
@@ -67,6 +95,39 @@ export function ChildSettingsScreen() {
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+      {isAppBlockingAvailable() ? (
+        <View style={styles.card}>
+          <Text variant="titleMedium" style={styles.title}>
+            App blocking (this phone)
+          </Text>
+          <Text variant="bodyMedium" style={styles.subtitle}>
+            Your parent picks which apps to block.
+          </Text>
+          <Text variant="bodySmall" style={styles.sectionLabel}>
+            Blocked apps right now
+          </Text>
+          {blockedLabels.length === 0 ? (
+            <Text variant="bodyMedium" style={styles.mutedSmall}>
+              None right now.
+            </Text>
+          ) : (
+            <View style={styles.blockedChipRow}>
+              {blockedLabels.map((label) => (
+                <Chip key={label} mode="flat" compact style={styles.blockedChip}>
+                  {label}
+                </Chip>
+              ))}
+            </View>
+          )}
+          <Text variant="bodyMedium" style={styles.statusLine}>
+            LearnGate Accessibility: {accessibilityOn === null ? "…" : accessibilityOn ? "On" : "Off"}
+          </Text>
+          <Button mode="outlined" onPress={() => openAccessibilitySettings()} style={styles.marginTopBtn}>
+            Open Accessibility settings
+          </Button>
+        </View>
+      ) : null}
+
       <View style={styles.card}>
         <Text variant="titleMedium" style={styles.title}>
           Account
@@ -93,7 +154,10 @@ export function ChildSettingsScreen() {
               mode="contained"
               onPress={() => {
                 setConfirmVisible(false);
-                void signOut();
+                void (async () => {
+                  await clearBlockedPackagesFromNative();
+                  await signOut();
+                })();
               }}
               style={styles.dialogLogout}
             >
@@ -148,6 +212,37 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#B91C1C",
+  },
+  statusLine: {
+    color: colors.text,
+    marginTop: 4,
+    fontWeight: "600",
+  },
+  marginTopBtn: {
+    marginTop: 8,
+  },
+  sectionLabel: {
+    color: colors.subtext,
+    fontWeight: "600",
+    marginTop: 8,
+  },
+  mutedSmall: {
+    color: colors.subtext,
+    marginTop: 2,
+  },
+  blockedChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+  },
+  blockedChip: {
+    alignSelf: "flex-start",
+  },
+  accessibilityNote: {
+    color: colors.subtext,
+    marginTop: 12,
+    lineHeight: 18,
   },
 });
 

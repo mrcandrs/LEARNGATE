@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
+import { BlockedReturnDialog } from "@/components/BlockedReturnDialog";
 import { AuthStackNavigator } from "@/navigation/AuthStackNavigator";
 import { ParentTabsNavigator } from "@/navigation/ParentTabsNavigator";
 import { ChildTabsNavigator } from "@/navigation/ChildTabsNavigator";
@@ -18,9 +19,12 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      {appMode === "auth" ? <AuthStackNavigator /> : appMode === "parent" ? <ParentTabsNavigator /> : <ChildTabsNavigator />}
-    </NavigationContainer>
+    <>
+      <NavigationContainer>
+        {appMode === "auth" ? <AuthStackNavigator /> : appMode === "parent" ? <ParentTabsNavigator /> : <ChildTabsNavigator />}
+      </NavigationContainer>
+      <BlockedReturnDialog />
+    </>
   );
 }
 

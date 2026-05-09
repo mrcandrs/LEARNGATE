@@ -1,6 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text, TextInput } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  Divider,
+  Menu,
+  Portal,
+  Snackbar,
+  Switch,
+  Text,
+  TextInput,
+  useTheme,
+} from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { colors, radii, shadows } from "@/theme/theme";
@@ -10,6 +24,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
 import { levelToDifficultyLabel } from "@/utils/difficulty";
 import { useThemeMode } from "@/store/ThemeModeContext";
+import { BLOCKABLE_APP_GROUPS, isGroupFullySelected, toggleBlockedGroup as applyBlockedGroupToggle, type BlockableAppGroup } from "@/constants/blockedAppPackages";
 
 type ChildSummary = {
   id: string;
@@ -33,11 +48,11 @@ type ScreenRule = {
 export function ParentSettingsScreen() {
   const { isSupabaseConfigured, signOut } = useAuth();
   const themeMode = useThemeMode();
+  const theme = useTheme();
   const [children, setChildren] = useState<ChildSummary[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childMenuVisible, setChildMenuVisible] = useState(false);
   const [rule, setRule] = useState<ScreenRule | null>(null);
-  const [blockedAppsInput, setBlockedAppsInput] = useState("");
   const [taskRequirementsInput, setTaskRequirementsInput] = useState("");
   const [rewardMultiplierInput, setRewardMultiplierInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -92,7 +107,6 @@ export function ParentSettingsScreen() {
 
     if (!nextChildId) {
       setRule(null);
-      setBlockedAppsInput("");
       setTaskRequirementsInput("");
       setRewardMultiplierInput("");
       setIsLoading(false);
@@ -124,7 +138,6 @@ export function ParentSettingsScreen() {
 
     const loadedRule = (rulesData as ScreenRule | null) ?? fallbackRule;
     setRule(loadedRule);
-    setBlockedAppsInput(loadedRule.blocked_apps_json.join(", "));
     setTaskRequirementsInput(String(loadedRule.unlock_after_task_count));
     setRewardMultiplierInput(String(loadedRule.reward_multiplier));
     setIsLoading(false);
@@ -176,10 +189,7 @@ export function ParentSettingsScreen() {
       child_id: selectedChildId,
       unlock_after_task_count: taskCount,
       reward_multiplier: multiplier,
-      blocked_apps_json: blockedAppsInput
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
+      blocked_apps_json: rule.blocked_apps_json,
     };
 
     const { error: upsertError } = await supabase.from("screen_rules").upsert(payload, { onConflict: "child_id" });
@@ -189,6 +199,16 @@ export function ParentSettingsScreen() {
     }
     setSnackbar("Parent settings saved successfully.");
     await loadSettings(false);
+  };
+
+  const toggleBlockedGroup = (group: BlockableAppGroup) => {
+    setRule((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        blocked_apps_json: applyBlockedGroupToggle(prev.blocked_apps_json, group),
+      };
+    });
   };
 
   return (
@@ -255,13 +275,43 @@ export function ParentSettingsScreen() {
             Bedtime Schedule: {selectedChild ? `${selectedChild.bedtime_start} - ${selectedChild.bedtime_end}` : "N/A"}
           </Text>
           <Divider />
-          <TextInput
-            label="Blocked Apps (comma separated)"
-            mode="outlined"
-            value={blockedAppsInput}
-            onChangeText={setBlockedAppsInput}
-            disabled={!rule}
-          />
+          <Text>Blocked Apps</Text>
+          <Text variant="bodySmall" style={[styles.blockedHint, { color: theme.colors.onSurfaceVariant }]}>
+            One tap blocks every common install variant (e.g. TikTok and TikTok Lite). Save after changing, then have the child reopen the app once so the phone gets the new list.
+          </Text>
+          <View style={styles.appGrid}>
+            {BLOCKABLE_APP_GROUPS.map((app) => {
+              const selected = rule ? isGroupFullySelected(rule.blocked_apps_json, app) : false;
+              return (
+                <Pressable
+                  key={app.slug}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Toggle ${app.label}`}
+                  style={[
+                    styles.appTile,
+                    {
+                      backgroundColor: selected ? theme.colors.primary : theme.colors.surfaceVariant,
+                      borderColor: selected ? theme.colors.primary : theme.colors.outline,
+                    },
+                  ]}
+                  onPress={() => toggleBlockedGroup(app)}
+                  disabled={!rule}
+                >
+                  <MaterialCommunityIcons
+                    name={app.icon}
+                    size={22}
+                    color={selected ? theme.colors.onPrimary : theme.colors.primary}
+                  />
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.appTileLabel, { color: selected ? theme.colors.onPrimary : theme.colors.onSurface }]}
+                  >
+                    {app.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </Card.Content>
       </Card>
 
@@ -395,6 +445,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  blockedHint: {
+    marginTop: 4,
+  },
+  appGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  appTile: {
+    width: "31%",
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  appTileLabel: {
+    fontWeight: "600",
+    textAlign: "center",
   },
   pickerRow: {
     borderWidth: 1,
