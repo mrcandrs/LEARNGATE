@@ -7,7 +7,7 @@ import { ParentSubmissionsScreen } from "@/screens/parent/ParentSubmissionsScree
 import { ParentLocationScreen } from "@/screens/parent/ParentLocationScreen";
 import { ParentTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
-import { ParentHeaderLogout } from "@/navigation/ParentHeaderLogout";
+import { useTheme } from "react-native-paper";
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 
@@ -20,21 +20,21 @@ const PARENT_TITLES: Record<keyof ParentTabParamList, string> = {
 };
 
 export function ParentTabsNavigator() {
+  const theme = useTheme();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: true,
-        headerStyle: { backgroundColor: colors.parentHeader },
+        headerStyle: { backgroundColor: theme.colors.primary },
         headerTintColor: "#FFFFFF",
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
-        headerRight: () => <ParentHeaderLogout />,
         title: PARENT_TITLES[route.name as keyof ParentTabParamList],
-        tabBarActiveTintColor: colors.primaryDark,
-        tabBarInactiveTintColor: colors.subtext,
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.outlineVariant,
         },
         tabBarIcon: ({ color, size }) => {
           const iconName =

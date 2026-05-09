@@ -38,13 +38,75 @@ export const shadows = {
   }),
 };
 
-export const appTheme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: colors.primary,
-    background: colors.background,
-    surface: colors.card,
+export type AppThemeMode = "mint" | "sunset" | "midnight";
+
+const themeModeColors: Record<
+  AppThemeMode,
+  {
+    primary: string;
+    secondary: string;
+    tertiary: string;
+    background: string;
+    surface: string;
+    surfaceVariant: string;
+    outline: string;
+    outlineVariant: string;
+    onSurfaceVariant: string;
+  }
+> = {
+  mint: {
+    primary: "#4CAF50",
+    secondary: "#0EA5A3",
+    tertiary: "#F59E0B",
+    background: "#F7FAF8",
+    surface: "#FFFFFF",
+    surfaceVariant: "#ECFDF3",
+    outline: "#B7D7C0",
+    outlineVariant: "#D4E6DA",
+    onSurfaceVariant: "#4B5563",
   },
-  fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }),
+  sunset: {
+    primary: "#EA580C",
+    secondary: "#F59E0B",
+    tertiary: "#DC2626",
+    background: "#FFF7ED",
+    surface: "#FFFFFF",
+    surfaceVariant: "#FFF1E6",
+    outline: "#F0C9A8",
+    outlineVariant: "#F7DDC8",
+    onSurfaceVariant: "#7C4A2D",
+  },
+  midnight: {
+    primary: "#4F46E5",
+    secondary: "#0284C7",
+    tertiary: "#7C3AED",
+    background: "#EEF2FF",
+    surface: "#FFFFFF",
+    surfaceVariant: "#E6E9FF",
+    outline: "#B7BDF6",
+    outlineVariant: "#CCD1FA",
+    onSurfaceVariant: "#46506B",
+  },
 };
+
+export function createAppTheme(mode: AppThemeMode) {
+  const palette = themeModeColors[mode];
+  return {
+    ...MD3LightTheme,
+    colors: {
+      ...MD3LightTheme.colors,
+      primary: palette.primary,
+      secondary: palette.secondary,
+      tertiary: palette.tertiary,
+      background: palette.background,
+      surface: palette.surface,
+      surfaceVariant: palette.surfaceVariant,
+      outline: palette.outline,
+      outlineVariant: palette.outlineVariant,
+      onSurfaceVariant: palette.onSurfaceVariant,
+    },
+    fonts: configureFonts({ config: { fontFamily: "Poppins_400Regular" } }),
+  };
+}
+
+export const appTheme = createAppTheme("mint");

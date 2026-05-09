@@ -33,6 +33,7 @@ export type ChildHomeStackParamList = {
 
 export type ChildProfileStackParamList = {
   MyStuffMain: undefined;
+  ChildSettings: undefined;
 };
 
 export type ChildTabParamList = {

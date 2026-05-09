@@ -1,7 +1,8 @@
 import { Image, StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
+import { Text, useTheme } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors, radii, shadows } from "@/theme/theme";
+import { levelToDifficultyLabel } from "@/utils/difficulty";
 
 type Props = {
   name: string;
@@ -11,8 +12,11 @@ type Props = {
 };
 
 export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
+  const theme = useTheme();
+  const difficultyLabel = levelToDifficultyLabel(level);
+
   return (
-    <View style={styles.outer}>
+    <View style={[styles.outer, { backgroundColor: theme.colors.primary }]}>
       <View style={styles.row}>
         <View style={styles.avatarWrap}>
           {avatarUrl ? (
@@ -28,7 +32,7 @@ export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
           <View style={styles.metaRow}>
             <View style={styles.pill}>
               <Text variant="labelMedium" style={styles.pillText}>
-                Level {level}
+                {difficultyLabel}
               </Text>
             </View>
             <View style={styles.pill}>

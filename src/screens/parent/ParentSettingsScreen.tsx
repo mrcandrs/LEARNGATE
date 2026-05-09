@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Card, Divider, Menu, Snackbar, Switch, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text, TextInput } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { colors, radii, shadows } from "@/theme/theme";
@@ -8,6 +8,8 @@ import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
+import { levelToDifficultyLabel } from "@/utils/difficulty";
+import { useThemeMode } from "@/store/ThemeModeContext";
 
 type ChildSummary = {
   id: string;
@@ -16,6 +18,7 @@ type ChildSummary = {
   bedtime_start: string;
   bedtime_end: string;
   difficulty_level: number;
+  audio_guide_rate: number;
 };
 
 type ScreenRule = {
@@ -28,7 +31,8 @@ type ScreenRule = {
 };
 
 export function ParentSettingsScreen() {
-  const { isSupabaseConfigured } = useAuth();
+  const { isSupabaseConfigured, signOut } = useAuth();
+  const themeMode = useThemeMode();
   const [children, setChildren] = useState<ChildSummary[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childMenuVisible, setChildMenuVisible] = useState(false);
@@ -40,6 +44,7 @@ export function ParentSettingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   const loadSettings = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -68,7 +73,7 @@ export function ParentSettingsScreen() {
 
     const { data: childData, error: childrenError } = await supabase
       .from("children")
-      .select("id, name, daily_limit_minutes, bedtime_start, bedtime_end, difficulty_level")
+      .select("id, name, daily_limit_minutes, bedtime_start, bedtime_end, difficulty_level, audio_guide_rate")
       .eq("parent_id", user.id)
       .order("created_at", { ascending: true });
 
@@ -135,6 +140,18 @@ export function ParentSettingsScreen() {
   }, [loadSettings]);
 
   const selectedChild = children.find((child) => child.id === selectedChildId);
+  const selectedRate = selectedChild?.audio_guide_rate ?? 0.92;
+
+  const updateAudioRate = async (rate: number) => {
+    if (!supabase || !selectedChildId) return;
+    const { error: updateError } = await supabase.from("children").update({ audio_guide_rate: rate }).eq("id", selectedChildId);
+    if (updateError) {
+      setError(formatAppError(updateError));
+      return;
+    }
+    setChildren((prev) => prev.map((child) => (child.id === selectedChildId ? { ...child, audio_guide_rate: rate } : child)));
+    setSnackbar("Audio guide pace saved.");
+  };
 
   const saveRules = async () => {
     if (!supabase || !rule || !selectedChildId) {
@@ -251,7 +268,7 @@ export function ParentSettingsScreen() {
       <Card style={styles.card}>
         <Card.Title title="Learning Settings" />
         <Card.Content style={styles.block}>
-          <Text>Default Difficulty: {selectedChild ? `Level ${selectedChild.difficulty_level}` : "N/A"}</Text>
+          <Text>Default Difficulty: {selectedChild ? levelToDifficultyLabel(selectedChild.difficulty_level) : "N/A"}</Text>
           <Divider />
           <TextInput
             label="Task Requirements"
@@ -292,10 +309,72 @@ export function ParentSettingsScreen() {
         </Card.Content>
       </Card>
 
+      <Card style={styles.card}>
+        <Card.Title title="Appearance" />
+        <Card.Content style={styles.block}>
+          <Text>App Theme</Text>
+          <View style={styles.chipRow}>
+            <Chip selected={themeMode.mode === "mint"} onPress={() => themeMode.setMode("mint")}>
+              Mint
+            </Chip>
+            <Chip selected={themeMode.mode === "sunset"} onPress={() => themeMode.setMode("sunset")}>
+              Sunset
+            </Chip>
+            <Chip selected={themeMode.mode === "midnight"} onPress={() => themeMode.setMode("midnight")}>
+              Midnight
+            </Chip>
+          </View>
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Title title="Audio Guide" />
+        <Card.Content style={styles.block}>
+          <Text>Speech Pace</Text>
+          <View style={styles.chipRow}>
+            <Chip selected={selectedRate <= 0.86} onPress={() => void updateAudioRate(0.84)}>
+              Slow
+            </Chip>
+            <Chip selected={selectedRate > 0.86 && selectedRate < 0.98} onPress={() => void updateAudioRate(0.92)}>
+              Normal
+            </Chip>
+            <Chip selected={selectedRate >= 0.98} onPress={() => void updateAudioRate(1.05)}>
+              Fast
+            </Chip>
+          </View>
+        </Card.Content>
+      </Card>
+
       <PrimaryButton label="Save Settings" onPress={() => void saveRules()} disabled={!rule} />
+      <Button mode="contained" onPress={() => setConfirmVisible(true)} style={styles.logoutButton}>
+        Log Out
+      </Button>
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
         {snackbar ?? ""}
       </Snackbar>
+      <Portal>
+        <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)}>
+          <Dialog.Title>Log out</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">Are you sure you want to log out?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button mode="text" onPress={() => setConfirmVisible(false)}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => {
+                setConfirmVisible(false);
+                void signOut();
+              }}
+              style={styles.dialogLogout}
+            >
+              Log Out
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScreenContainer>
   );
 }
@@ -311,6 +390,11 @@ const styles = StyleSheet.create({
   },
   block: {
     gap: 10,
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   pickerRow: {
     borderWidth: 1,
@@ -341,5 +425,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#B91C1C",
+  },
+  logoutButton: {
+    backgroundColor: "#B91C1C",
+  },
+  dialogLogout: {
+    backgroundColor: "#B91C1C",
   },
 });

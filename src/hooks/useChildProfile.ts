@@ -12,6 +12,8 @@ export type ChildProfileRow = {
   stars: number;
   daily_limit_minutes: number;
   avatar_url: string | null;
+  audio_guide_enabled: boolean;
+  audio_guide_rate: number;
 };
 
 export function useChildProfile() {
@@ -46,7 +48,7 @@ export function useChildProfile() {
 
     const { data, error: childError } = await supabase
       .from("children")
-      .select("id, name, age, difficulty_level, stars, daily_limit_minutes, avatar_url")
+      .select("id, name, age, difficulty_level, stars, daily_limit_minutes, avatar_url, audio_guide_enabled, audio_guide_rate")
       .eq("child_user_id", user.id)
       .maybeSingle();
 

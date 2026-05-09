@@ -9,23 +9,25 @@ import { colors } from "@/theme/theme";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { useAuth } from "@/store/AuthContext";
 import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
+import { useTheme } from "react-native-paper";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
 
 export function ChildTabsNavigator() {
   useChildLocationTracking();
   const { appMode } = useAuth();
+  const theme = useTheme();
   useChildHeartbeat({ enabled: appMode === "child", intervalMs: 60_000 });
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.primaryDark,
+        tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: colors.subtext,
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
+          backgroundColor: theme.colors.surface,
+          borderTopColor: theme.colors.outlineVariant,
         },
         tabBarIcon: ({ color, size }) => {
           const iconName =

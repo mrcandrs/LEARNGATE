@@ -297,6 +297,8 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   const [rewardSaved, setRewardSaved] = useState(false);
   const awardInFlightRef = useRef(false);
   const taskCompleteInFlightRef = useRef(false);
+  const audioEnabled = child?.audio_guide_enabled ?? audio.enabled;
+  const audioRate = child?.audio_guide_rate ?? audio.rate;
 
   useEffect(() => {
     setFeedback(null);
@@ -368,9 +370,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
     if (lastSpokenRoundRef.current === round) return;
     lastSpokenRoundRef.current = round;
     promptTimerRef.current = setTimeout(() => {
-      audio.speak(spokenPrompt);
+      audio.speak(spokenPrompt, { enabled: audioEnabled, rate: audioRate });
     }, 250);
-  }, [spokenPrompt, audio, feedback, round]);
+  }, [spokenPrompt, audio, feedback, round, audioEnabled, audioRate]);
 
   useEffect(() => {
     return () => {
@@ -395,10 +397,10 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       if (correct) {
         setScore((s) => s + 1);
         setFeedback("Correct!");
-        audio.speak("Correct!");
+        audio.speak("Correct!", { enabled: audioEnabled, rate: audioRate });
       } else {
         setFeedback("Wrong!");
-        audio.speak("Wrong!");
+        audio.speak("Wrong!", { enabled: audioEnabled, rate: audioRate });
       }
       if (advanceTimerRef.current) {
         clearTimeout(advanceTimerRef.current);
@@ -413,7 +415,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
         setLocked(false);
       }, 700);
     },
-    [round, settings.rounds, audio, locked]
+    [round, settings.rounds, audio, locked, audioEnabled, audioRate]
   );
 
   const restart = () => {
@@ -426,7 +428,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   };
 
   const xpEarned = score * settings.xpPerCorrect;
-  const difficultyText = `Difficulty ${difficultyLevel} (${settings.tier})`;
+  const difficultyText = `Difficulty ${settings.tier === "easy" ? "Easy" : settings.tier === "hard" ? "Hard" : "Medium"}`;
 
   useEffect(() => {
     async function award() {

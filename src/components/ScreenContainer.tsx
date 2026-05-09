@@ -1,7 +1,7 @@
 import { PropsWithChildren } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@/theme/theme";
+import { useTheme } from "react-native-paper";
 
 type ScreenContainerProps = PropsWithChildren<{
   scroll?: boolean;
@@ -20,16 +20,17 @@ export function ScreenContainer({
   onRefresh,
   refreshing = false,
 }: ScreenContainerProps) {
+  const theme = useTheme();
   const pad = { paddingHorizontal: contentPadding, paddingBottom: 32, paddingTop: contentPadding, gap: 12 };
   const edges = includeTopInset ? (["top", "left", "right", "bottom"] as const) : (["left", "right", "bottom"] as const);
 
   if (scroll) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={edges}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]} edges={edges}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, pad]}
           refreshControl={
-            onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} /> : undefined
+            onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} /> : undefined
           }
         >
           {children}
@@ -39,7 +40,7 @@ export function ScreenContainer({
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={edges}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]} edges={edges}>
       <View style={[styles.content, { padding: contentPadding }]}>{children}</View>
     </SafeAreaView>
   );
@@ -48,7 +49,6 @@ export function ScreenContainer({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
   },
   content: {
     flex: 1,

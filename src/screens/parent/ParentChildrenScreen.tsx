@@ -14,6 +14,7 @@ import { env } from "@/config/env";
 import { EXERCISES, type ExerciseId } from "@/data/exercises";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { GameId } from "@/data/childGames";
+import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
 
 type ChildRow = {
   id: string;
@@ -34,7 +35,7 @@ type SortMode = "recent" | "name" | "age" | "stars";
 
 type ChildDraft = {
   daily_limit_minutes: string;
-  difficulty_level: string;
+  difficulty_level: DifficultyTier;
   bedtime_start: string;
   bedtime_end: string;
 };
@@ -117,7 +118,7 @@ export function ParentChildrenScreen() {
     const nextDrafts = rows.reduce<Record<string, ChildDraft>>((acc, row) => {
       acc[row.id] = {
         daily_limit_minutes: String(row.daily_limit_minutes),
-        difficulty_level: String(row.difficulty_level),
+        difficulty_level: levelToDifficultyTier(row.difficulty_level),
         bedtime_start: row.bedtime_start,
         bedtime_end: row.bedtime_end,
       };
@@ -167,15 +168,15 @@ export function ParentChildrenScreen() {
     }
     setError(null);
     const draft = drafts[childId];
-    if (!draft.daily_limit_minutes.trim() || !draft.difficulty_level.trim()) {
-      setError("Daily limit and difficulty are required.");
+    if (!draft.daily_limit_minutes.trim()) {
+      setError("Daily limit is required.");
       return;
     }
 
     const dailyLimit = Number(draft.daily_limit_minutes);
-    const difficulty = Number(draft.difficulty_level);
-    if (Number.isNaN(dailyLimit) || Number.isNaN(difficulty)) {
-      setError("Please enter valid numeric values.");
+    const difficulty = difficultyTierToLevel(draft.difficulty_level);
+    if (Number.isNaN(dailyLimit)) {
+      setError("Please enter a valid daily limit.");
       return;
     }
 
@@ -471,7 +472,7 @@ export function ParentChildrenScreen() {
       ? draft
       : {
           daily_limit_minutes: String(selectedChild.daily_limit_minutes),
-          difficulty_level: String(selectedChild.difficulty_level),
+          difficulty_level: levelToDifficultyTier(selectedChild.difficulty_level),
           bedtime_start: selectedChild.bedtime_start,
           bedtime_end: selectedChild.bedtime_end,
         };
@@ -632,18 +633,26 @@ export function ParentChildrenScreen() {
                         />
                       </View>
                       <View style={styles.twoColItem}>
-                        <TextInput
-                          label="Difficulty (1-10)"
-                          mode="outlined"
-                          value={selectedDraft.difficulty_level}
-                          keyboardType="number-pad"
-                          onChangeText={(value) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [selectedChild.id]: { ...selectedDraft, difficulty_level: value.replace(/[^0-9]/g, "") },
-                            }))
-                          }
-                        />
+                        <Text variant="labelLarge" style={styles.sectionLabel}>
+                          Difficulty
+                        </Text>
+                        <View style={styles.chipRow}>
+                          {(["easy", "medium", "hard"] as const).map((tier) => (
+                            <Chip
+                              key={tier}
+                              selected={selectedDraft.difficulty_level === tier}
+                              onPress={() =>
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [selectedChild.id]: { ...selectedDraft, difficulty_level: tier },
+                                }))
+                              }
+                              compact
+                            >
+                              {difficultyTierLabel(tier)}
+                            </Chip>
+                          ))}
+                        </View>
                       </View>
                     </View>
                   </View>

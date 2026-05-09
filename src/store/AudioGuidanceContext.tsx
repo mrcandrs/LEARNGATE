@@ -10,7 +10,7 @@ type AudioGuidanceState = {
 type AudioGuidanceContextValue = AudioGuidanceState & {
   setEnabled: (next: boolean) => void;
   setRate: (next: number) => void;
-  speak: (text: string) => void;
+  speak: (text: string, options?: { enabled?: boolean; rate?: number }) => void;
   stop: () => void;
 };
 
@@ -54,13 +54,15 @@ export function AudioGuidanceProvider({ children }: PropsWithChildren) {
   }, []);
 
   const speak = useCallback(
-    (text: string) => {
-      if (!enabled) return;
+    (text: string, options?: { enabled?: boolean; rate?: number }) => {
+      const effectiveEnabled = options?.enabled ?? enabled;
+      const effectiveRate = options?.rate ?? rate;
+      if (!effectiveEnabled) return;
       const trimmed = text.trim();
       if (!trimmed) return;
       try {
         Speech.stop();
-        Speech.speak(trimmed, { rate });
+        Speech.speak(trimmed, { rate: effectiveRate });
       } catch {
         // ignore
       }

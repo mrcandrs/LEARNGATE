@@ -13,10 +13,23 @@ import {
 } from "@expo-google-fonts/poppins";
 import { AuthProvider } from "./src/store/AuthContext";
 import { AudioGuidanceProvider } from "./src/store/AudioGuidanceContext";
+import { ThemeModeProvider, useThemeMode } from "./src/store/ThemeModeContext";
 
 WebBrowser.maybeCompleteAuthSession();
 import { RootNavigator } from "./src/navigation/RootNavigator";
-import { appTheme } from "./src/theme/theme";
+
+function AppShell() {
+  const { theme } = useThemeMode();
+  return (
+    <PaperProvider theme={theme}>
+      <AudioGuidanceProvider>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </AudioGuidanceProvider>
+    </PaperProvider>
+  );
+}
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -35,12 +48,8 @@ export default function App() {
   }
 
   return (
-    <PaperProvider theme={appTheme}>
-      <AudioGuidanceProvider>
-        <AuthProvider>
-          <RootNavigator />
-        </AuthProvider>
-      </AudioGuidanceProvider>
-    </PaperProvider>
+    <ThemeModeProvider>
+      <AppShell />
+    </ThemeModeProvider>
   );
 }
