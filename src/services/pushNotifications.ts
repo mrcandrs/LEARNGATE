@@ -141,6 +141,17 @@ export async function registerAndSavePushToken(): Promise<PushRegistrationResult
   };
 }
 
+/** Ask the server to verify child push tokens and notify parent if a child app was removed. */
+export async function requestChildPushHealthCheck(): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+  const { error } = await supabase.rpc("request_child_push_health_check");
+  if (error && __DEV__) {
+    console.warn("[push] request_child_push_health_check:", error.message);
+  }
+}
+
 export async function upsertMyPushToken(expoPushToken: string): Promise<{ ok: boolean; message: string }> {
   if (!supabase) {
     return { ok: false, message: "Supabase is not configured." };

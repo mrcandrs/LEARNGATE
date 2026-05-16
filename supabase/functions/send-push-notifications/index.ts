@@ -1,15 +1,17 @@
 /// <reference path="../deno-shim.d.ts" />
 /**
- * Drains public.notification_outbox and sends via Expo Push API.
- * Optional body: { "check_child_tokens": true } — ping child tokens (cron) to detect uninstall.
+ * Drains notification_outbox + detects uninstalled child apps via Expo push receipts.
+ *
+ * Body: { "check_child_tokens": true } — ping all child push tokens (use on a schedule).
  *
  * Deploy: npx supabase functions deploy send-push-notifications --no-verify-jwt
- * Secrets: CRON_SECRET
  */
 // @ts-expect-error Deno resolves npm: specifiers at deploy time
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.49.1";
 
-const EXPO_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send";
+const EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts";
+const RECEIPT_WAIT_MS = 2000;
 
 type OutboxRow = {
   id: number;
@@ -27,8 +29,7 @@ type ExpoMsg = {
   channelId?: string;
 };
 
-/** Internal: ties an Expo message back to an outbox row for post-send ack. */
-type OutboxExpoMsg = ExpoMsg & { outboxId?: number };
+type OutboxExpoMsg = ExpoMsg & { outboxId?: number; childUserId?: string };
 
 type RowResult = {
   outbox_id: number;
@@ -41,15 +42,9 @@ type RowResult = {
 };
 
 type ExpoTicket = { status: string; id?: string; message?: string; details?: { error?: string } };
+type ExpoReceipt = { status: string; message?: string; details?: { error?: string } };
 
-type DrainResult = {
-  messages: OutboxExpoMsg[];
-  /** Mark after Expo confirms delivery (or for skips / non-uninstall no-token rows). */
-  processedIds: number[];
-  results: RowResult[];
-};
-
-type ChildRow = { child_user_id: string | null };
+type ChildRecord = { id: string; name: string; parent_id: string; child_user_id: string | null };
 type TokenRow = { token: string; user_id: string };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -59,22 +54,23 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function isRevokedTokenTicket(ticket: ExpoTicket): boolean {
-  const err = ticket.details?.error ?? "";
-  if (err === "DeviceNotRegistered" || err === "InvalidCredentials") {
-    return true;
-  }
-  const msg = (ticket.message ?? "").toLowerCase();
-  return msg.includes("not registered") || msg.includes("device token");
+function isRevokedPushError(err?: string, message?: string): boolean {
+  if (err === "DeviceNotRegistered" || err === "InvalidCredentials") return true;
+  const msg = (message ?? "").toLowerCase();
+  return msg.includes("not registered") || msg.includes("device token") || msg.includes("unregistered");
 }
 
 function toExpoPayload(chunk: OutboxExpoMsg[]): ExpoMsg[] {
-  return chunk.map(({ outboxId: _id, ...msg }) => msg);
+  return chunk.map(({ outboxId: _o, childUserId: _c, ...msg }) => msg);
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function sendExpoBatch(chunk: OutboxExpoMsg[]): Promise<ExpoTicket[]> {
   if (chunk.length === 0) return [];
-  const res = await fetch(EXPO_URL, {
+  const res = await fetch(EXPO_SEND_URL, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -87,13 +83,27 @@ async function sendExpoBatch(chunk: OutboxExpoMsg[]): Promise<ExpoTicket[]> {
   if (!res.ok) {
     throw new Error(`Expo push failed ${res.status}: ${JSON.stringify(body)}`);
   }
-  const tickets = (body?.data ?? []) as ExpoTicket[];
-  if (tickets.length !== chunk.length) {
-    console.warn(
-      `Expo ticket count (${tickets.length}) != message count (${chunk.length})`,
-    );
+  return (body?.data ?? []) as ExpoTicket[];
+}
+
+async function fetchExpoReceipts(
+  ticketIds: string[],
+): Promise<Record<string, ExpoReceipt>> {
+  if (ticketIds.length === 0) return {};
+  const res = await fetch(EXPO_RECEIPTS_URL, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ids: ticketIds }),
+  });
+  const body = await res.json();
+  if (!res.ok) {
+    console.warn("Expo getReceipts failed:", JSON.stringify(body));
+    return {};
   }
-  return tickets;
+  return (body?.data ?? {}) as Record<string, ExpoReceipt>;
 }
 
 async function latestTokensForUser(supabase: SupabaseClient, userId: string): Promise<string[]> {
@@ -107,30 +117,142 @@ async function latestTokensForUser(supabase: SupabaseClient, userId: string): Pr
   return token ? [token] : [];
 }
 
-function targetsChild(eventType: string): boolean {
-  return eventType === "task_assigned" || eventType === "chore_approved";
+async function childForPushToken(
+  supabase: SupabaseClient,
+  token: string,
+): Promise<{ child: ChildRecord; token: string } | null> {
+  const { data: tok } = await supabase
+    .from("push_tokens")
+    .select("token, user_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (!tok?.user_id) return null;
+
+  const { data: child } = await supabase
+    .from("children")
+    .select("id, name, parent_id, child_user_id")
+    .eq("child_user_id", tok.user_id)
+    .maybeSingle();
+
+  if (!child) return null;
+  return { child: child as ChildRecord, token: tok.token as string };
 }
 
-function targetsParent(eventType: string): boolean {
-  return (
-    eventType === "task_submitted" ||
-    eventType === "task_completed" ||
-    eventType === "child_game_milestone" ||
-    eventType === "child_app_uninstalled" ||
-    eventType === "parent_insight"
-  );
+/** Tell the parent immediately — do not rely on a second outbox drain pass. */
+async function deliverUninstallAlertToParent(
+  supabase: SupabaseClient,
+  child: ChildRecord,
+): Promise<{ sent: boolean; parentTokenCount: number }> {
+  const parentTokens = await latestTokensForUser(supabase, child.parent_id);
+  if (parentTokens.length === 0) {
+    return { sent: false, parentTokenCount: 0 };
+  }
+
+  const childName = child.name ?? "Your child";
+  const messages: OutboxExpoMsg[] = parentTokens.map((to) => ({
+    to,
+    title: "App may be uninstalled",
+    body: `LEARNGATE on ${childName}'s device may have been uninstalled or had its data cleared. Open the child app again to restore monitoring.`,
+    data: { kind: "child_app_uninstalled", child_id: child.id },
+    sound: "default",
+    channelId: "tasks",
+    priority: "high",
+  }));
+
+  const tickets = await sendExpoBatch(messages);
+  const sent = tickets.some((t) => t.status === "ok");
+  return { sent, parentTokenCount: parentTokens.length };
 }
 
-async function revokeChildToken(supabase: SupabaseClient, token: string): Promise<boolean> {
+async function handleRevokedChildToken(
+  supabase: SupabaseClient,
+  token: string,
+): Promise<{ enqueued: boolean; parentNotified: boolean; childId: string | null }> {
+  const match = await childForPushToken(supabase, token);
+  if (!match) {
+    await supabase.from("push_tokens").delete().eq("token", token);
+    return { enqueued: false, parentNotified: false, childId: null };
+  }
+
+  const { child } = match;
+
   const { data: enqueued, error } = await supabase.rpc("fn_enqueue_child_app_uninstalled", {
     p_token: token,
   });
   if (error) {
     console.error("fn_enqueue_child_app_uninstalled:", error.message);
-    return false;
   }
+
   await supabase.from("push_tokens").delete().eq("token", token);
-  return enqueued === true;
+
+  const { sent: parentNotified } = await deliverUninstallAlertToParent(supabase, child);
+
+  if (enqueued === true) {
+    const { data: pending } = await supabase
+      .from("notification_outbox")
+      .select("id")
+      .eq("event_type", "child_app_uninstalled")
+      .filter("payload->>child_id", "eq", child.id)
+      .is("processed_at", null)
+      .order("id", { ascending: false })
+      .limit(1);
+
+    if (pending?.[0]?.id && parentNotified) {
+      await supabase
+        .from("notification_outbox")
+        .update({ processed_at: new Date().toISOString() })
+        .eq("id", pending[0].id);
+    }
+  }
+
+  return {
+    enqueued: enqueued === true,
+    parentNotified,
+    childId: child.id,
+  };
+}
+
+async function processTicketsForRevokedTokens(
+  supabase: SupabaseClient,
+  chunk: OutboxExpoMsg[],
+  tickets: ExpoTicket[],
+): Promise<{ revoked: string[]; uninstallHandled: number }> {
+  const revoked: string[] = [];
+  let uninstallHandled = 0;
+  const n = Math.min(chunk.length, tickets.length);
+
+  for (let j = 0; j < n; j++) {
+    const ticket = tickets[j];
+    const msg = chunk[j];
+    if (ticket.status === "error" && isRevokedPushError(ticket.details?.error, ticket.message)) {
+      if (msg.to && !revoked.includes(msg.to)) {
+        revoked.push(msg.to);
+        await handleRevokedChildToken(supabase, msg.to);
+        uninstallHandled += 1;
+      }
+    }
+  }
+
+  const okIds = tickets
+    .map((t, j) => (t.status === "ok" && t.id ? { id: t.id, to: chunk[j]?.to } : null))
+    .filter((x): x is { id: string; to: string } => Boolean(x?.id && x?.to));
+
+  if (okIds.length === 0) return { revoked, uninstallHandled };
+
+  await sleep(RECEIPT_WAIT_MS);
+  const receipts = await fetchExpoReceipts(okIds.map((x) => x.id));
+
+  for (const { id, to } of okIds) {
+    const receipt = receipts[id];
+    if (!receipt || receipt.status !== "error") continue;
+    if (!isRevokedPushError(receipt.details?.error, receipt.message)) continue;
+    if (revoked.includes(to)) continue;
+    revoked.push(to);
+    await handleRevokedChildToken(supabase, to);
+    uninstallHandled += 1;
+  }
+
+  return { revoked, uninstallHandled };
 }
 
 async function sendMessagesAndRevokeInvalid(
@@ -139,53 +261,44 @@ async function sendMessagesAndRevokeInvalid(
 ): Promise<{
   tickets: ExpoTicket[];
   revoked: string[];
-  enqueuedUninstall: number;
+  uninstallHandled: number;
   confirmedOutboxIds: number[];
 }> {
   const tickets: ExpoTicket[] = [];
   const revoked: string[] = [];
   const confirmedOutboxIds: number[] = [];
-  let enqueuedUninstall = 0;
+  let uninstallHandled = 0;
 
   for (let i = 0; i < messages.length; i += 100) {
     const chunk = messages.slice(i, i + 100);
     const batchTickets = await sendExpoBatch(chunk);
-    const n = Math.min(chunk.length, batchTickets.length);
+    tickets.push(...batchTickets);
 
-    for (let j = 0; j < n; j++) {
-      const ticket = batchTickets[j];
-      const msg = chunk[j];
-      tickets.push(ticket);
-
-      if (ticket.status === "ok" && msg.outboxId != null) {
-        confirmedOutboxIds.push(msg.outboxId);
-      }
-
-      if (ticket.status === "error" && isRevokedTokenTicket(ticket)) {
-        const badToken = msg.to;
-        if (badToken && !revoked.includes(badToken)) {
-          revoked.push(badToken);
-          if (await revokeChildToken(supabase, badToken)) {
-            enqueuedUninstall += 1;
-          }
-        }
+    for (let j = 0; j < Math.min(chunk.length, batchTickets.length); j++) {
+      if (batchTickets[j].status === "ok" && chunk[j].outboxId != null) {
+        confirmedOutboxIds.push(chunk[j].outboxId!);
       }
     }
+
+    const { revoked: batchRevoked, uninstallHandled: batchHandled } =
+      await processTicketsForRevokedTokens(supabase, chunk, batchTickets);
+    revoked.push(...batchRevoked.filter((t) => !revoked.includes(t)));
+    uninstallHandled += batchHandled;
   }
 
   return {
     tickets,
-    revoked,
-    enqueuedUninstall,
+    revoked: [...new Set(revoked)],
+    uninstallHandled,
     confirmedOutboxIds: [...new Set(confirmedOutboxIds)],
   };
 }
 
-/** Data-only ping — no visible notification on the child device. */
 async function checkChildPushTokens(supabase: SupabaseClient): Promise<{
   tokens_checked: number;
   revoked: string[];
-  enqueued_uninstall: number;
+  uninstall_handled: number;
+  parent_notified: number;
 }> {
   const { data: children, error: childErr } = await supabase
     .from("children")
@@ -193,11 +306,11 @@ async function checkChildPushTokens(supabase: SupabaseClient): Promise<{
     .not("child_user_id", "is", null);
 
   if (childErr || !children?.length) {
-    return { tokens_checked: 0, revoked: [], enqueued_uninstall: 0 };
+    return { tokens_checked: 0, revoked: [], uninstall_handled: 0, parent_notified: 0 };
   }
 
   const childUserIds = new Set(
-    (children as ChildRow[]).map((c) => c.child_user_id).filter((id): id is string => Boolean(id)),
+    children.map((c: { child_user_id: string }) => c.child_user_id).filter(Boolean),
   );
 
   const { data: tokenRows, error: tokErr } = await supabase
@@ -205,26 +318,38 @@ async function checkChildPushTokens(supabase: SupabaseClient): Promise<{
     .select("token, user_id");
 
   if (tokErr || !tokenRows?.length) {
-    return { tokens_checked: 0, revoked: [], enqueued_uninstall: 0 };
+    return { tokens_checked: 0, revoked: [], uninstall_handled: 0, parent_notified: 0 };
   }
 
   const pings: OutboxExpoMsg[] = (tokenRows as TokenRow[])
     .filter((r) => childUserIds.has(r.user_id))
     .map((r) => ({
       to: r.token,
-      data: { kind: "token_health_ping" },
-      priority: "normal" as const,
+      title: "LEARNGATE",
+      body: "Checking device connection",
+      data: { kind: "token_health_ping", _silent: true },
+      channelId: "default",
+      priority: "normal",
+      childUserId: r.user_id,
     }));
 
-  const { revoked, enqueuedUninstall } = await sendMessagesAndRevokeInvalid(supabase, pings);
+  let parentNotified = 0;
+  const { revoked, uninstallHandled } = await sendMessagesAndRevokeInvalid(supabase, pings);
+  if (uninstallHandled > 0) parentNotified = uninstallHandled;
+
   return {
     tokens_checked: pings.length,
     revoked,
-    enqueued_uninstall: enqueuedUninstall,
+    uninstall_handled: uninstallHandled,
+    parent_notified: parentNotified,
   };
 }
 
-async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> {
+async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
+  messages: OutboxExpoMsg[];
+  processedIds: number[];
+  results: RowResult[];
+}> {
   const { data: rows, error: fetchError } = await supabase
     .from("notification_outbox")
     .select("id, event_type, payload")
@@ -232,9 +357,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
     .order("id", { ascending: true })
     .limit(40);
 
-  if (fetchError) {
-    throw new Error(fetchError.message);
-  }
+  if (fetchError) throw new Error(fetchError.message);
 
   const batch = (rows ?? []) as OutboxRow[];
   const messages: OutboxExpoMsg[] = [];
@@ -281,13 +404,11 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
     const childName = (child.name as string) ?? "Your child";
     const parentId = child.parent_id as string;
     const childUserId = child.child_user_id as string | null;
-
     const parentTokenList = await latestTokensForUser(supabase, parentId);
     const childTokenList = childUserId ? await latestTokensForUser(supabase, childUserId) : [];
-
     const title = (p.title as string) ?? "";
     let pushedForRow = 0;
-    const deferProcessed = row.event_type === "child_app_uninstalled";
+    const isUninstall = row.event_type === "child_app_uninstalled";
 
     if (row.event_type === "task_assigned") {
       for (const to of childTokenList) {
@@ -299,6 +420,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
           sound: "default",
           priority: "high",
           channelId: "tasks",
+          childUserId: childUserId ?? undefined,
         });
         pushedForRow++;
       }
@@ -335,6 +457,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
           data: { kind: "chore_approved", task_id: p.task_id },
           sound: "default",
           channelId: "tasks",
+          childUserId: childUserId ?? undefined,
         });
         pushedForRow++;
       }
@@ -351,7 +474,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
         });
         pushedForRow++;
       }
-    } else if (row.event_type === "child_app_uninstalled") {
+    } else if (isUninstall) {
       for (const to of parentTokenList) {
         messages.push({
           to,
@@ -361,6 +484,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
           data: { kind: "child_app_uninstalled", child_id: childId },
           sound: "default",
           channelId: "tasks",
+          priority: "high",
         });
         pushedForRow++;
       }
@@ -405,54 +529,33 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
       continue;
     }
 
-    const needsChild = targetsChild(row.event_type);
-    const needsParent = targetsParent(row.event_type);
-
     if (pushedForRow > 0) {
-      if (!deferProcessed) {
-        processedIds.push(row.id);
-      }
+      if (!isUninstall) processedIds.push(row.id);
       results.push({
         outbox_id: row.id,
         event_type: row.event_type,
-        status: deferProcessed ? "pending" : "sent",
+        status: isUninstall ? "pending" : "sent",
         child_user_id: childUserId,
         child_token_count: childTokenList.length,
         parent_token_count: parentTokenList.length,
-        note: deferProcessed ? "waiting for Expo delivery ack" : undefined,
       });
     } else {
-      let note = "no push token for target user";
-      if (needsChild && !childUserId) {
-        note = "children.child_user_id is NULL — link child login to children row";
-      } else if (needsChild && childTokenList.length === 0) {
-        note = "child has no row in push_tokens";
-      } else if (needsParent && parentTokenList.length === 0) {
-        note = "parent has no row in push_tokens";
-      }
-
-      if (deferProcessed) {
-        results.push({
-          outbox_id: row.id,
-          event_type: row.event_type,
-          status: "pending",
-          child_user_id: childUserId,
-          child_token_count: childTokenList.length,
-          parent_token_count: parentTokenList.length,
-          note,
-        });
-      } else {
-        processedIds.push(row.id);
-        results.push({
-          outbox_id: row.id,
-          event_type: row.event_type,
-          status: "no_tokens",
-          child_user_id: childUserId,
-          child_token_count: childTokenList.length,
-          parent_token_count: parentTokenList.length,
-          note,
-        });
-      }
+      const note =
+        childTokenList.length === 0 && row.event_type === "task_assigned"
+          ? "child has no push_tokens row"
+          : parentTokenList.length === 0
+            ? "parent has no push_tokens row — open parent app and allow notifications"
+            : "no push token for target user";
+      if (!isUninstall) processedIds.push(row.id);
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: isUninstall ? "pending" : "no_tokens",
+        child_user_id: childUserId,
+        child_token_count: childTokenList.length,
+        parent_token_count: parentTokenList.length,
+        note,
+      });
     }
   }
 
@@ -462,18 +565,16 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<DrainResult> 
 async function markProcessed(supabase: SupabaseClient, ids: number[]) {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return;
-  const now = new Date().toISOString();
-  await supabase.from("notification_outbox").update({ processed_at: now }).in("id", unique);
+  await supabase
+    .from("notification_outbox")
+    .update({ processed_at: new Date().toISOString() })
+    .in("id", unique);
 }
 
 async function parseRequestBody(req: Request): Promise<{ checkChildTokens: boolean }> {
-  if (req.method === "GET" || req.method === "HEAD") {
-    return { checkChildTokens: false };
-  }
+  if (req.method === "GET" || req.method === "HEAD") return { checkChildTokens: false };
   const text = await req.text();
-  if (!text.trim()) {
-    return { checkChildTokens: false };
-  }
+  if (!text.trim()) return { checkChildTokens: false };
   try {
     const body = JSON.parse(text) as { check_child_tokens?: boolean };
     return { checkChildTokens: Boolean(body.check_child_tokens) };
@@ -498,73 +599,49 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Missing Supabase env" }, 500);
   }
 
-  const { checkChildTokens } = await parseRequestBody(req);
+  const { checkChildTokens: checkChildTokensRequested } = await parseRequestBody(req);
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  let healthCheck: Awaited<ReturnType<typeof checkChildPushTokens>> | null = null;
-  if (checkChildTokens) {
-    healthCheck = await checkChildPushTokens(supabase);
-  }
+  // Always verify child tokens when this function runs (outbox drain, cron, or parent RPC).
+  const healthCheck = await checkChildPushTokens(supabase);
+  const checkChildTokens = checkChildTokensRequested || true;
 
   const allResults: RowResult[] = [];
   const allTickets: ExpoTicket[] = [];
   const allProcessedIds: number[] = [];
   let totalMessages = 0;
   let totalRevoked = 0;
-  let totalEnqueuedUninstall = healthCheck?.enqueued_uninstall ?? 0;
+  let totalUninstallHandled = healthCheck.uninstall_handled;
   let outboxPasses = 0;
 
   try {
     for (let pass = 0; pass < 3; pass++) {
       const drain = await buildOutboxDrain(supabase);
       const hasWork = drain.messages.length > 0 || drain.processedIds.length > 0;
-
-      if (pass > 0 && !hasWork) {
-        break;
-      }
-
-      if (!hasWork && pass === 0 && !checkChildTokens) {
-        break;
-      }
-
-      if (!hasWork) {
-        continue;
-      }
+      if (pass > 0 && !hasWork) break;
+      if (!hasWork) break;
+      if (!hasWork) continue;
 
       outboxPasses += 1;
-
-      const { tickets, revoked, enqueuedUninstall, confirmedOutboxIds } =
+      const { tickets, revoked, uninstallHandled, confirmedOutboxIds } =
         await sendMessagesAndRevokeInvalid(supabase, drain.messages);
 
       const idsToMark = [...drain.processedIds, ...confirmedOutboxIds];
-
       allTickets.push(...tickets);
       allResults.push(...drain.results);
       allProcessedIds.push(...idsToMark);
       totalMessages += drain.messages.length;
       totalRevoked += revoked.length;
-      totalEnqueuedUninstall += enqueuedUninstall;
+      totalUninstallHandled += uninstallHandled;
 
       await markProcessed(supabase, idsToMark);
 
-      if (enqueuedUninstall > 0) {
-        continue;
-      }
-
-      if (drain.messages.length === 0) {
-        break;
-      }
+      if (uninstallHandled > 0) continue;
+      if (drain.messages.length === 0) break;
     }
   } catch (e) {
     return jsonResponse(
-      {
-        error: String(e),
-        partial: true,
-        health_check: healthCheck,
-        outbox_passes: outboxPasses,
-        results: allResults,
-        expo_tickets: allTickets,
-      },
+      { error: String(e), partial: true, health_check: healthCheck, results: allResults },
       500,
     );
   }
@@ -575,17 +652,13 @@ Deno.serve(async (req) => {
     outbox_passes: outboxPasses,
     messages_sent: totalMessages,
     tokens_revoked: totalRevoked,
-    uninstall_alerts_enqueued: totalEnqueuedUninstall,
-    expo_tickets: allTickets,
-    processed_outbox_ids: [...new Set(allProcessedIds)],
+    uninstall_handled: totalUninstallHandled,
     results: allResults,
     hint:
-      totalEnqueuedUninstall > 0
-        ? "Uninstall alert enqueued — a follow-up pass should deliver it to the parent."
+      totalUninstallHandled > 0
+        ? "Revoked child token(s) and sent uninstall alert to parent."
         : checkChildTokens
-          ? "Token health check ran. See tokens_checked / tokens_revoked."
-          : allResults.some((r) => r.status === "pending")
-            ? "Some rows are pending (parent has no push token or Expo did not ack yet)."
-            : "No unprocessed outbox rows.",
+          ? "Health check ran — see tokens_checked. If 0, child never saved a push token."
+          : "Run Test with {\"check_child_tokens\":true} after uninstalling the child app.",
   });
 });

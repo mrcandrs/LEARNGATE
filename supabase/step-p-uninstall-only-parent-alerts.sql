@@ -33,7 +33,6 @@ declare
   uid uuid;
   cid uuid;
   cname text;
-  last_alert timestamptz;
 begin
   select user_id into uid from public.push_tokens where token = p_token limit 1;
   if uid is null then
@@ -49,11 +48,13 @@ begin
     return false;
   end if;
 
-  select pns.last_offline_alert_at into last_alert
-  from public.parent_notification_state pns
-  where pns.child_id = cid;
-
-  if last_alert is not null and last_alert > now() - interval '24 hours' then
+  if exists (
+    select 1
+    from public.notification_outbox o
+    where o.event_type = 'child_app_uninstalled'
+      and o.payload->>'child_id' = cid::text
+      and o.created_at > now() - interval '30 minutes'
+  ) then
     return false;
   end if;
 
@@ -65,11 +66,6 @@ begin
       'child_name', cname
     )
   );
-
-  insert into public.parent_notification_state (child_id, last_offline_alert_at, updated_at)
-  values (cid, now(), now())
-  on conflict (child_id) do update
-    set last_offline_alert_at = now(), updated_at = now();
 
   return true;
 end;

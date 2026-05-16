@@ -7,6 +7,8 @@ import { ParentSubmissionsScreen } from "@/screens/parent/ParentSubmissionsScree
 import { ParentLocationScreen } from "@/screens/parent/ParentLocationScreen";
 import { ParentTabParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
+import { useParentChildPushHealthCheck } from "@/hooks/useParentChildPushHealthCheck";
+import { useAuth } from "@/store/AuthContext";
 import { useTheme } from "react-native-paper";
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
@@ -21,6 +23,9 @@ const PARENT_TITLES: Record<keyof ParentTabParamList, string> = {
 
 export function ParentTabsNavigator() {
   const theme = useTheme();
+  const { appMode } = useAuth();
+  useParentChildPushHealthCheck(appMode === "parent");
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({

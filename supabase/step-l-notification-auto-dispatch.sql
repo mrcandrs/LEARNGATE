@@ -27,7 +27,7 @@ begin
       'Content-Type', 'application/json',
       'x-cron-secret', cron_secret
     ),
-    body := '{}'::jsonb
+    body := '{"check_child_tokens":true}'::jsonb
   ) into request_id;
 
   return new;

@@ -2,7 +2,7 @@
 -- Run AFTER step-p-uninstall-only-parent-alerts.sql and step-l-notification-auto-dispatch.sql
 --
 -- Replace YOUR_PROJECT_REF and YOUR_CRON_SECRET before running.
--- Schedule: every 4 hours (change cron expression if you want daily only: 0 9 * * *)
+-- Schedule: every hour (Expo receipts detect uninstall; parent is notified directly from the edge function)
 
 begin;
 
@@ -22,7 +22,7 @@ end $$;
 
 select cron.schedule(
   'learngate-child-token-health',
-  '0 */4 * * *',
+  '*/15 * * * *',
   $$
   select net.http_post(
     url := format('https://%s.supabase.co/functions/v1/send-push-notifications', 'YOUR_PROJECT_REF'),
@@ -42,5 +42,5 @@ commit;
 --   Header: x-cron-secret = your CRON_SECRET
 --
 -- Without pg_cron: Dashboard → Edge Functions → send-push-notifications → Schedules
---   Cron: 0 */4 * * *
+--   Cron: */15 * * * *
 --   Body: {"check_child_tokens":true}
