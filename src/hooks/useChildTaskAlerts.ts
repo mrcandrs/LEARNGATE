@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { supabase } from "@/services/supabase";
-import { showTaskAssignedNotification } from "@/services/pushNotifications";
-
 /**
- * When the child app is running, show a local notification on new task INSERT
- * (works even if FCM / Expo push delivery fails on emulators).
+ * Subscribes to new tasks for the signed-in child (Realtime).
+ * Push alerts are sent by Supabase (notification_outbox + edge function) — no local
+ * duplicate notification here (that caused 2 alerts per new task).
  * Does not use useChildProfile — must work outside NavigationContainer.
  */
 export function useChildTaskAlerts(enabled: boolean) {
@@ -84,16 +83,12 @@ export function useChildTaskAlerts(enabled: boolean) {
             }
             seenTaskIds.current.add(row.id);
 
-            const title = row.title?.trim() || "A new task";
-
             if (__DEV__) {
-              console.log("[push] new task via realtime", {
+              console.log("[push] new task detected (server will push)", {
                 id: row.id,
-                inForeground: appState.current === "active",
+                title: row.title,
               });
             }
-
-            void showTaskAssignedNotification(title);
           }
         )
         .subscribe((status) => {

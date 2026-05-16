@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -12,11 +12,11 @@ export function RoleSelectScreen({ navigation }: Props) {
   return (
     <ScreenContainer scroll>
       <View style={styles.brand}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoEmoji} accessibilityLabel="">
-            LG
-          </Text>
-        </View>
+        <Image
+          source={require("../../../assets/icon.png")}
+          style={styles.logo}
+          accessibilityLabel="LEARNGATE"
+        />
         <Text variant="headlineMedium" style={styles.title}>
           Welcome to LEARNGATE
         </Text>
@@ -51,19 +51,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     marginTop: 8,
   },
-  logoCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#8D6E63",
-    alignItems: "center",
-    justifyContent: "center",
+  logo: {
+    width: 88,
+    height: 88,
+    borderRadius: 20,
     marginBottom: 16,
-  },
-  logoEmoji: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-    fontSize: 22,
   },
   title: {
     color: colors.text,
