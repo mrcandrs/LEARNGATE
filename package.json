@@ -4,7 +4,10 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "preandroid": "npm run copy:google-services",
     "android": "expo run:android",
+    "android:clean": "cd android && gradlew.bat clean",
+    "copy:google-services": "node -e \"const fs=require('fs');const path=require('path');const src=path.join('google-services.json');const dest=path.join('android','app','google-services.json');if(fs.existsSync(src)){fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest);console.log('Copied google-services.json -> android/app/');}else if(fs.existsSync(dest)){console.log('Using existing android/app/google-services.json');}else{throw new Error('Missing google-services.json — download from Firebase Console and place in project root.');}\"",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },

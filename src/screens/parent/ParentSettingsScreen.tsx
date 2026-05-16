@@ -1,19 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Chip,
-  Dialog,
-  Divider,
-  Menu,
-  Portal,
-  Snackbar,
-  Switch,
-  Text,
-  TextInput,
-  useTheme,
+import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text, TextInput, useTheme,
 } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -24,6 +11,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
 import { levelToDifficultyLabel } from "@/utils/difficulty";
 import { useThemeMode } from "@/store/ThemeModeContext";
+import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { BLOCKABLE_APP_GROUPS, isGroupFullySelected, toggleBlockedGroup as applyBlockedGroupToggle, type BlockableAppGroup } from "@/constants/blockedAppPackages";
 
 type ChildSummary = {
@@ -60,6 +48,7 @@ export function ParentSettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pushRegistering, setPushRegistering] = useState(false);
 
   const loadSettings = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -356,6 +345,29 @@ export function ParentSettingsScreen() {
             disabled={!rule}
             onValueChange={(value) => setRule((prev) => (prev ? { ...prev, task_reminders_enabled: value } : prev))}
           />
+          <Divider />
+          <Text variant="bodySmall" style={styles.pushHint}>
+            Device alerts (new tasks, submissions) need notification permission and a development build — not Expo Go.
+          </Text>
+          <Button
+            mode="outlined"
+            loading={pushRegistering}
+            disabled={pushRegistering}
+            onPress={async () => {
+              setPushRegistering(true);
+              try {
+                const result = await registerAndSavePushToken();
+                setSnackbar(result.message);
+                if (!result.ok && __DEV__) {
+                  console.warn("[push] registration:", result.message);
+                }
+              } finally {
+                setPushRegistering(false);
+              }
+            }}
+          >
+            Enable push on this device
+          </Button>
         </Card.Content>
       </Card>
 
@@ -399,7 +411,7 @@ export function ParentSettingsScreen() {
       <Button mode="contained" onPress={() => setConfirmVisible(true)} style={styles.logoutButton}>
         Log Out
       </Button>
-      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
+      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={5000}>
         {snackbar ?? ""}
       </Snackbar>
       <Portal>
@@ -447,6 +459,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   blockedHint: {
+    marginTop: 4,
+  },
+  pushHint: {
+    color: colors.subtext,
     marginTop: 4,
   },
   appGrid: {

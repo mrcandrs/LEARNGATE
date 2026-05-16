@@ -1,0 +1,5 @@
+# Supabase local/dev config (optional for CLI).
+# Deploy: npx supabase functions deploy send-push-notifications --no-verify-jwt
+
+[functions.send-push-notifications]
+verify_jwt = false

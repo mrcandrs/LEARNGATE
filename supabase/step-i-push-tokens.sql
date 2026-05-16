@@ -36,5 +36,35 @@ to authenticated
 using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
+-- Upsert from the app must use this RPC (see step-i-push-tokens-fix-rls.sql) so a device token
+-- can move from parent → child without violating RLS on conflict.
+
+create or replace function public.upsert_push_token(p_token text, p_platform text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  uid uuid := auth.uid();
+begin
+  if uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  if p_token is null or length(trim(p_token)) = 0 then
+    raise exception 'Token is required';
+  end if;
+
+  delete from public.push_tokens where token = p_token;
+
+  insert into public.push_tokens (user_id, token, platform, updated_at)
+  values (uid, p_token, p_platform, now());
+end;
+$$;
+
+revoke all on function public.upsert_push_token(text, text) from public;
+grant execute on function public.upsert_push_token(text, text) to authenticated;
+
 commit;
 

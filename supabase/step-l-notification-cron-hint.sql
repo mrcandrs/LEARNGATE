@@ -1,0 +1,11 @@
+-- Prefer: step-l-notification-auto-dispatch.sql (trigger on notification_outbox INSERT).
+--
+-- Manual one-off drain (replace placeholders):
+-- select net.http_post(
+--   url := 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/send-push-notifications',
+--   headers := jsonb_build_object(
+--     'Content-Type', 'application/json',
+--     'x-cron-secret', 'YOUR_CRON_SECRET'
+--   ),
+--   body := '{}'::jsonb
+-- );

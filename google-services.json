@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "977339865571",
+    "project_id": "learngate-9e487",
+    "storage_bucket": "learngate-9e487.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:977339865571:android:151bb80d028c03a2bb68d6",
+        "android_client_info": {
+          "package_name": "com.pipsjacob.learngate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBvQNowzwoVp7aue_K-nWtsoJEc8tEiJKw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -61,7 +61,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       setAppMode(nextMode);
       if (nextMode !== "auth") {
-        void registerAndSavePushToken();
+        void registerAndSavePushToken().then((result) => {
+          if (!result.ok && __DEV__) {
+            console.warn("[push] auto-register on login:", result.message);
+          }
+        });
       }
       setIsBootstrapping(false);
     }
@@ -81,7 +85,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
           }
           setAppMode(nextMode);
           if (nextMode !== "auth") {
-            void registerAndSavePushToken();
+            void registerAndSavePushToken().then((result) => {
+              if (!result.ok && __DEV__) {
+                console.warn("[push] auto-register on auth change:", result.message);
+              }
+            });
           }
         });
       }) ?? { data: { subscription: { unsubscribe: () => undefined } } };

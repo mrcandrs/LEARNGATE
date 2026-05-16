@@ -1,15 +1,14 @@
+/// <reference path="../deno-shim.d.ts" />
 /**
  * Drains public.notification_outbox and sends via Expo Push API.
+ * Runs on Supabase Edge (Deno) — open this folder with the Deno extension enabled (see .vscode/settings.json).
  *
- * Deploy: supabase functions deploy send-push-notifications --no-verify-jwt
- * Secrets (Dashboard → Edge Functions → Secrets): CRON_SECRET
- *
- * Schedule: Dashboard → Edge Functions → send-push-notifications → Schedules (every 1 min), or:
- *   curl -X POST "$SUPABASE_URL/functions/v1/send-push-notifications" \
- *     -H "x-cron-secret: $CRON_SECRET" -H "Content-Type: application/json" -d '{}'
+ * Deploy: npx supabase functions deploy send-push-notifications --no-verify-jwt
+ * Secrets: CRON_SECRET
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
+// npm: import is required for Supabase Edge deploy (Deno bundler).
+// @ts-expect-error Deno resolves npm: specifiers at deploy time
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.49.1";
 const EXPO_URL = "https://exp.host/--/api/v2/push/send";
 
 type OutboxRow = {
@@ -24,7 +23,18 @@ type ExpoMsg = {
   body: string;
   data?: Record<string, unknown>;
   sound?: "default";
+  priority?: "default" | "normal" | "high";
   channelId?: string;
+};
+
+type RowResult = {
+  outbox_id: number;
+  event_type: string;
+  status: "sent" | "skipped" | "no_tokens";
+  child_user_id: string | null;
+  child_token_count: number;
+  parent_token_count: number;
+  note?: string;
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -34,8 +44,10 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-async function sendExpoBatch(messages: ExpoMsg[]) {
-  if (messages.length === 0) return;
+type ExpoTicket = { status: string; id?: string; message?: string; details?: { error?: string } };
+
+async function sendExpoBatch(chunk: ExpoMsg[]): Promise<ExpoTicket[]> {
+  if (chunk.length === 0) return [];
   const res = await fetch(EXPO_URL, {
     method: "POST",
     headers: {
@@ -43,12 +55,41 @@ async function sendExpoBatch(messages: ExpoMsg[]) {
       "Accept-Encoding": "gzip, deflate",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify(chunk),
   });
+  const body = await res.json();
   if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Expo push failed ${res.status}: ${t}`);
+    throw new Error(`Expo push failed ${res.status}: ${JSON.stringify(body)}`);
   }
+  const tickets = (body?.data ?? []) as ExpoTicket[];
+  const errors = tickets.filter((t) => t.status === "error");
+  if (errors.length === tickets.length && tickets.length > 0) {
+    throw new Error(`Expo push tickets all failed: ${JSON.stringify(errors)}`);
+  }
+  return tickets;
+}
+
+async function latestTokensForUser(supabase: SupabaseClient, userId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from("push_tokens")
+    .select("token")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  const token = data?.[0]?.token;
+  return token ? [token] : [];
+}
+
+function targetsChild(eventType: string): boolean {
+  return eventType === "task_assigned" || eventType === "chore_approved";
+}
+
+function targetsParent(eventType: string): boolean {
+  return (
+    eventType === "task_submitted" ||
+    eventType === "task_completed" ||
+    eventType === "child_game_milestone"
+  );
 }
 
 Deno.serve(async (req) => {
@@ -83,12 +124,22 @@ Deno.serve(async (req) => {
   const batch = (rows ?? []) as OutboxRow[];
   const messages: ExpoMsg[] = [];
   const processedIds: number[] = [];
+  const results: RowResult[] = [];
 
   for (const row of batch) {
     const p = row.payload;
     const childId = p.child_id as string | undefined;
     if (!childId) {
       processedIds.push(row.id);
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: "skipped",
+        child_user_id: null,
+        child_token_count: 0,
+        parent_token_count: 0,
+        note: "missing child_id in payload",
+      });
       continue;
     }
 
@@ -100,6 +151,15 @@ Deno.serve(async (req) => {
 
     if (childErr || !child) {
       processedIds.push(row.id);
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: "skipped",
+        child_user_id: null,
+        child_token_count: 0,
+        parent_token_count: 0,
+        note: "child row not found",
+      });
       continue;
     }
 
@@ -107,15 +167,11 @@ Deno.serve(async (req) => {
     const parentId = child.parent_id as string;
     const childUserId = child.child_user_id as string | null;
 
-    const { data: parentTokens } = await supabase.from("push_tokens").select("token").eq("user_id", parentId);
-    const { data: childTokens } = childUserId
-      ? await supabase.from("push_tokens").select("token").eq("user_id", childUserId)
-      : { data: [] as { token: string }[] };
-
-    const parentTokenList = (parentTokens ?? []).map((r) => r.token).filter(Boolean);
-    const childTokenList = (childTokens ?? []).map((r) => r.token).filter(Boolean);
+    const parentTokenList = await latestTokensForUser(supabase, parentId);
+    const childTokenList = childUserId ? await latestTokensForUser(supabase, childUserId) : [];
 
     const title = (p.title as string) ?? "";
+    let pushedForRow = 0;
 
     if (row.event_type === "task_assigned") {
       for (const to of childTokenList) {
@@ -125,8 +181,10 @@ Deno.serve(async (req) => {
           body: `${title || "A new task"} was added for you.`,
           data: { kind: "task_assigned", task_id: p.task_id },
           sound: "default",
+          priority: "high",
           channelId: "tasks",
         });
+        pushedForRow++;
       }
     } else if (row.event_type === "task_submitted") {
       for (const to of parentTokenList) {
@@ -138,6 +196,7 @@ Deno.serve(async (req) => {
           sound: "default",
           channelId: "tasks",
         });
+        pushedForRow++;
       }
     } else if (row.event_type === "task_completed") {
       for (const to of parentTokenList) {
@@ -149,6 +208,7 @@ Deno.serve(async (req) => {
           sound: "default",
           channelId: "tasks",
         });
+        pushedForRow++;
       }
     } else if (row.event_type === "chore_approved") {
       for (const to of childTokenList) {
@@ -160,6 +220,7 @@ Deno.serve(async (req) => {
           sound: "default",
           channelId: "tasks",
         });
+        pushedForRow++;
       }
     } else if (row.event_type === "child_game_milestone") {
       const pts = (p.points as number) ?? 0;
@@ -172,18 +233,75 @@ Deno.serve(async (req) => {
           sound: "default",
           channelId: "tasks",
         });
+        pushedForRow++;
       }
+    } else {
+      processedIds.push(row.id);
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: "skipped",
+        child_user_id: childUserId,
+        child_token_count: childTokenList.length,
+        parent_token_count: parentTokenList.length,
+        note: "unknown event_type",
+      });
+      continue;
     }
 
-    processedIds.push(row.id);
+    const needsChild = targetsChild(row.event_type);
+    const needsParent = targetsParent(row.event_type);
+
+    if (pushedForRow > 0) {
+      processedIds.push(row.id);
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: "sent",
+        child_user_id: childUserId,
+        child_token_count: childTokenList.length,
+        parent_token_count: parentTokenList.length,
+      });
+    } else {
+      let note = "no push token for target user";
+      if (needsChild && !childUserId) {
+        note = "children.child_user_id is NULL — link child login to children row";
+      } else if (needsChild && childTokenList.length === 0) {
+        note = "child has no row in push_tokens — open child app and sign in on child device";
+      } else if (needsParent && parentTokenList.length === 0) {
+        note = "parent has no row in push_tokens";
+      }
+
+      results.push({
+        outbox_id: row.id,
+        event_type: row.event_type,
+        status: "no_tokens",
+        child_user_id: childUserId,
+        child_token_count: childTokenList.length,
+        parent_token_count: parentTokenList.length,
+        note,
+      });
+    }
   }
 
+  const expoTickets: ExpoTicket[] = [];
   try {
     for (let i = 0; i < messages.length; i += 100) {
-      await sendExpoBatch(messages.slice(i, i + 100));
+      const chunk = messages.slice(i, i + 100);
+      const tickets = await sendExpoBatch(chunk);
+      for (let j = 0; j < tickets.length; j++) {
+        const ticket = tickets[j];
+        expoTickets.push(ticket);
+        if (ticket.status === "error" && ticket.details?.error === "DeviceNotRegistered") {
+          const badToken = chunk[j]?.to;
+          if (badToken) {
+            await supabase.from("push_tokens").delete().eq("token", badToken);
+          }
+        }
+      }
     }
   } catch (e) {
-    return jsonResponse({ error: String(e), partial: true }, 500);
+    return jsonResponse({ error: String(e), partial: true, results, expo_tickets: expoTickets }, 500);
   }
 
   if (processedIds.length > 0) {
@@ -191,5 +309,19 @@ Deno.serve(async (req) => {
     await supabase.from("notification_outbox").update({ processed_at: now }).in("id", processedIds);
   }
 
-  return jsonResponse({ ok: true, outbox_rows: batch.length, messages: messages.length });
+  return jsonResponse({
+    ok: true,
+    outbox_rows: batch.length,
+    messages_sent: messages.length,
+    tokens_used: messages.map((m) => m.to),
+    expo_tickets: expoTickets,
+    processed_outbox_ids: processedIds,
+    results,
+    hint:
+      batch.length > 0 && messages.length === 0
+        ? "Outbox has rows but nothing was sent — read results[].note (usually child_user_id or push_tokens)."
+        : batch.length === 0
+          ? "No unprocessed outbox rows. Create a task, then run this function again."
+          : "If messages_sent > 0 but no phone alert, check MuMu notification settings and FCM on Expo.",
+  });
 });

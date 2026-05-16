@@ -40,4 +40,7 @@ yarn-error.*
 /ios
 /android
 
-.env    
+.env
+
+# Firebase service account private key (for FCM v1 / EAS upload only — never commit).
+*-firebase-adminsdk-*.json

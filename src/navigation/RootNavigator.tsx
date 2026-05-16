@@ -1,6 +1,7 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { BlockedReturnDialog } from "@/components/BlockedReturnDialog";
+import { ChildPushBridge } from "@/components/ChildPushBridge";
 import { AuthStackNavigator } from "@/navigation/AuthStackNavigator";
 import { ParentTabsNavigator } from "@/navigation/ParentTabsNavigator";
 import { ChildTabsNavigator } from "@/navigation/ChildTabsNavigator";
@@ -23,6 +24,7 @@ export function RootNavigator() {
       <NavigationContainer>
         {appMode === "auth" ? <AuthStackNavigator /> : appMode === "parent" ? <ParentTabsNavigator /> : <ChildTabsNavigator />}
       </NavigationContainer>
+      <ChildPushBridge />
       <BlockedReturnDialog />
     </>
   );
