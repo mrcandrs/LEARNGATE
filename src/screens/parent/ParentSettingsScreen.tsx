@@ -11,7 +11,11 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
 import { levelToDifficultyLabel } from "@/utils/difficulty";
 import { useThemeMode } from "@/store/ThemeModeContext";
-import { registerAndSavePushToken } from "@/services/pushNotifications";
+import {
+  enqueueParentTestPush,
+  registerAndSavePushToken,
+  showDeviceTestNotification,
+} from "@/services/pushNotifications";
 import { BLOCKABLE_APP_GROUPS, isGroupFullySelected, toggleBlockedGroup as applyBlockedGroupToggle, type BlockableAppGroup } from "@/constants/blockedAppPackages";
 
 type ChildSummary = {
@@ -49,6 +53,7 @@ export function ParentSettingsScreen() {
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [pushRegistering, setPushRegistering] = useState(false);
+  const [pushTesting, setPushTesting] = useState(false);
 
   const loadSettings = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -352,7 +357,7 @@ export function ParentSettingsScreen() {
           <Button
             mode="outlined"
             loading={pushRegistering}
-            disabled={pushRegistering}
+            disabled={pushRegistering || pushTesting}
             onPress={async () => {
               setPushRegistering(true);
               try {
@@ -367,6 +372,36 @@ export function ParentSettingsScreen() {
             }}
           >
             Enable push on this device
+          </Button>
+          <Button
+            mode="text"
+            disabled={pushRegistering || pushTesting}
+            onPress={async () => {
+              try {
+                await showDeviceTestNotification();
+                setSnackbar("Device test notification sent.");
+              } catch (e) {
+                setSnackbar(e instanceof Error ? e.message : "Could not show test notification.");
+              }
+            }}
+          >
+            Test notification on this device
+          </Button>
+          <Button
+            mode="text"
+            loading={pushTesting}
+            disabled={pushRegistering || pushTesting}
+            onPress={async () => {
+              setPushTesting(true);
+              try {
+                const result = await enqueueParentTestPush();
+                setSnackbar(result.message);
+              } finally {
+                setPushTesting(false);
+              }
+            }}
+          >
+            Send server test push
           </Button>
         </Card.Content>
       </Card>

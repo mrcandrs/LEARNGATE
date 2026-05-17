@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import { requestChildPushHealthCheck } from "@/services/pushNotifications";
 
-const INTERVAL_MS = 5 * 60 * 1000;
+const INTERVAL_MS = 30 * 60 * 1000;
 
 /**
  * While the parent app is in the foreground, periodically ask the server to verify

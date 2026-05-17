@@ -4,13 +4,19 @@ import { Platform } from "react-native";
 import { supabase } from "@/services/supabase";
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as Record<string, unknown> | undefined;
+    const kind = typeof data?.kind === "string" ? data.kind : "";
+    const isSilentHealthPing = kind === "token_health_ping";
+
+    return {
+      shouldShowAlert: !isSilentHealthPing,
+      shouldShowBanner: !isSilentHealthPing,
+      shouldShowList: !isSilentHealthPing,
+      shouldPlaySound: !isSilentHealthPing,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 let listenersInitialized = false;
@@ -152,6 +158,27 @@ export async function requestChildPushHealthCheck(): Promise<void> {
   }
 }
 
+/** True when the signed-in user has a row in push_tokens (required for remote alerts). */
+export async function hasMyPushToken(): Promise<boolean> {
+  if (!supabase) {
+    return false;
+  }
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError || !user) {
+    return false;
+  }
+  const { data, error } = await supabase
+    .from("push_tokens")
+    .select("token")
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+  return !error && Boolean(data?.token);
+}
+
 export async function upsertMyPushToken(expoPushToken: string): Promise<{ ok: boolean; message: string }> {
   if (!supabase) {
     return { ok: false, message: "Supabase is not configured." };
@@ -183,6 +210,32 @@ export async function upsertMyPushToken(expoPushToken: string): Promise<{ ok: bo
   }
 
   return { ok: true, message: "Token saved." };
+}
+
+/** On-device test — proves notification permission and channels work (no server). */
+export async function showDeviceTestNotification(): Promise<void> {
+  await notifySilenceLocal({
+    title: "LEARNGATE device test",
+    body: "If you see this, this phone can show notifications.",
+  });
+}
+
+/** Queue a task_completed outbox row for the signed-in parent (requires step-u SQL). */
+export async function enqueueParentTestPush(): Promise<{ ok: boolean; message: string }> {
+  if (!supabase) {
+    return { ok: false, message: "Supabase is not configured." };
+  }
+  const { data, error } = await supabase.rpc("enqueue_parent_test_push");
+  if (error) {
+    const hint = error.message.includes("enqueue_parent_test_push")
+      ? " Run supabase/step-u-parent-test-push.sql in the Supabase SQL Editor."
+      : "";
+    return { ok: false, message: `${error.message}${hint}` };
+  }
+  return {
+    ok: true,
+    message: `Test push queued (outbox #${data ?? "?"}). Put the app in the background and wait a few seconds.`,
+  };
 }
 
 export async function notifySilenceLocal(params: { title: string; body: string }) {

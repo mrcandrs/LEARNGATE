@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ComponentProps } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { ActivityIndicator, Avatar, Card, Chip, Text } from "react-native-paper";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { ActivityIndicator, Avatar, Card, Chip, Snackbar, Text } from "react-native-paper";
+import { AchievementBadgeCard } from "@/components/AchievementBadgeCard";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
 import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
+import { useChildAchievements } from "@/hooks/useChildAchievements";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
 import { pickChildAvatarFromLibrary, uploadChildAvatar } from "@/services/childAvatar";
@@ -29,14 +29,23 @@ export function ChildProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ChildProfileStackParamList, "MyStuffMain">>();
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
-  const [completedTasks, setCompletedTasks] = useState(0);
-  const [gamesPlayed, setGamesPlayed] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [pointsHistory, setPointsHistory] = useState<PointsHistoryItem[]>([]);
   const [pointsFilter, setPointsFilter] = useState<PointsFilter>("all");
+  const {
+    stats: achievementStats,
+    progress: achievementProgress,
+    unlockedCount,
+    totalCount,
+    nextUp,
+    loading: achievementsLoading,
+    refresh: refreshAchievements,
+    newUnlockTitle,
+    clearNewUnlock,
+  } = useChildAchievements(child);
 
   const loadStats = useCallback(
     async (fromPull = false) => {
@@ -52,26 +61,6 @@ export function ChildProfileScreen() {
         setLoading(true);
       }
       setError(null);
-
-      const { count, error: tasksCountError } = await supabase
-        .from("tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("child_id", child.id)
-        .eq("status", "completed");
-      if (tasksCountError) {
-        setError(formatAppError(tasksCountError));
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      setCompletedTasks(count ?? 0);
-
-      const { count: activityCount } = await supabase
-        .from("activity_logs")
-        .select("id", { count: "exact", head: true })
-        .eq("child_id", child.id)
-        .in("type", ["game_played", "game_completed"]);
-      setGamesPlayed(activityCount ?? 0);
 
       const { data: pointsRows, error: pointsError } = await supabase
         .from("activity_logs")
@@ -104,25 +93,8 @@ export function ChildProfileScreen() {
   const onRefresh = useCallback(() => {
     void refreshProfile();
     void loadStats(true);
-  }, [refreshProfile, loadStats]);
-
-  const achievements = useMemo(() => {
-    type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
-    const badges: { icon: IconName; label: string }[] = [];
-    if ((child?.stars ?? 0) > 0) {
-      badges.push({ icon: "star", label: "First Star" });
-    }
-    if ((child?.stars ?? 0) >= 200) {
-      badges.push({ icon: "star-circle", label: "Star Collector" });
-    }
-    if (completedTasks >= 10) {
-      badges.push({ icon: "trophy", label: "Task Finisher" });
-    }
-    if (completedTasks >= 50) {
-      badges.push({ icon: "book-open-page-variant", label: "Learning Champ" });
-    }
-    return badges;
-  }, [completedTasks, child?.stars]);
+    void refreshAchievements();
+  }, [refreshProfile, loadStats, refreshAchievements]);
 
   const showError = profileError ?? error;
   const filteredPointsHistory = useMemo(() => {
@@ -202,28 +174,33 @@ export function ChildProfileScreen() {
           <Card.Title title="Learning Stats" titleStyle={styles.cardTitle} />
           <Card.Content style={styles.statsList}>
             {loading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-            <StatRow label="Total Learning Time" value="—" />
-            <StatRow label="Tasks Completed" value={String(completedTasks)} />
-            <StatRow label="Games Played" value={String(gamesPlayed)} />
+            <StatRow label="Active days (14d)" value={String(achievementStats?.activeDaysLast14 ?? 0)} />
+            <StatRow label="Tasks Completed" value={String(achievementStats?.completedTasks ?? 0)} />
+            <StatRow label="Games Finished" value={String(achievementStats?.gamesCompleted ?? 0)} />
+            <StatRow label="Daily streak" value={`${achievementStats?.dailyStreak ?? 0} days`} />
             <StatRow label="Stars Earned" value={String(child?.stars ?? 0)} />
           </Card.Content>
         </Card>
 
         <Card style={styles.card}>
-          <Card.Title title="Achievements" titleStyle={styles.cardTitle} />
+          <Card.Title
+            title="Achievements"
+            subtitle={`${unlockedCount} of ${totalCount} unlocked`}
+            titleStyle={styles.cardTitle}
+          />
           <Card.Content style={styles.badgeGrid}>
-            {achievements.length === 0 ? (
-              <Text style={styles.emptyAch}>Complete tasks to unlock achievements.</Text>
-            ) : (
-              achievements.map((b) => (
-                <View key={b.label} style={styles.badge}>
-                  <MaterialCommunityIcons name={b.icon} size={22} color={colors.primary} />
-                  <Text variant="labelSmall" style={styles.badgeLabel}>
-                    {b.label}
-                  </Text>
-                </View>
-              ))
-            )}
+            {achievementsLoading && !refreshing ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : null}
+            {nextUp && !nextUp.unlocked ? (
+              <Text style={styles.nextUp}>
+                Next up: {nextUp.definition.title} ({nextUp.progress?.current ?? 0}/
+                {nextUp.progress?.target ?? "?"})
+              </Text>
+            ) : null}
+            {achievementProgress.map((item) => (
+              <AchievementBadgeCard key={item.definition.id} item={item} />
+            ))}
           </Card.Content>
         </Card>
 
@@ -269,6 +246,10 @@ export function ChildProfileScreen() {
           </Card.Content>
         </Card>
       </View>
+
+      <Snackbar visible={Boolean(newUnlockTitle)} onDismiss={clearNewUnlock} duration={5000}>
+        Achievement unlocked: {newUnlockTitle}
+      </Snackbar>
     </ScreenContainer>
   );
 }
@@ -342,17 +323,11 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 10,
   },
-  badge: {
-    width: "47%",
-    backgroundColor: "#F3F4F6",
-    borderRadius: radii.sm,
-    padding: 12,
-    alignItems: "center",
-    gap: 6,
-  },
-  badgeLabel: {
-    textAlign: "center",
-    color: colors.text,
+  nextUp: {
+    width: "100%",
+    color: colors.primaryDark,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   emptyAch: {
     color: colors.subtext,

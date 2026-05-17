@@ -34,11 +34,14 @@ type OutboxExpoMsg = ExpoMsg & { outboxId?: number; childUserId?: string };
 type RowResult = {
   outbox_id: number;
   event_type: string;
-  status: "sent" | "skipped" | "no_tokens" | "pending";
+  status: "queued" | "sent" | "skipped" | "no_tokens" | "pending" | "expo_error";
   child_user_id: string | null;
   child_token_count: number;
   parent_token_count: number;
   note?: string;
+  expo_ticket?: "ok" | "error";
+  expo_error?: string;
+  target_token_prefix?: string;
 };
 
 type ExpoTicket = { status: string; id?: string; message?: string; details?: { error?: string } };
@@ -155,7 +158,7 @@ async function deliverUninstallAlertToParent(
     body: `LEARNGATE on ${childName}'s device may have been uninstalled or had its data cleared. Open the child app again to restore monitoring.`,
     data: { kind: "child_app_uninstalled", child_id: child.id },
     sound: "default",
-    channelId: "tasks",
+    channelId: "default",
     priority: "high",
   }));
 
@@ -164,7 +167,8 @@ async function deliverUninstallAlertToParent(
   return { sent, parentTokenCount: parentTokens.length };
 }
 
-async function handleRevokedChildToken(
+/** Remove stale token; uninstall flow only when the token belonged to a child account. */
+async function handleRevokedPushToken(
   supabase: SupabaseClient,
   token: string,
 ): Promise<{ enqueued: boolean; parentNotified: boolean; childId: string | null }> {
@@ -227,8 +231,8 @@ async function processTicketsForRevokedTokens(
     if (ticket.status === "error" && isRevokedPushError(ticket.details?.error, ticket.message)) {
       if (msg.to && !revoked.includes(msg.to)) {
         revoked.push(msg.to);
-        await handleRevokedChildToken(supabase, msg.to);
-        uninstallHandled += 1;
+        const result = await handleRevokedPushToken(supabase, msg.to);
+        if (result.childId) uninstallHandled += 1;
       }
     }
   }
@@ -248,8 +252,8 @@ async function processTicketsForRevokedTokens(
     if (!isRevokedPushError(receipt.details?.error, receipt.message)) continue;
     if (revoked.includes(to)) continue;
     revoked.push(to);
-    await handleRevokedChildToken(supabase, to);
-    uninstallHandled += 1;
+    const result = await handleRevokedPushToken(supabase, to);
+    if (result.childId) uninstallHandled += 1;
   }
 
   return { revoked, uninstallHandled };
@@ -321,15 +325,13 @@ async function checkChildPushTokens(supabase: SupabaseClient): Promise<{
     return { tokens_checked: 0, revoked: [], uninstall_handled: 0, parent_notified: 0 };
   }
 
+  // Data-only ping — must not show title/body or children see "Checking device connection".
   const pings: OutboxExpoMsg[] = (tokenRows as TokenRow[])
     .filter((r) => childUserIds.has(r.user_id))
     .map((r) => ({
       to: r.token,
-      title: "LEARNGATE",
-      body: "Checking device connection",
-      data: { kind: "token_health_ping", _silent: true },
-      channelId: "default",
-      priority: "normal",
+      data: { kind: "token_health_ping" },
+      priority: "normal" as const,
       childUserId: r.user_id,
     }));
 
@@ -414,6 +416,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of childTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "New task",
           body: `${title || "A new task"} was added for you.`,
           data: { kind: "task_assigned", task_id: p.task_id },
@@ -428,11 +431,13 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of parentTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "Submission to review",
           body: `${childName} submitted “${title || "a chore"}” for review.`,
           data: { kind: "task_submitted", task_id: p.task_id, child_id: childId },
           sound: "default",
-          channelId: "tasks",
+          priority: "high",
+          channelId: "default",
         });
         pushedForRow++;
       }
@@ -440,11 +445,13 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of parentTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "Task completed",
           body: `${childName} completed “${title || "a task"}”.`,
           data: { kind: "task_completed", task_id: p.task_id, child_id: childId },
           sound: "default",
-          channelId: "tasks",
+          priority: "high",
+          channelId: "default",
         });
         pushedForRow++;
       }
@@ -452,6 +459,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of childTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "Chore approved",
           body: `Great job! “${title || "Your chore"}” was approved.`,
           data: { kind: "chore_approved", task_id: p.task_id },
@@ -466,11 +474,13 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of parentTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "Learning update",
           body: `${childName} earned ${pts} stars from a learning game.`,
           data: { kind: "child_game_milestone", child_id: childId },
           sound: "default",
-          channelId: "tasks",
+          priority: "high",
+          channelId: "default",
         });
         pushedForRow++;
       }
@@ -483,7 +493,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           body: `LEARNGATE on ${childName}'s device may have been uninstalled or had its data cleared. Open the child app again to restore monitoring.`,
           data: { kind: "child_app_uninstalled", child_id: childId },
           sound: "default",
-          channelId: "tasks",
+          channelId: "default",
           priority: "high",
         });
         pushedForRow++;
@@ -507,11 +517,13 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
       for (const to of parentTokenList) {
         messages.push({
           to,
+          outboxId: row.id,
           title: "Insight for you",
           body: insightBody,
           data: { kind: "parent_insight", child_id: childId },
           sound: "default",
-          channelId: "tasks",
+          priority: "high",
+          channelId: "default",
         });
         pushedForRow++;
       }
@@ -530,11 +542,10 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
     }
 
     if (pushedForRow > 0) {
-      if (!isUninstall) processedIds.push(row.id);
       results.push({
         outbox_id: row.id,
         event_type: row.event_type,
-        status: isUninstall ? "pending" : "sent",
+        status: isUninstall ? "pending" : "queued",
         child_user_id: childUserId,
         child_token_count: childTokenList.length,
         parent_token_count: parentTokenList.length,
@@ -560,6 +571,43 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
   }
 
   return { messages, processedIds, results };
+}
+
+/** Apply Expo ticket results; only successful outbox rows should be marked processed. */
+function applyExpoTicketsToResults(
+  results: RowResult[],
+  messages: OutboxExpoMsg[],
+  tickets: ExpoTicket[],
+): number[] {
+  const byOutbox = new Map(results.map((r) => [r.outbox_id, r]));
+  const successOutbox = new Set<number>();
+
+  const n = Math.min(messages.length, tickets.length);
+  for (let j = 0; j < n; j++) {
+    const msg = messages[j];
+    const ticket = tickets[j];
+    const outboxId = msg.outboxId;
+    if (outboxId == null) continue;
+
+    const row = byOutbox.get(outboxId);
+    if (!row || row.status === "pending") continue;
+
+    const prefix = msg.to.length > 28 ? `${msg.to.slice(0, 28)}…` : msg.to;
+    row.target_token_prefix = prefix;
+
+    if (ticket.status === "ok") {
+      row.expo_ticket = "ok";
+      row.status = "sent";
+      successOutbox.add(outboxId);
+    } else if (row.status === "queued") {
+      row.expo_ticket = "error";
+      row.status = "expo_error";
+      row.expo_error = ticket.message ?? ticket.details?.error ?? "Expo push error";
+      row.note = `Expo rejected push: ${row.expo_error}`;
+    }
+  }
+
+  return [...successOutbox];
 }
 
 async function markProcessed(supabase: SupabaseClient, ids: number[]) {
@@ -602,16 +650,15 @@ Deno.serve(async (req) => {
   const { checkChildTokens: checkChildTokensRequested } = await parseRequestBody(req);
   const supabase = createClient(supabaseUrl, serviceKey);
 
-  // Always verify child tokens when this function runs (outbox drain, cron, or parent RPC).
-  const healthCheck = await checkChildPushTokens(supabase);
-  const checkChildTokens = checkChildTokensRequested || true;
+  // Only ping child tokens when explicitly requested (cron / parent RPC Test). Not on every task push.
+  const healthCheck = checkChildTokensRequested ? await checkChildPushTokens(supabase) : null;
 
   const allResults: RowResult[] = [];
   const allTickets: ExpoTicket[] = [];
   const allProcessedIds: number[] = [];
   let totalMessages = 0;
   let totalRevoked = 0;
-  let totalUninstallHandled = healthCheck.uninstall_handled;
+  let totalUninstallHandled = healthCheck?.uninstall_handled ?? 0;
   let outboxPasses = 0;
 
   try {
@@ -619,14 +666,14 @@ Deno.serve(async (req) => {
       const drain = await buildOutboxDrain(supabase);
       const hasWork = drain.messages.length > 0 || drain.processedIds.length > 0;
       if (pass > 0 && !hasWork) break;
-      if (!hasWork) break;
       if (!hasWork) continue;
 
       outboxPasses += 1;
       const { tickets, revoked, uninstallHandled, confirmedOutboxIds } =
         await sendMessagesAndRevokeInvalid(supabase, drain.messages);
 
-      const idsToMark = [...drain.processedIds, ...confirmedOutboxIds];
+      const sentOutboxIds = applyExpoTicketsToResults(drain.results, drain.messages, tickets);
+      const idsToMark = [...new Set([...drain.processedIds, ...sentOutboxIds, ...confirmedOutboxIds])];
       allTickets.push(...tickets);
       allResults.push(...drain.results);
       allProcessedIds.push(...idsToMark);
@@ -657,8 +704,12 @@ Deno.serve(async (req) => {
     hint:
       totalUninstallHandled > 0
         ? "Revoked child token(s) and sent uninstall alert to parent."
-        : checkChildTokens
-          ? "Health check ran — see tokens_checked. If 0, child never saved a push token."
-          : "Run Test with {\"check_child_tokens\":true} after uninstalling the child app.",
+        : allResults.some((r) => r.status === "expo_error")
+          ? "Expo rejected one or more pushes — see expo_error in results. Re-enable push on the parent device, then retry."
+          : allResults.some((r) => r.status === "no_tokens")
+            ? "No push token for target user — parent must tap Enable push on the parent phone/emulator."
+            : checkChildTokensRequested
+              ? "Health check ran — see health_check.tokens_checked (silent pings, no UI on child)."
+              : "Outbox drained. Check results[].status (sent | expo_error | no_tokens).",
   });
 });

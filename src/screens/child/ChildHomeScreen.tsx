@@ -9,6 +9,7 @@ import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
 import { colors, radii, shadows } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
+import { useChildAchievements } from "@/hooks/useChildAchievements";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { formatAppError } from "@/utils/errors";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
@@ -24,8 +25,9 @@ export function ChildHomeScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskPreview[]>([]);
-  const [completedCount, setCompletedCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const { stats: achievementStats, unlockedCount, totalCount, nextUp, refresh: refreshAchievements } =
+    useChildAchievements(child);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,19 +62,6 @@ export function ChildHomeScreen() {
       }
       setTasks((pendingTasks as TaskPreview[]) ?? []);
 
-      const { count, error: countError } = await supabase
-        .from("tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("child_id", child.id)
-        .eq("status", "completed");
-
-      if (countError) {
-        setError(formatAppError(countError));
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      setCompletedCount(count ?? 0);
       setLoading(false);
       setRefreshing(false);
     },
@@ -90,7 +79,11 @@ export function ChildHomeScreen() {
   const onRefresh = useCallback(() => {
     void refreshProfile();
     void loadHomeData(true);
-  }, [refreshProfile, loadHomeData]);
+    void refreshAchievements();
+  }, [refreshProfile, loadHomeData, refreshAchievements]);
+
+  const streakDays = achievementStats?.dailyStreak ?? 0;
+  const completedCount = achievementStats?.completedTasks ?? 0;
 
   const showError = profileError ?? error;
 
@@ -115,15 +108,19 @@ export function ChildHomeScreen() {
               <MaterialCommunityIcons name="fire" size={40} color="#FFFFFF" />
               <View style={styles.streakText}>
                 <Text variant="titleLarge" style={styles.streakTitle}>
-                  Keep your streak!
+                  {streakDays > 0 ? `${streakDays}-day streak!` : "Start your streak"}
                 </Text>
                 <Text variant="bodyMedium" style={styles.streakSub}>
-                  {completedCount} tasks completed so far. Keep learning daily.
+                  {streakDays > 0
+                    ? `Active ${streakDays} day${streakDays === 1 ? "" : "s"} in a row. ${unlockedCount}/${totalCount} achievements unlocked.`
+                    : nextUp
+                      ? `Complete a task today — next badge: ${nextUp.definition.title}.`
+                      : "Complete a task or game today to begin your streak."}
                 </Text>
               </View>
               <View style={styles.streakBadge}>
                 <Text variant="labelLarge" style={styles.streakBadgeText}>
-                  {completedCount}
+                  {streakDays}
                 </Text>
               </View>
             </Card.Content>
