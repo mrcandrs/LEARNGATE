@@ -1,39 +1,39 @@
-import type { ComponentProps } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, radii, shadows } from "@/theme/theme";
-
-type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+import { colors } from "@/theme/theme";
 
 type Props = {
   title: string;
-  description: string;
-  iconName: IconName;
-  iconColor: string;
+  variant: "parent" | "child";
   onPress: () => void;
 };
 
-export function RoleSelectCard({ title, description, iconName, iconColor, onPress }: Props) {
+const GREEN = colors.roleSelectGreen;
+
+export function RoleSelectCard({ title, variant, onPress }: Props) {
+  const isParent = variant === "parent";
+
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        isParent ? styles.cardParent : styles.cardChild,
+        pressed && styles.pressed,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={title}
     >
-      <View style={[styles.iconCircle, { borderColor: iconColor }]}>
-        <MaterialCommunityIcons name={iconName} size={28} color={iconColor} />
+      <View style={[styles.iconCircle, isParent ? styles.iconCircleParent : styles.iconCircleChild]}>
+        <MaterialCommunityIcons
+          name={isParent ? "account-supervisor" : "human-child"}
+          size={26}
+          color={isParent ? GREEN : "#FFFFFF"}
+        />
       </View>
-      <View style={styles.textCol}>
-        <Text variant="titleMedium" style={styles.title}>
-          {title}
-        </Text>
-        <Text variant="bodySmall" style={styles.desc}>
-          {description}
-        </Text>
-      </View>
-      <MaterialCommunityIcons name="chevron-right" size={24} color={colors.border} />
+      <Text style={[styles.title, isParent ? styles.titleParent : styles.titleChild]}>{title}</Text>
+      <MaterialCommunityIcons name="chevron-right" size={28} color={isParent ? "#FFFFFF" : GREEN} />
     </Pressable>
   );
 }
@@ -42,37 +42,45 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 64,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     gap: 14,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
+  },
+  cardParent: {
+    backgroundColor: GREEN,
+  },
+  cardChild: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 2,
+    borderColor: GREEN,
   },
   pressed: {
     opacity: 0.92,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.background,
   },
-  textCol: {
-    flex: 1,
-    minWidth: 0,
+  iconCircleParent: {
+    backgroundColor: "#FFFFFF",
+  },
+  iconCircleChild: {
+    backgroundColor: GREEN,
   },
   title: {
+    flex: 1,
+    fontSize: 18,
     fontWeight: "700",
-    color: colors.text,
   },
-  desc: {
-    color: colors.subtext,
-    marginTop: 4,
+  titleParent: {
+    color: "#FFFFFF",
+  },
+  titleChild: {
+    color: GREEN,
   },
 });

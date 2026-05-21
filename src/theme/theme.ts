@@ -16,6 +16,10 @@ export const colors = {
   streak: "#FF9800",
   streakLight: "#FFB74D",
   parentHeader: "#4CAF50",
+  /** Matches app icon / splash background (lime). */
+  brandLime: "#C5E84D",
+  /** Role select mockup — header + Parent/Child buttons. */
+  roleSelectGreen: "#5CB85C",
 };
 
 export const radii = {
