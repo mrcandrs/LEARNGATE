@@ -11,6 +11,16 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
+import { getGameSettings } from "@/data/gameDifficulty";
+import {
+  COLOR_CATEGORY_CHALLENGES,
+  COLOR_MIX_CHALLENGES,
+  COUNTING_SCENARIOS,
+  scienceMcqPoolForTier,
+  sciencePoolForTier,
+  VOWELS,
+  WORDS_BY_FIRST_LETTER,
+} from "@/data/gameRoundBanks";
 
 type Props = NativeStackScreenProps<ChildGamesStackParamList, "GamePlay">;
 
@@ -18,6 +28,7 @@ const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const SHAPES = [
   { id: "circle", label: "Circle", glyph: "●", sides: 0 },
   { id: "square", label: "Square", glyph: "■", sides: 4 },
+  { id: "rectangle", label: "Rectangle", glyph: "▬", sides: 4 },
   { id: "triangle", label: "Triangle", glyph: "▲", sides: 3 },
   { id: "diamond", label: "Diamond", glyph: "◆", sides: 4 },
   { id: "star", label: "Star", glyph: "★", sides: 10 },
@@ -29,24 +40,7 @@ const COLOR_OPTIONS = [
   { id: "green", label: "GREEN", bg: "#22C55E" },
   { id: "yellow", label: "YELLOW", bg: "#FACC15" },
   { id: "purple", label: "PURPLE", bg: "#A855F7" },
-] as const;
-
-const SCIENCE_Q = [
-  { q: "The sun is a star.", a: true },
-  { q: "Fish breathe air like humans.", a: false },
-  { q: "Water boils at 100°C at sea level.", a: true },
-  { q: "Plants need sunlight to grow.", a: true },
-  { q: "The moon makes its own light.", a: false },
-  { q: "Earth is the fourth planet from the Sun.", a: false },
-  { q: "Magnets can attract some metals.", a: true },
-  { q: "A day has 24 hours.", a: true },
-] as const;
-
-const SCIENCE_MCQ = [
-  { q: "Which part of a plant takes in water?", choices: ["Roots", "Leaves", "Flowers", "Fruit"], answer: "Roots" },
-  { q: "Which planet do we live on?", choices: ["Mars", "Earth", "Venus", "Jupiter"], answer: "Earth" },
-  { q: "What do bees make?", choices: ["Honey", "Milk", "Bread", "Oil"], answer: "Honey" },
-  { q: "What gas do people need to breathe?", choices: ["Oxygen", "Helium", "Hydrogen", "Nitrogen"], answer: "Oxygen" },
+  { id: "orange", label: "ORANGE", bg: "#F97316" },
 ] as const;
 
 function shuffle<T>(arr: T[]): T[] {
@@ -82,200 +76,269 @@ type NumberRound = {
   choices: number[];
 };
 
-type DifficultyTier = "easy" | "medium" | "hard";
-
-function getDifficultyTier(level: number): DifficultyTier {
-  if (level <= 3) {
-    return "easy";
+function makeNumberChoices(answer: number, count: number) {
+  const pool = new Set<number>();
+  pool.add(answer);
+  while (pool.size < count) {
+    const delta = randomInt(1, 4);
+    pool.add(Math.max(0, answer + (Math.random() > 0.5 ? delta : -delta)));
   }
-  if (level >= 8) {
-    return "hard";
-  }
-  return "medium";
+  return shuffle([...pool]);
 }
 
-function getGameSettings(level: number, gameId: Props["route"]["params"]["gameId"]) {
-  const tier = getDifficultyTier(level);
-  const baseChoices = tier === "easy" ? 3 : tier === "hard" ? 5 : 4;
-  const rounds = tier === "easy" ? 4 : tier === "hard" ? 6 : 5;
-  const numberMax = tier === "easy" ? 8 : tier === "hard" ? 24 : 14;
-  const xpPerCorrect = tier === "easy" ? 8 : tier === "hard" ? 14 : 10;
-  const sciencePool = tier === "easy" ? SCIENCE_Q.slice(0, 5) : tier === "medium" ? SCIENCE_Q.slice(0, 7) : SCIENCE_Q;
-  const choiceCount = gameId === "numbers" ? Math.max(3, baseChoices - 1) : baseChoices;
-
-  return { tier, rounds, choiceCount, numberMax, xpPerCorrect, sciencePool };
+function wordForLetter(letter: string): string {
+  const list = WORDS_BY_FIRST_LETTER[letter] ?? ["Word"];
+  return list[randomInt(0, list.length - 1)];
 }
 
-function createAlphabetRound(settings: ReturnType<typeof getGameSettings>): AlphabetRound {
+function createAlphabetRound(settings: ReturnType<typeof getGameSettings>, slot: number): AlphabetRound {
+  const s = slot % 10;
+
   if (settings.tier === "easy") {
-    const target = LETTERS[randomInt(0, LETTERS.length - 1)];
+    if (s <= 2) {
+      const target = LETTERS[randomInt(0, LETTERS.length - 1)];
+      return { prompt: `Tap the letter: ${target}`, answer: target, choices: pickChoices(target, LETTERS, settings.choiceCount) };
+    }
+    if (s === 3) {
+      const vowelList = LETTERS.filter((l) => VOWELS.has(l));
+      const target = vowelList[randomInt(0, vowelList.length - 1)];
+      return { prompt: "Tap a vowel (A, E, I, O, U)", answer: target, choices: pickChoices(target, vowelList, settings.choiceCount) };
+    }
+    const letter = LETTERS[randomInt(0, LETTERS.length - 1)];
+    const word = wordForLetter(letter);
     return {
-      prompt: `Tap the letter: ${target}`,
-      answer: target,
-      choices: pickChoices(target, LETTERS, settings.choiceCount),
+      prompt: `"${word}" starts with which letter?`,
+      answer: letter,
+      choices: pickChoices(letter, LETTERS, settings.choiceCount),
     };
   }
 
   if (settings.tier === "medium") {
-    const target = LETTERS[randomInt(0, LETTERS.length - 1)];
-    const lowerPool = LETTERS.map((l) => l.toLowerCase());
+    if (s % 2 === 0) {
+      const target = LETTERS[randomInt(0, LETTERS.length - 1)];
+      const lowerPool = LETTERS.map((l) => l.toLowerCase());
+      return {
+        prompt: `Tap the lowercase letter for: ${target}`,
+        answer: target.toLowerCase(),
+        choices: pickChoices(target.toLowerCase(), lowerPool, settings.choiceCount),
+      };
+    }
+    const idx = randomInt(1, LETTERS.length - 2);
+    const current = LETTERS[idx];
+    const next = LETTERS[idx + 1];
     return {
-      prompt: `Tap lowercase for: ${target}`,
-      answer: target.toLowerCase(),
-      choices: pickChoices(target.toLowerCase(), lowerPool, settings.choiceCount),
+      prompt: `Which letter comes AFTER ${current}?`,
+      answer: next,
+      choices: pickChoices(next, LETTERS, settings.choiceCount),
     };
   }
 
-  const currentIdx = randomInt(0, LETTERS.length - 2);
-  const current = LETTERS[currentIdx];
-  const next = LETTERS[currentIdx + 1];
+  if (s % 3 === 0) {
+    const idx = randomInt(1, LETTERS.length - 1);
+    const current = LETTERS[idx];
+    const prev = LETTERS[idx - 1];
+    return {
+      prompt: `Which letter comes BEFORE ${current}?`,
+      answer: prev,
+      choices: pickChoices(prev, LETTERS, settings.choiceCount),
+    };
+  }
+  if (s % 3 === 1) {
+    const word = "LEARN";
+    const missingIdx = randomInt(0, word.length - 1);
+    const answer = word[missingIdx];
+    return {
+      prompt: `Fill the missing letter: ${word.split("").map((c, i) => (i === missingIdx ? "_" : c)).join("")}`,
+      answer,
+      choices: pickChoices(answer, LETTERS, settings.choiceCount),
+    };
+  }
+  const idx = randomInt(0, LETTERS.length - 2);
+  const current = LETTERS[idx];
+  const next = LETTERS[idx + 1];
   return {
-    prompt: `Which letter comes after ${current}?`,
+    prompt: `What is the next letter after ${current}?`,
     answer: next,
     choices: pickChoices(next, LETTERS, settings.choiceCount),
   };
 }
 
-function createColorRound(settings: ReturnType<typeof getGameSettings>): ColorRound {
+function createColorRound(settings: ReturnType<typeof getGameSettings>, slot: number): ColorRound {
+  const s = slot % 10;
+
   if (settings.tier === "easy") {
     const pool = shuffle([...COLOR_OPTIONS]).slice(0, settings.choiceCount);
     const target = pool[randomInt(0, pool.length - 1)];
-    return {
-      mode: "blob",
-      prompt: `Tap the color: ${target.label}`,
-      answer: target.id,
-      choices: pool,
-    };
+    const prompts = [`Tap the color: ${target.label}`, `Which swatch is ${target.label}?`, `Find ${target.label}`];
+    return { mode: "blob", prompt: prompts[s % prompts.length], answer: target.id, choices: pool };
   }
 
   if (settings.tier === "medium") {
-    const mixes = [
-      { prompt: "RED + BLUE =", answer: "PURPLE" },
-      { prompt: "RED + YELLOW =", answer: "ORANGE" },
-      { prompt: "BLUE + YELLOW =", answer: "GREEN" },
-    ] as const;
-    const selected = mixes[randomInt(0, mixes.length - 1)];
-    return {
-      mode: "text",
-      prompt: `Color mix challenge: ${selected.prompt}`,
-      answer: selected.answer,
-      choices: shuffle(["PURPLE", "GREEN", "ORANGE", "BROWN"]).slice(0, settings.choiceCount),
-    };
+    if (s % 2 === 0) {
+      const challenge = COLOR_MIX_CHALLENGES[s % COLOR_MIX_CHALLENGES.length];
+      return {
+        mode: "text",
+        prompt: challenge.prompt,
+        answer: challenge.answer,
+        choices: pickChoices(challenge.answer, challenge.pool, settings.choiceCount),
+      };
+    }
+    const pool = shuffle([...COLOR_OPTIONS]).slice(0, settings.choiceCount);
+    const target = pool[0];
+    return { mode: "blob", prompt: `Which color is ${target.label}?`, answer: target.id, choices: pool };
   }
 
-  const warmCool = [
-    { prompt: "Pick a warm color", answer: "RED", options: ["RED", "BLUE", "GREEN", "PURPLE"] },
-    { prompt: "Pick a cool color", answer: "BLUE", options: ["BLUE", "RED", "YELLOW", "ORANGE"] },
-  ] as const;
-  const selected = warmCool[randomInt(0, warmCool.length - 1)];
+  const challenge = COLOR_CATEGORY_CHALLENGES[s % COLOR_CATEGORY_CHALLENGES.length];
   return {
     mode: "text",
-    prompt: selected.prompt,
-    answer: selected.answer,
-    choices: shuffle([...selected.options]).slice(0, settings.choiceCount),
+    prompt: challenge.prompt,
+    answer: challenge.answer,
+    choices: pickChoices(challenge.answer, challenge.pool, settings.choiceCount),
   };
 }
 
-function createShapeRound(settings: ReturnType<typeof getGameSettings>): ShapeRound {
+function createShapeRound(settings: ReturnType<typeof getGameSettings>, slot: number): ShapeRound {
+  const s = slot % 10;
+  const polygonPool = SHAPES.filter((sh) => sh.sides > 0);
+
   if (settings.tier === "easy") {
     const pool = shuffle([...SHAPES]).slice(0, settings.choiceCount);
     const target = pool[randomInt(0, pool.length - 1)];
-    return {
-      prompt: `Find: ${target.label}`,
-      answer: target.id,
-      choices: shuffle([...pool]),
-    };
+    const prompts = [`Find the ${target.label}`, `Tap the ${target.label}`, `Which shape is a ${target.label}?`];
+    return { prompt: prompts[s % prompts.length], answer: target.id, choices: shuffle([...pool]) };
   }
 
   if (settings.tier === "medium") {
-    const polygonPool = SHAPES.filter((s) => s.sides > 0);
-    const target = polygonPool[randomInt(0, polygonPool.length - 1)];
-    const pool = shuffle([...polygonPool]).slice(0, settings.choiceCount);
+    if (s % 2 === 0) {
+      const target = polygonPool[randomInt(0, polygonPool.length - 1)];
+      const pool = shuffle([...polygonPool]).slice(0, settings.choiceCount);
+      return { prompt: `Which shape has ${target.sides} sides?`, answer: target.id, choices: pool };
+    }
+    const target = SHAPES[randomInt(0, SHAPES.length - 1)];
+    const pool = shuffle([...SHAPES]).slice(0, settings.choiceCount);
+    return { prompt: `Tap the ${target.label}`, answer: target.id, choices: pool };
+  }
+
+  if (s % 3 === 0) {
+    const circle = SHAPES.find((sh) => sh.id === "circle")!;
+    const pool = shuffle(SHAPES.filter((sh) => sh.id !== "circle")).slice(0, settings.choiceCount - 1);
+    return { prompt: "Which shape has no corners?", answer: circle.id, choices: shuffle([circle, ...pool]) };
+  }
+  if (s % 3 === 1) {
+    const star = SHAPES.find((sh) => sh.id === "star")!;
+    const pool = shuffle(SHAPES.filter((sh) => sh.id !== "star")).slice(0, settings.choiceCount - 1);
+    return { prompt: "Which shape has the most pointed tips?", answer: star.id, choices: shuffle([star, ...pool]) };
+  }
+  const target = polygonPool[randomInt(0, polygonPool.length - 1)];
+  const pool = shuffle([...polygonPool]).slice(0, settings.choiceCount);
+  return { prompt: `Pick the ${target.label}`, answer: target.id, choices: pool };
+}
+
+function createNumbersRound(settings: ReturnType<typeof getGameSettings>, slot: number): NumberRound {
+  const s = slot % 10;
+
+  if (settings.tier === "easy") {
+    if (s < COUNTING_SCENARIOS.length) {
+      const item = COUNTING_SCENARIOS[s];
+      return { prompt: item.prompt, answer: item.answer, choices: makeNumberChoices(item.answer, settings.choiceCount) };
+    }
+    const target = randomInt(1, settings.numberMax);
+    return { prompt: `Tap the number ${target}`, answer: target, choices: makeNumberChoices(target, settings.choiceCount) };
+  }
+
+  if (settings.tier === "medium") {
+    if (s % 2 === 0) {
+      const start = randomInt(2, 12);
+      const answer = start + 2;
+      return {
+        prompt: `What comes next? ${start}, ${start + 1}, __`,
+        answer,
+        choices: makeNumberChoices(answer, settings.choiceCount),
+      };
+    }
+    const a = randomInt(3, 15);
+    const b = randomInt(3, 15);
+    const bigger = Math.max(a, b);
     return {
-      prompt: `Which shape has ${target.sides} sides?`,
-      answer: target.id,
-      choices: pool,
+      prompt: `Which number is bigger: ${a} or ${b}?`,
+      answer: bigger,
+      choices: makeNumberChoices(bigger, settings.choiceCount),
     };
   }
 
-  const target = SHAPES.find((s) => s.id === "circle")!;
-  const pool = shuffle([...SHAPES.filter((s) => s.id !== "circle")]).slice(0, Math.max(2, settings.choiceCount - 1));
+  const start = randomInt(5, 20);
+  const step = s % 2 === 0 ? 2 : 5;
+  const answer = start + step * 2;
   return {
-    prompt: "Which one has no sides?",
-    answer: target.id,
-    choices: shuffle([target, ...pool]),
+    prompt: `Pattern: ${start}, ${start + step}, ${start + step * 2}, __`,
+    answer,
+    choices: makeNumberChoices(answer, settings.choiceCount),
   };
 }
 
-function createNumberRound(gameId: Props["route"]["params"]["gameId"], settings: ReturnType<typeof getGameSettings>): NumberRound | null {
-  if (gameId !== "numbers" && gameId !== "math") {
-    return null;
-  }
-
-  const makeChoices = (answer: number) => {
-    const pool = new Set<number>();
-    pool.add(answer);
-    while (pool.size < settings.choiceCount) {
-      pool.add(randomInt(Math.max(0, answer - 10), answer + 10));
-    }
-    return shuffle([...pool]);
-  };
-
-  if (gameId === "numbers") {
-    if (settings.tier === "easy") {
-      const target = randomInt(1, 12);
-      return {
-        prompt: `Tap the number ${target}`,
-        answer: target,
-        choices: makeChoices(target),
-      };
-    }
-
-    if (settings.tier === "medium") {
-      const start = randomInt(8, 30);
-      const missing = start + 2;
-      return {
-        prompt: `What comes next? ${start}, ${start + 1}, __`,
-        answer: missing,
-        choices: makeChoices(missing),
-      };
-    }
-
-    const start = randomInt(10, 40);
-    const step = randomInt(2, 5);
-    const answer = start + step * 3;
-    return {
-      prompt: `Fill in the missing number: ${start}, ${start + step}, ${start + step * 2}, __`,
-      answer,
-      choices: makeChoices(answer),
-    };
-  }
+function createMathRound(settings: ReturnType<typeof getGameSettings>, slot: number): NumberRound {
+  const s = slot % 10;
 
   if (settings.tier === "easy") {
-    const a = randomInt(1, 9);
-    const b = randomInt(1, 9);
+    const a = randomInt(1, 5 + (s % 4));
+    const b = randomInt(1, 5 + (s % 3));
     const answer = a + b;
-    return { prompt: `What is ${a} + ${b}?`, answer, choices: makeChoices(answer) };
+    return { prompt: `What is ${a} + ${b}?`, answer, choices: makeNumberChoices(answer, settings.choiceCount) };
   }
 
   if (settings.tier === "medium") {
-    const useSubtract = Math.random() > 0.5;
-    if (useSubtract) {
-      const a = randomInt(8, 20);
-      const b = randomInt(1, a - 1);
+    if (s % 2 === 0) {
+      const a = randomInt(10, settings.numberMax);
+      const b = randomInt(1, Math.min(9, a - 1));
       const answer = a - b;
-      return { prompt: `What is ${a} - ${b}?`, answer, choices: makeChoices(answer) };
+      return { prompt: `What is ${a} − ${b}?`, answer, choices: makeNumberChoices(answer, settings.choiceCount) };
     }
-    const a = randomInt(5, settings.numberMax);
-    const b = randomInt(5, settings.numberMax);
+    const a = randomInt(4, settings.numberMax);
+    const b = randomInt(4, settings.numberMax);
     const answer = a + b;
-    return { prompt: `What is ${a} + ${b}?`, answer, choices: makeChoices(answer) };
+    return { prompt: `What is ${a} + ${b}?`, answer, choices: makeNumberChoices(answer, settings.choiceCount) };
   }
 
-  const a = randomInt(2, 12);
-  const b = randomInt(2, 12);
-  const answer = a * b;
-  return { prompt: `What is ${a} × ${b}?`, answer, choices: makeChoices(answer) };
+  if (s % 3 === 0) {
+    const a = randomInt(2, 10);
+    const b = randomInt(2, 10);
+    const answer = a * b;
+    return { prompt: `What is ${a} × ${b}?`, answer, choices: makeNumberChoices(answer, settings.choiceCount) };
+  }
+  const a = randomInt(12, settings.numberMax + 5);
+  const b = randomInt(3, 9);
+  const answer = a - b;
+  return { prompt: `What is ${a} − ${b}?`, answer, choices: makeNumberChoices(answer, settings.choiceCount) };
+}
+
+function createScienceRound(settings: ReturnType<typeof getGameSettings>, slot: number): ScienceRound {
+  const s = slot % 10;
+
+  if (settings.tier === "hard" && s >= 4) {
+    const pool = scienceMcqPoolForTier("hard");
+    const item = pool[s % pool.length];
+    return {
+      mode: "mcq",
+      q: item.q,
+      answer: item.answer,
+      choices: pickChoices(item.answer, item.choices, settings.choiceCount),
+    };
+  }
+
+  if (settings.tier === "medium" && s >= 7) {
+    const pool = scienceMcqPoolForTier("medium");
+    const item = pool[s % pool.length];
+    return {
+      mode: "mcq",
+      q: item.q,
+      answer: item.answer,
+      choices: pickChoices(item.answer, item.choices, settings.choiceCount),
+    };
+  }
+
+  const pool = sciencePoolForTier(settings.tier);
+  const item = pool[s % pool.length];
+  return { mode: "tf", q: item.q, a: item.a };
 }
 
 export function ChildMiniGameScreen({ route, navigation }: Props) {
@@ -284,6 +347,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   const audio = useAudioGuidance();
   const difficultyLevel = child?.difficulty_level ?? 5;
   const settings = useMemo(() => getGameSettings(difficultyLevel, gameId), [difficultyLevel, gameId]);
+  const [questionOrder, setQuestionOrder] = useState(() => shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
@@ -304,40 +368,33 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
     setFeedback(null);
   }, [round]);
 
-  const alphabetRound = useMemo(() => {
-    if (gameId !== "alphabet") {
-      return null;
-    }
-    return createAlphabetRound(settings);
-  }, [gameId, round, settings]);
+  const questionSlot = questionOrder[round] ?? round;
 
-  const numberRound = useMemo(() => createNumberRound(gameId, settings), [gameId, settings, round]);
+  const alphabetRound = useMemo(() => {
+    if (gameId !== "alphabet") return null;
+    return createAlphabetRound(settings, questionSlot);
+  }, [gameId, questionSlot, settings]);
+
+  const numberRound = useMemo(() => {
+    if (gameId === "numbers") return createNumbersRound(settings, questionSlot);
+    if (gameId === "math") return createMathRound(settings, questionSlot);
+    return null;
+  }, [gameId, questionSlot, settings]);
 
   const colorRound = useMemo(() => {
-    if (gameId !== "colors") {
-      return null;
-    }
-    return createColorRound(settings);
-  }, [gameId, round, settings]);
+    if (gameId !== "colors") return null;
+    return createColorRound(settings, questionSlot);
+  }, [gameId, questionSlot, settings]);
 
   const shapeRound = useMemo(() => {
-    if (gameId !== "shapes") {
-      return null;
-    }
-    return createShapeRound(settings);
-  }, [gameId, round, settings]);
+    if (gameId !== "shapes") return null;
+    return createShapeRound(settings, questionSlot);
+  }, [gameId, questionSlot, settings]);
 
   const scienceRound = useMemo(() => {
-    if (gameId !== "science") {
-      return null;
-    }
-    if (settings.tier === "hard") {
-      const q = SCIENCE_MCQ[round % SCIENCE_MCQ.length];
-      return { mode: "mcq", q: q.q, answer: q.answer, choices: shuffle([...q.choices]).slice(0, settings.choiceCount) } as ScienceRound;
-    }
-    const tf = settings.sciencePool[round % settings.sciencePool.length];
-    return { mode: "tf", ...tf } as ScienceRound;
-  }, [gameId, round, settings]);
+    if (gameId !== "science") return null;
+    return createScienceRound(settings, questionSlot);
+  }, [gameId, questionSlot, settings]);
 
   const spokenPrompt = useMemo(() => {
     if (profileLoading || profileError || done) {
@@ -419,12 +476,14 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   );
 
   const restart = () => {
+    setQuestionOrder(shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
     setRound(0);
     setScore(0);
     setDone(false);
     setFeedback(null);
     setSaveError(null);
     setRewardSaved(false);
+    lastSpokenRoundRef.current = null;
   };
 
   const xpEarned = score * settings.xpPerCorrect;

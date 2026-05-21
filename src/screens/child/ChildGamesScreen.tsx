@@ -34,7 +34,7 @@ export function ChildGamesScreen() {
           </Text>
         </View>
         <Text variant="bodyMedium" style={styles.hint}>
-          Tap a game to play five quick rounds and earn XP.
+          Each game has 10 questions. Difficulty follows your learning level.
         </Text>
         <View style={styles.grid}>
           {CHILD_GAME_CATALOG.map((game) => (
@@ -51,10 +51,13 @@ export function ChildGamesScreen() {
                   <Text variant="titleMedium" style={styles.gameTitle}>
                     {game.title}
                   </Text>
+                  <Text variant="labelSmall" style={styles.gameBlurb}>
+                    {game.blurb}
+                  </Text>
                   <View style={styles.xpRow}>
                     <MaterialCommunityIcons name="star" size={14} color="#FFFDE7" />
                     <Text variant="labelSmall" style={styles.xp}>
-                      +50 XP
+                      10 questions
                     </Text>
                   </View>
                   <View style={styles.playRow}>
@@ -126,6 +129,11 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
     textAlign: "center",
+  },
+  gameBlurb: {
+    color: "#FFFDE7",
+    textAlign: "center",
+    opacity: 0.95,
   },
   xpRow: {
     flexDirection: "row",
