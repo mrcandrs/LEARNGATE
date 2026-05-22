@@ -1,23 +1,41 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
+import {
+  Dimensions,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import { Text } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
-import { PrimaryButton } from "@/components/PrimaryButton";
-import { ScreenContainer } from "@/components/ScreenContainer";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
-import { colors, radii, shadows } from "@/theme/theme";
+import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { signInWithGoogleOAuth } from "@/services/googleOAuth";
 import { formatAppError } from "@/utils/errors";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
 
+const GREEN = colors.roleSelectGreen;
+const SHEET_BG = "#F6F7EC";
+const CARD_OVERLAP = 20;
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
+
 export function ParentLoginScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { selectRole, isSupabaseConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -61,184 +79,300 @@ export function ParentLoginScreen({ navigation }: Props) {
   };
 
   return (
-    <ScreenContainer scroll>
-      <View style={styles.hero}>
-        <View style={styles.avatarRing}>
-          <MaterialCommunityIcons name="account-heart" size={40} color="#FFFFFF" />
-        </View>
-        <Text variant="headlineLarge" style={styles.title}>
-          Parent Login
-        </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          Sign in to manage your child&apos;s learning journey, tasks, and screen time.
-        </Text>
+    <View style={styles.screen}>
+      <View style={[styles.headerWrap, { height: HERO_HEIGHT + insets.top, paddingTop: insets.top }]}>
+        <Image
+          source={require("../../../assets/parent-login-hero.png")}
+          style={styles.heroImage}
+          resizeMode="cover"
+          accessibilityLabel="LearnGate Parent Portal"
+        />
+        <Pressable
+          style={[styles.backBtn, { top: insets.top + 8 }]}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={12}
+        />
       </View>
 
-      {isSupabaseConfigured ? (
-        <View style={styles.card}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with Google"
-            disabled={googleBusy || isSubmitting}
-            onPress={() => void handleGoogle()}
-            style={({ pressed }) => [styles.googleBtn, (pressed || googleBusy) && styles.googleBtnPressed]}
-          >
-            <View style={styles.googleIconWrap}>
-              <FontAwesome6 name="google" size={20} color="#EA4335" />
-            </View>
-            <Text style={styles.googleLabel}>{googleBusy ? "Opening Google…" : "Continue with Google"}</Text>
-            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.subtext} />
-          </Pressable>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Parent Login</Text>
+            <Text style={styles.cardSubtitle}>Sign In to manage your child</Text>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text variant="labelSmall" style={styles.dividerText}>
-              or with email
-            </Text>
-            <View style={styles.dividerLine} />
+            {isSupabaseConfigured ? (
+              <>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Continue with Google"
+                  disabled={googleBusy || isSubmitting}
+                  onPress={() => void handleGoogle()}
+                  style={({ pressed }) => [
+                    styles.googleBtn,
+                    (pressed || googleBusy) && styles.btnPressed,
+                  ]}
+                >
+                  <Image
+                    source={require("../../../assets/google-signin-g.png")}
+                    style={styles.googleIcon}
+                    accessibilityIgnoresInvertColors
+                  />
+                  <Text style={styles.googleLabel}>
+                    {googleBusy ? "Opening Google…" : "Continue with Google"}
+                  </Text>
+                </Pressable>
+
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR WITH EMAIL</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <View style={styles.field}>
+                  <MaterialCommunityIcons name="email-outline" size={22} color={GREEN} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Email"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <MaterialCommunityIcons name="lock-outline" size={22} color={GREEN} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Password"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                  />
+                  <Pressable
+                    onPress={() => setShowPassword((v) => !v)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons
+                      name={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={22}
+                      color="#9CA3AF"
+                    />
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+
+            <Pressable
+              onPress={() => void handleContinue()}
+              disabled={isSubmitting || googleBusy}
+              style={({ pressed }) => [
+                styles.signInBtn,
+                (pressed || isSubmitting) && styles.btnPressed,
+                (isSubmitting || googleBusy) && styles.btnDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={isSupabaseConfigured ? "Sign In" : "Continue in demo mode"}
+            >
+              <Text style={styles.signInLabel}>
+                {isSupabaseConfigured ? (isSubmitting ? "Signing in…" : "Sign In") : "Continue in Demo Mode"}
+              </Text>
+            </Pressable>
+
+            {isSupabaseConfigured ? (
+              <Pressable
+                onPress={() => navigation.navigate("ParentSignUp")}
+                style={({ pressed }) => [styles.createBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Create Account"
+              >
+                <Text style={styles.createLabel}>Create Account</Text>
+              </Pressable>
+            ) : null}
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {!isSupabaseConfigured ? (
+              <Text style={styles.warning}>
+                Supabase keys are not configured yet. Add your .env values to enable real authentication.
+              </Text>
+            ) : null}
           </View>
-
-          <View style={styles.form}>
-            <TextInput
-              label="Email"
-              mode="outlined"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-            />
-            <TextInput
-              label="Password"
-              mode="outlined"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-            />
-          </View>
-        </View>
-      ) : null}
-
-      <PrimaryButton
-        label={isSupabaseConfigured ? "Sign In" : "Continue in Demo Mode"}
-        onPress={() => void handleContinue()}
-        disabled={isSubmitting || googleBusy}
-      />
-
-      {isSupabaseConfigured ? (
-        <PrimaryButton label="Create Parent Account" onPress={() => navigation.navigate("ParentSignUp")} mode="text" />
-      ) : null}
-
-      {error ? (
-        <Text variant="bodySmall" style={styles.error}>
-          {error}
-        </Text>
-      ) : null}
-
-      {!isSupabaseConfigured ? (
-        <Text variant="bodySmall" style={styles.warning}>
-          Supabase keys are not configured yet. Add your .env values to enable real authentication.
-        </Text>
-      ) : null}
-    </ScreenContainer>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    alignItems: "center",
-    marginBottom: 16,
+  screen: {
+    flex: 1,
+    backgroundColor: SHEET_BG,
   },
-  avatarRing: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.primary,
-    borderWidth: 4,
-    borderColor: "#F5C542",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  flex: {
+    flex: 1,
   },
-  title: {
-    color: colors.text,
-    fontWeight: "700",
-    textAlign: "center",
+  headerWrap: {
+    width: SCREEN_WIDTH,
+    backgroundColor: GREEN,
+    overflow: "hidden",
   },
-  subtitle: {
-    color: colors.subtext,
-    textAlign: "center",
-    marginTop: 8,
-    lineHeight: 22,
-    paddingHorizontal: 8,
+  heroImage: {
+    width: SCREEN_WIDTH,
+    height: HERO_HEIGHT,
+  },
+  backBtn: {
+    position: "absolute",
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    marginTop: -CARD_OVERLAP,
   },
   card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 22,
     gap: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
+  },
+  cardSubtitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#6B7280",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  googleIcon: {
+    width: 22,
+    height: 22,
   },
   googleBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    borderWidth: 2,
+    borderColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: "#FFFFFF",
   },
-  googleBtnPressed: {
-    opacity: 0.88,
-  },
-  googleIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#F9FAFB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   googleLabel: {
-    flex: 1,
     fontSize: 16,
     fontWeight: "600",
-    color: colors.text,
+    color: "#374151",
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    marginVertical: 2,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: "#D1D5DB",
   },
   dividerText: {
-    color: colors.subtext,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#9CA3AF",
+    letterSpacing: 0.6,
   },
-  form: {
+  field: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: GREEN,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    backgroundColor: "#FFFFFF",
     gap: 10,
   },
-  warning: {
-    marginTop: 8,
-    color: colors.warning,
+  fieldIcon: {
+    marginRight: 2,
+  },
+  fieldInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#1F2937",
+    paddingVertical: 12,
+  },
+  signInBtn: {
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  signInLabel: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  createBtn: {
+    borderWidth: 2,
+    borderColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  createLabel: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: GREEN,
+  },
+  btnPressed: {
+    opacity: 0.9,
+  },
+  btnDisabled: {
+    opacity: 0.65,
   },
   error: {
-    marginTop: 8,
     color: "#B91C1C",
+    fontSize: 14,
+    textAlign: "center",
+  },
+  warning: {
+    color: colors.warning,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

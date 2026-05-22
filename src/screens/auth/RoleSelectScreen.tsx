@@ -53,6 +53,7 @@ const styles = StyleSheet.create({
   headerWrap: {
     width: SCREEN_WIDTH,
     backgroundColor: HEADER_GREEN,
+    marginBottom: 13,
     overflow: "hidden",
   },
   heroImage: {

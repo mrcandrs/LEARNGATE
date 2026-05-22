@@ -1,14 +1,38 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Text, TextInput } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ScreenContainer } from "@/components/ScreenContainer";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
-import { colors, radii, shadows } from "@/theme/theme";
+import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 
-export function ChildAccessScreen() {
+type Props = NativeStackScreenProps<AuthStackParamList, "ChildAccess">;
+
+const GREEN = colors.roleSelectGreen;
+const SHEET_BG = "#F6F7EC";
+const CARD_OVERLAP = 20;
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
+
+export function ChildAccessScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { selectRole, isSupabaseConfigured } = useAuth();
   const [childName, setChildName] = useState("");
   const [pin, setPin] = useState("");
@@ -58,7 +82,6 @@ export function ChildAccessScreen() {
 
     setSuccessToastVisible(true);
     setIsSubmitting(false);
-    // App mode will be resolved by AuthContext via profiles.role.
   };
 
   useEffect(() => {
@@ -95,109 +118,203 @@ export function ChildAccessScreen() {
   }, [successToastVisible]);
 
   return (
-    <ScreenContainer scroll>
-      <View style={styles.content}>
-        <View style={styles.badge}>
-          <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.primaryDark} />
-          <Text variant="labelMedium" style={styles.badgeText}>
-            Secure Child Login
-          </Text>
-        </View>
-        <Text variant="headlineLarge" style={styles.title}>
-          Child Access
-        </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
-          Enter your child name and parent PIN.
-        </Text>
-        {successToastVisible ? (
-          <View style={styles.successToast}>
-            <MaterialCommunityIcons name="check-circle" size={16} color="#15803D" />
-            <Text variant="labelMedium" style={styles.successToastText}>
-              Logged in successfully
-            </Text>
-          </View>
-        ) : null}
-
-        {isSupabaseConfigured ? (
-          <View style={styles.formCard}>
-            <TextInput
-              label="Child Name"
-              mode="outlined"
-              value={childName}
-              onChangeText={setChildName}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-            />
-            <TextInput
-              label="Parent PIN (6 digits)"
-              mode="outlined"
-              value={pin}
-              onChangeText={(value) => setPin(value.replace(/[^0-9]/g, "").slice(0, 6))}
-              keyboardType="number-pad"
-              secureTextEntry={!showPin}
-              outlineColor={colors.border}
-              activeOutlineColor={colors.primary}
-              right={
-                <TextInput.Icon
-                  icon={showPin ? "eye-off-outline" : "eye-outline"}
-                  onPress={() => setShowPin((prev) => !prev)}
-                  forceTextInputFocus={false}
-                />
-              }
-            />
-          </View>
-        ) : null}
-        {isSubmitting ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text variant="bodySmall" style={styles.loadingText}>
-              Signing in...
-            </Text>
-          </View>
-        ) : null}
-
-        {error ? (
-          <Text variant="bodySmall" style={styles.errorText}>
-            {error}
-          </Text>
-        ) : null}
-
-        {!isSupabaseConfigured ? (
-          <Text variant="bodySmall" style={styles.warningText}>
-            Supabase keys are not configured yet. Add your .env values to enable real child authentication.
-          </Text>
-        ) : null}
+    <View style={styles.screen}>
+      <View style={[styles.headerWrap, { height: HERO_HEIGHT + insets.top, paddingTop: insets.top }]}>
+        <Image
+          source={require("../../../assets/child-access-hero.png")}
+          style={styles.heroImage}
+          resizeMode="cover"
+          accessibilityLabel="LearnGate Child Access"
+        />
+        <Pressable
+          style={[styles.backBtn, { top: insets.top + 8 }]}
+          onPress={() => navigation.goBack()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={12}
+        />
       </View>
-    </ScreenContainer>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.card}>
+            <View style={styles.badge}>
+              <MaterialCommunityIcons name="shield-check" size={18} color={GREEN} />
+              <Text style={styles.badgeText}>Secure Child Login</Text>
+            </View>
+
+            <Text style={styles.cardTitle}>Child Access</Text>
+            <Text style={styles.cardSubtitle}>Enter your child name and parent PIN.</Text>
+
+            {successToastVisible ? (
+              <View style={styles.successToast}>
+                <MaterialCommunityIcons name="check-circle" size={16} color="#15803D" />
+                <Text style={styles.successToastText}>Logged in successfully</Text>
+              </View>
+            ) : null}
+
+            {isSupabaseConfigured ? (
+              <>
+                <View style={styles.field}>
+                  <MaterialCommunityIcons name="account-outline" size={22} color={GREEN} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Child Name"
+                    placeholderTextColor="#9CA3AF"
+                    value={childName}
+                    onChangeText={setChildName}
+                    autoCapitalize="words"
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <View style={styles.field}>
+                  <MaterialCommunityIcons name="lock-outline" size={22} color={GREEN} style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Parent PIN ( 6 digits )"
+                    placeholderTextColor="#9CA3AF"
+                    value={pin}
+                    onChangeText={(value) => setPin(value.replace(/[^0-9]/g, "").slice(0, 6))}
+                    keyboardType="number-pad"
+                    secureTextEntry={!showPin}
+                  />
+                  <Pressable
+                    onPress={() => setShowPin((v) => !v)}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPin ? "Hide PIN" : "Show PIN"}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons
+                      name={showPin ? "eye-off-outline" : "eye-outline"}
+                      size={22}
+                      color="#9CA3AF"
+                    />
+                  </Pressable>
+                </View>
+              </>
+            ) : null}
+
+            <Pressable
+              onPress={() => void handleChildSignIn()}
+              disabled={isSubmitting}
+              style={({ pressed }) => [
+                styles.unlockBtn,
+                (pressed || isSubmitting) && styles.btnPressed,
+                isSubmitting && styles.btnDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={isSupabaseConfigured ? "Unlock" : "Continue in demo mode"}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.unlockLabel}>
+                  {isSupabaseConfigured ? "Unlock" : "Continue in Demo Mode"}
+                </Text>
+              )}
+            </Pressable>
+
+            {isSubmitting && isSupabaseConfigured ? (
+              <Text style={styles.signingInHint}>Signing in…</Text>
+            ) : null}
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {!isSupabaseConfigured ? (
+              <Text style={styles.warning}>
+                Supabase keys are not configured yet. Add your .env values to enable real child authentication.
+              </Text>
+            ) : null}
+
+            <View style={styles.safetyFooter}>
+              <MaterialCommunityIcons name="shield-check-outline" size={16} color={GREEN} />
+              <Text style={styles.safetyText}>Your child&apos;s safety is our top priority</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  screen: {
     flex: 1,
-    justifyContent: "center",
-    gap: 10,
+    backgroundColor: SHEET_BG,
+  },
+  flex: {
+    flex: 1,
+  },
+  headerWrap: {
+    width: SCREEN_WIDTH,
+    backgroundColor: GREEN,
+    overflow: "hidden",
+  },
+  heroImage: {
+    width: SCREEN_WIDTH,
+    height: HERO_HEIGHT,
+  },
+  backBtn: {
+    position: "absolute",
+    left: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    marginTop: -CARD_OVERLAP,
+  },
+  card: {
+    marginTop: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 18,
+    gap: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   badge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E8F5E9",
-    borderRadius: radii.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    backgroundColor: "#E8F5E9",
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
   },
   badgeText: {
-    color: colors.primaryDark,
+    fontSize: 13,
     fontWeight: "700",
+    color: GREEN,
   },
-  title: {
-    color: colors.text,
+  cardTitle: {
+    fontSize: 22,
     fontWeight: "700",
+    color: "#1A1A1A",
+    textAlign: "center",
   },
-  subtitle: {
-    color: colors.subtext,
+  cardSubtitle: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#6B7280",
+    textAlign: "center",
     marginBottom: 2,
   },
   successToast: {
@@ -208,39 +325,85 @@ const styles = StyleSheet.create({
     backgroundColor: "#DCFCE7",
     borderColor: "#BBF7D0",
     borderWidth: 1,
-    borderRadius: radii.pill,
+    borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
   successToastText: {
     color: "#15803D",
     fontWeight: "700",
+    fontSize: 13,
   },
-  formCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    padding: 12,
-    gap: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  loadingRow: {
-    alignSelf: "center",
+  field: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    borderWidth: 2,
+    borderColor: GREEN,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    backgroundColor: "#FFFFFF",
+    gap: 10,
+  },
+  fieldIcon: {
+    marginRight: 2,
+  },
+  fieldInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#1F2937",
+    paddingVertical: 12,
+  },
+  unlockBtn: {
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: "center",
     marginTop: 4,
+    minHeight: 52,
+    justifyContent: "center",
   },
-  loadingText: {
-    color: colors.subtext,
+  unlockLabel: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
   },
-  errorText: {
+  signingInHint: {
+    textAlign: "center",
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: -6,
+  },
+  btnPressed: {
+    opacity: 0.9,
+  },
+  btnDisabled: {
+    opacity: 0.75,
+  },
+  error: {
     color: "#B91C1C",
-    marginTop: 6,
+    fontSize: 14,
+    textAlign: "center",
   },
-  warningText: {
+  warning: {
     color: colors.warning,
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  safetyFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     marginTop: 6,
+    paddingTop: 4,
+  },
+  safetyText: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
   },
 });

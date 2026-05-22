@@ -19,9 +19,9 @@ export function AuthStackNavigator() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="RoleSelect" component={RoleSelectScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="ParentLogin" component={ParentLoginScreen} options={{ title: "Parent Portal", ...greenHeader }} />
+      <Stack.Screen name="ParentLogin" component={ParentLoginScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ParentSignUp" component={ParentSignUpScreen} options={{ title: "Create Parent Account", ...greenHeader }} />
-      <Stack.Screen name="ChildAccess" component={ChildAccessScreen} options={{ title: "Child Access", ...greenHeader }} />
+      <Stack.Screen name="ChildAccess" component={ChildAccessScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }
