@@ -1,3 +1,4 @@
+import { Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ChildHomeStackNavigator } from "@/navigation/ChildHomeStackNavigator";
@@ -9,6 +10,7 @@ import { colors } from "@/theme/theme";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { useAuth } from "@/store/AuthContext";
 import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
+import { useChildScreenLockContext } from "@/store/ChildScreenLockContext";
 import { useTheme } from "react-native-paper";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
@@ -17,18 +19,38 @@ export function ChildTabsNavigator() {
   useChildLocationTracking();
   const { appMode } = useAuth();
   const theme = useTheme();
-  useChildHeartbeat({ enabled: appMode === "child", intervalMs: 60_000 });
+  const lock = useChildScreenLockContext();
+  useChildHeartbeat({ enabled: appMode === "child" && !lock.isLocked, intervalMs: 60_000 });
 
   return (
     <Tab.Navigator
+      screenListeners={{
+        tabPress: (e) => {
+          if (lock.isLocked) {
+            e.preventDefault();
+          }
+        },
+      }}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: colors.subtext,
-        tabBarStyle: {
-          backgroundColor: theme.colors.surface,
-          borderTopColor: theme.colors.outlineVariant,
-        },
+        tabBarStyle: lock.isLocked
+          ? { display: "none", height: 0 }
+          : {
+              backgroundColor: theme.colors.surface,
+              borderTopColor: theme.colors.outlineVariant,
+            },
+        tabBarButton: lock.isLocked
+          ? (props) => (
+              <Pressable
+                style={props.style}
+                accessibilityState={props.accessibilityState}
+                accessibilityLabel={props.accessibilityLabel}
+                onPress={() => {}}
+              />
+            )
+          : undefined,
         tabBarIcon: ({ color, size }) => {
           const iconName =
             route.name === "Home"

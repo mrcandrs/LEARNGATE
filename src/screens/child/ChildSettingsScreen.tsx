@@ -122,6 +122,9 @@ export function ChildSettingsScreen() {
           <Text variant="bodyMedium" style={styles.statusLine}>
             LearnGate Accessibility: {accessibilityOn === null ? "…" : accessibilityOn ? "On" : "Off"}
           </Text>
+          <Text variant="bodySmall" style={styles.mutedSmall}>
+            Required for screen-time and bedtime lock: blocks Home, Recents, and other apps while LearnGate is locked.
+          </Text>
           <Button mode="outlined" onPress={() => openAccessibilitySettings()} style={styles.marginTopBtn}>
             Open Accessibility settings
           </Button>

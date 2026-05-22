@@ -4,21 +4,10 @@ import { Platform } from "react-native";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { syncBlockedPackages } from "@/services/appBlocking";
-import { formatAppError } from "@/utils/errors";
+import { fetchChildProfileForCurrentUser } from "@/services/childProfileFetch";
 
-export type ChildProfileRow = {
-  id: string;
-  name: string;
-  age: number;
-  difficulty_level: number;
-  stars: number;
-  daily_limit_minutes: number;
-  avatar_url: string | null;
-  audio_guide_enabled: boolean;
-  audio_guide_rate: number;
-  /** Package names the parent chose to block (from `screen_rules.blocked_apps_json`). */
-  blocked_apps_json: string[];
-};
+export type { ChildProfileRow } from "@/types/child";
+import type { ChildProfileRow } from "@/types/child";
 
 export function useChildProfile() {
   const { isSupabaseConfigured } = useAuth();
@@ -38,47 +27,11 @@ export function useChildProfile() {
     }
     setError(null);
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setError(formatAppError(userError ?? new Error("Not signed in.")));
-      setChild(null);
-      setLoading(false);
-      return;
+    const { child: row, error: fetchError } = await fetchChildProfileForCurrentUser();
+    if (fetchError) {
+      setError(fetchError);
     }
-
-    const { data, error: childError } = await supabase
-      .from("children")
-      .select("id, name, age, difficulty_level, stars, daily_limit_minutes, avatar_url, audio_guide_enabled, audio_guide_rate")
-      .eq("child_user_id", user.id)
-      .maybeSingle();
-
-    if (childError || !data) {
-      setError(childError ? formatAppError(childError) : "No child profile linked to this account.");
-      setChild(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data: ruleRow, error: ruleError } = await supabase
-      .from("screen_rules")
-      .select("blocked_apps_json")
-      .eq("child_id", data.id)
-      .maybeSingle();
-
-    if (ruleError) {
-      setError(formatAppError(ruleError));
-    }
-
-    const blocked = Array.isArray(ruleRow?.blocked_apps_json) ? ruleRow!.blocked_apps_json : [];
-
-    setChild({
-      ...(data as ChildProfileRow),
-      blocked_apps_json: blocked.filter((p): p is string => typeof p === "string" && p.length > 0),
-    });
+    setChild(row);
     setLoading(false);
   }, [isSupabaseConfigured]);
 

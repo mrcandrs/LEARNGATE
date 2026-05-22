@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Card, Chip, Dialog, Divider, List, Portal, Snackbar, Text, TextInput } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { colors } from "@/theme/theme";
@@ -15,6 +15,16 @@ import { EXERCISES, type ExerciseId } from "@/data/exercises";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { GameId } from "@/data/childGames";
 import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
+import {
+  DAILY_LIMIT_MAX_MINUTES,
+  DAILY_LIMIT_MIN_MINUTES,
+  formatBedtimeForInput,
+  formatDailyLimitDbError,
+  parseDailyLimitMinutes,
+  validateBedtimeForDb,
+} from "@/utils/childLimits";
+
+type AppSnackbar = { message: string; variant: "success" | "error" };
 
 type ChildRow = {
   id: string;
@@ -51,9 +61,16 @@ export function ParentChildrenScreen() {
   const [pinBusyChildId, setPinBusyChildId] = useState<string | null>(null);
   const [saveBusyChildId, setSaveBusyChildId] = useState<string | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  const [childMenuVisible, setChildMenuVisible] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [snackbar, setSnackbar] = useState<string | null>(null);
+  const [childPickerVisible, setChildPickerVisible] = useState(false);
+  const [snackbar, setSnackbar] = useState<AppSnackbar | null>(null);
+
+  const showError = useCallback((message: string) => {
+    setSnackbar({ message, variant: "error" });
+  }, []);
+
+  const showSuccess = useCallback((message: string) => {
+    setSnackbar({ message, variant: "success" });
+  }, []);
   const [newChildName, setNewChildName] = useState("");
   const [newChildAge, setNewChildAge] = useState("");
   const [newChildEmail, setNewChildEmail] = useState("");
@@ -88,14 +105,13 @@ export function ParentChildrenScreen() {
     } else {
       setIsLoading(true);
     }
-    setError(null);
     const {
       data: { user },
       error: userError,
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error("Not signed in.")));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -108,7 +124,7 @@ export function ParentChildrenScreen() {
       .order("created_at", { ascending: true });
 
     if (childrenError) {
-      setError(formatAppError(childrenError));
+      showError(formatAppError(childrenError));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -119,8 +135,8 @@ export function ParentChildrenScreen() {
       acc[row.id] = {
         daily_limit_minutes: String(row.daily_limit_minutes),
         difficulty_level: levelToDifficultyTier(row.difficulty_level),
-        bedtime_start: row.bedtime_start,
-        bedtime_end: row.bedtime_end,
+        bedtime_start: formatBedtimeForInput(row.bedtime_start),
+        bedtime_end: formatBedtimeForInput(row.bedtime_end),
       };
       return acc;
     }, {});
@@ -166,19 +182,27 @@ export function ParentChildrenScreen() {
     if (!supabase || !drafts[childId]) {
       return;
     }
-    setError(null);
     const draft = drafts[childId];
-    if (!draft.daily_limit_minutes.trim()) {
-      setError("Daily limit is required.");
+    const { value: dailyLimit, error: limitError } = parseDailyLimitMinutes(draft.daily_limit_minutes);
+    if (limitError || dailyLimit == null) {
+      showError(limitError ?? "Invalid daily limit.");
       return;
     }
 
-    const dailyLimit = Number(draft.daily_limit_minutes);
-    const difficulty = difficultyTierToLevel(draft.difficulty_level);
-    if (Number.isNaN(dailyLimit)) {
-      setError("Please enter a valid daily limit.");
+    const startResult = validateBedtimeForDb(draft.bedtime_start);
+    if (startResult.error || !startResult.value) {
+      showError(startResult.error ?? "Invalid bedtime start.");
       return;
     }
+    const endResult = validateBedtimeForDb(draft.bedtime_end);
+    if (endResult.error || !endResult.value) {
+      showError(endResult.error ?? "Invalid bedtime end.");
+      return;
+    }
+    const bedtimeStart = startResult.value;
+    const bedtimeEnd = endResult.value;
+
+    const difficulty = difficultyTierToLevel(draft.difficulty_level);
 
     setSaveBusyChildId(childId);
     const { error: updateError } = await supabase
@@ -186,17 +210,18 @@ export function ParentChildrenScreen() {
       .update({
         daily_limit_minutes: dailyLimit,
         difficulty_level: difficulty,
-        bedtime_start: draft.bedtime_start,
-        bedtime_end: draft.bedtime_end,
+        bedtime_start: bedtimeStart,
+        bedtime_end: bedtimeEnd,
       })
       .eq("id", childId);
     setSaveBusyChildId((prev) => (prev === childId ? null : prev));
 
     if (updateError) {
-      setError(formatAppError(updateError));
+      const raw = updateError.message ?? "";
+      showError(formatDailyLimitDbError(raw) ?? formatAppError(updateError));
       return;
     }
-    setSnackbar("Child settings saved successfully.");
+    showSuccess("Child settings saved successfully.");
     await loadChildren(false);
   };
 
@@ -206,16 +231,14 @@ export function ParentChildrenScreen() {
     if (!supabase) {
       return;
     }
-    setError(null);
-
     if (!newChildName.trim() || !newChildAge.trim() || !newChildEmail.trim()) {
-      setError("Name, age, and child email are required.");
+      showError("Name, age, and child email are required.");
       return;
     }
 
     const age = Number(newChildAge);
     if (Number.isNaN(age) || age <= 0 || age >= 18) {
-      setError("Child age must be between 1 and 17.");
+      showError("Child age must be between 1 and 17.");
       return;
     }
     const {
@@ -224,7 +247,7 @@ export function ParentChildrenScreen() {
     } = await supabase.auth.getUser();
 
     if (parentUserError || !parentUser) {
-      setError(formatAppError(parentUserError ?? new Error("Parent session not found.")));
+      showError(formatAppError(parentUserError ?? new Error("Parent session not found.")));
       return;
     }
 
@@ -233,7 +256,7 @@ export function ParentChildrenScreen() {
     const loginSecret = `LG-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
     if (!env.supabaseUrl || !env.supabaseAnonKey) {
       setIsCreating(false);
-      setError("Supabase is not configured.");
+      showError("Supabase is not configured.");
       return;
     }
 
@@ -258,7 +281,7 @@ export function ParentChildrenScreen() {
 
     if (signUpError || !signUpData.user?.id) {
       setIsCreating(false);
-      setError(formatAppError(signUpError ?? new Error("Failed to create child login account.")));
+      showError(formatAppError(signUpError ?? new Error("Failed to create child login account.")));
       return;
     }
 
@@ -274,7 +297,7 @@ export function ParentChildrenScreen() {
 
     setIsCreating(false);
     if (insertError) {
-      setError(formatAppError(insertError));
+      showError(formatAppError(insertError));
       return;
     }
 
@@ -282,7 +305,7 @@ export function ParentChildrenScreen() {
     setNewChildAge("");
     setNewChildEmail("");
     setShowCreateDialog(false);
-    setSnackbar(`Child account created. PIN: ${pin}`);
+    showSuccess(`Child account created. PIN: ${pin}`);
     await loadChildren(false);
   };
 
@@ -290,16 +313,15 @@ export function ParentChildrenScreen() {
     if (!supabase) {
       return;
     }
-    setError(null);
     const pin = generatePin();
     setPinBusyChildId(childId);
     const { error: pinError } = await supabase.from("children").update({ auth_pin: pin }).eq("id", childId);
     setPinBusyChildId((prev) => (prev === childId ? null : prev));
     if (pinError) {
-      setError(formatAppError(pinError));
+      showError(formatAppError(pinError));
       return;
     }
-    setSnackbar(`PIN regenerated: ${pin}`);
+    showSuccess(`PIN regenerated: ${pin}`);
     await loadChildren(false);
   };
 
@@ -315,16 +337,14 @@ export function ParentChildrenScreen() {
     if (!supabase || !exerciseTarget) {
       return;
     }
-    setError(null);
-
     const reps = Number(exerciseReps);
     const pts = Number(exercisePoints);
     if (Number.isNaN(reps) || reps <= 0 || reps > 999) {
-      setError("Exercise reps must be a valid number.");
+      showError("Exercise reps must be a valid number.");
       return;
     }
     if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      setError("Exercise points must be a valid number.");
+      showError("Exercise points must be a valid number.");
       return;
     }
 
@@ -333,7 +353,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error("Not signed in.")));
       return;
     }
 
@@ -353,12 +373,12 @@ export function ParentChildrenScreen() {
     setAssigning(false);
 
     if (insError) {
-      setError(formatAppError(insError));
+      showError(formatAppError(insError));
       return;
     }
 
     setExerciseTarget(null);
-    setSnackbar(`Exercise assigned: ${def.title} (${reps} reps)`);
+    showSuccess(`Exercise assigned: ${def.title} (${reps} reps)`);
   };
 
   const openAssignLearning = (child: ChildRow) => {
@@ -371,10 +391,9 @@ export function ParentChildrenScreen() {
     if (!supabase || !learningTarget) {
       return;
     }
-    setError(null);
     const pts = Number(learningPoints);
     if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      setError("Learning points must be a valid number.");
+      showError("Learning points must be a valid number.");
       return;
     }
     const {
@@ -382,7 +401,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error("Not signed in.")));
       return;
     }
 
@@ -401,11 +420,11 @@ export function ParentChildrenScreen() {
     const { error: insError } = await supabase.from("tasks").insert(payload);
     setAssigningLearning(false);
     if (insError) {
-      setError(formatAppError(insError));
+      showError(formatAppError(insError));
       return;
     }
     setLearningTarget(null);
-    setSnackbar(`Learning task assigned: ${game.title}`);
+    showSuccess(`Learning task assigned: ${game.title}`);
   };
 
   const openAssignChore = (child: ChildRow) => {
@@ -418,14 +437,13 @@ export function ParentChildrenScreen() {
     if (!supabase || !choreTarget) {
       return;
     }
-    setError(null);
     if (!choreTitle.trim()) {
-      setError("Chore title is required.");
+      showError("Chore title is required.");
       return;
     }
     const pts = Number(chorePoints);
     if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      setError("Chore points must be a valid number.");
+      showError("Chore points must be a valid number.");
       return;
     }
     const {
@@ -433,7 +451,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      setError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error("Not signed in.")));
       return;
     }
 
@@ -451,11 +469,11 @@ export function ParentChildrenScreen() {
     const { error: insError } = await supabase.from("tasks").insert(payload);
     setAssigningChore(false);
     if (insError) {
-      setError(formatAppError(insError));
+      showError(formatAppError(insError));
       return;
     }
     setChoreTarget(null);
-    setSnackbar(`Chore assigned: ${choreTitle.trim()}`);
+    showSuccess(`Chore assigned: ${choreTitle.trim()}`);
   };
 
   const onRefresh = useCallback(() => {
@@ -520,7 +538,6 @@ export function ParentChildrenScreen() {
       </Card>
 
       {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
       {isEmpty ? <Text>No children found for this parent account yet.</Text> : null}
       {!isEmpty && filteredChildren.length === 0 ? (
         <Text style={styles.emptyFiltered}>No child matched "{searchText}".</Text>
@@ -529,42 +546,25 @@ export function ParentChildrenScreen() {
         <Card style={styles.childCard}>
           <Card.Title title="Selected Child" subtitle="Select one child to view PIN and controls." />
           <Card.Content style={styles.cardContent}>
-            <Menu
-              visible={childMenuVisible}
-              onDismiss={() => setChildMenuVisible(false)}
-              anchor={
-                <Pressable
-                  onPress={() => setChildMenuVisible(true)}
-                  style={styles.pickerRow}
-                  accessibilityRole="button"
-                  accessibilityLabel="Select child"
-                >
-                  <View style={styles.pickerLeft}>
-                    <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
-                    <View style={styles.pickerTextWrap}>
-                      <Text variant="labelMedium" style={styles.pickerLabel}>
-                        Child
-                      </Text>
-                      <Text variant="titleSmall" style={styles.pickerValue}>
-                        {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
-                      </Text>
-                    </View>
-                  </View>
-                  <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
-                </Pressable>
-              }
+            <Pressable
+              onPress={() => setChildPickerVisible(true)}
+              style={styles.pickerRow}
+              accessibilityRole="button"
+              accessibilityLabel="Select child"
             >
-              {filteredChildren.map((child) => (
-                <Menu.Item
-                  key={child.id}
-                  title={child.name}
-                  onPress={() => {
-                    setSelectedChildId(child.id);
-                    setChildMenuVisible(false);
-                  }}
-                />
-              ))}
-            </Menu>
+              <View style={styles.pickerLeft}>
+                <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
+                <View style={styles.pickerTextWrap}>
+                  <Text variant="labelMedium" style={styles.pickerLabel}>
+                    Child
+                  </Text>
+                  <Text variant="titleSmall" style={styles.pickerValue}>
+                    {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
+                  </Text>
+                </View>
+              </View>
+              <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+            </Pressable>
 
             {selectedChild && selectedDraft ? (
               <>
@@ -624,6 +624,7 @@ export function ParentChildrenScreen() {
                           mode="outlined"
                           value={selectedDraft.daily_limit_minutes}
                           keyboardType="number-pad"
+                          placeholder={`${DAILY_LIMIT_MIN_MINUTES}-${DAILY_LIMIT_MAX_MINUTES}`}
                           onChangeText={(value) =>
                             setDrafts((prev) => ({
                               ...prev,
@@ -631,6 +632,9 @@ export function ParentChildrenScreen() {
                             }))
                           }
                         />
+                        <Text variant="bodySmall" style={styles.helper}>
+                          Allowed: {DAILY_LIMIT_MIN_MINUTES}–{DAILY_LIMIT_MAX_MINUTES} minutes per day.
+                        </Text>
                       </View>
                       <View style={styles.twoColItem}>
                         <Text variant="labelLarge" style={styles.sectionLabel}>
@@ -665,8 +669,9 @@ export function ParentChildrenScreen() {
                     <View style={styles.twoColRow}>
                       <View style={styles.twoColItem}>
                         <TextInput
-                          label="Start (HH:mm)"
+                          label="Start (00:00–23:59)"
                           mode="outlined"
+                          placeholder="20:00"
                           value={selectedDraft.bedtime_start}
                           onChangeText={(value) =>
                             setDrafts((prev) => ({
@@ -678,8 +683,9 @@ export function ParentChildrenScreen() {
                       </View>
                       <View style={styles.twoColItem}>
                         <TextInput
-                          label="End (HH:mm)"
+                          label="End (00:00–23:59)"
                           mode="outlined"
+                          placeholder="07:00"
                           value={selectedDraft.bedtime_end}
                           onChangeText={(value) =>
                             setDrafts((prev) => ({
@@ -690,6 +696,9 @@ export function ParentChildrenScreen() {
                         />
                       </View>
                     </View>
+                    <Text variant="bodySmall" style={styles.helper}>
+                      Use 24-hour time from 00:00 to 23:59.
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.saveRow}>
@@ -705,13 +714,36 @@ export function ParentChildrenScreen() {
           </Card.Content>
         </Card>
       ) : null}
-      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={1800}>
-        {snackbar ?? ""}
+      <Snackbar
+        visible={snackbar != null}
+        onDismiss={() => setSnackbar(null)}
+        duration={snackbar?.variant === "error" ? 4500 : 2200}
+        style={snackbar?.variant === "error" ? styles.errorSnackbar : styles.successSnackbar}
+      >
+        {snackbar?.message ?? ""}
       </Snackbar>
 
       <PrimaryButton label="Create Child Account" onPress={() => setShowCreateDialog(true)} />
 
       <Portal>
+        <Dialog visible={childPickerVisible} onDismiss={() => setChildPickerVisible(false)}>
+          <Dialog.Title>Select child</Dialog.Title>
+          <Dialog.ScrollArea style={styles.pickerDialogScroll}>
+            {children.map((child) => (
+              <List.Item
+                key={child.id}
+                title={child.name}
+                description={`Age ${child.age}`}
+                left={(props) => <List.Icon {...props} icon="account-child" />}
+                onPress={() => {
+                  setSelectedChildId(child.id);
+                  setChildPickerVisible(false);
+                }}
+              />
+            ))}
+          </Dialog.ScrollArea>
+        </Dialog>
+
         <Dialog visible={showCreateDialog} onDismiss={() => setShowCreateDialog(false)}>
           <Dialog.Title>Create Child Account</Dialog.Title>
           <Dialog.Content>
@@ -875,6 +907,10 @@ const styles = StyleSheet.create({
   cardContent: {
     gap: 10,
   },
+  pickerDialogScroll: {
+    maxHeight: 320,
+    paddingHorizontal: 8,
+  },
   pickerRow: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -972,7 +1008,10 @@ const styles = StyleSheet.create({
   emptyFiltered: {
     color: colors.subtext,
   },
-  errorText: {
-    color: "#B91C1C",
+  errorSnackbar: {
+    backgroundColor: "#B91C1C",
+  },
+  successSnackbar: {
+    backgroundColor: "#2E7D32",
   },
 });
