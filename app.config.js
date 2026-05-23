@@ -30,6 +30,7 @@ module.exports = ({ config }) => {
       permissions: [
         ...(config.android?.permissions ?? []),
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.PACKAGE_USAGE_STATS",
       ],
     },
   };

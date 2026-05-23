@@ -19,7 +19,9 @@ import {
   type ParentDashboardAnalytics,
   type TaskRow,
 } from "@/services/parentDashboardAnalytics";
+import { iconForPackage } from "@/constants/blockedAppPackages";
 import { formatAppError } from "@/utils/errors";
+import { filterReportableUsageRows } from "@/utils/appUsagePackages";
 import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotifications";
 
 type ActivityItem = {
@@ -64,6 +66,45 @@ function formatActivityTime(iso: string): string {
   }
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
+
+type AppUsageItem = {
+  id: string;
+  child_id: string;
+  package_name: string;
+  app_label: string | null;
+  event_at: string;
+  duration_seconds: number | null;
+};
+
+function formatUsageRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 45_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} min ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} hr ago`;
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatUsedDuration(seconds: number | null): string | null {
+  if (!seconds || seconds < 60) return null;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `used ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem > 0 ? `used ${hours} hr ${rem} min` : `used ${hours} hr`;
+}
+
+function formatAppUsageDetail(eventAt: string, durationSeconds: number | null): string {
+  const opened = `Opened ${formatUsageRelativeTime(eventAt)}`;
+  const used = formatUsedDuration(durationSeconds);
+  return used ? `${opened} · ${used}` : opened;
+}
+
+type ManagedChild = { id: string; name: string };
 
 function buildInsights(children: ChildRow[], rows: TaskRow[]): ChildInsight[] {
   const now = Date.now();
@@ -151,9 +192,15 @@ export function ParentOverviewScreen() {
   const [stats, setStats] = useState<ParentStat[]>([]);
   const [analytics, setAnalytics] = useState<ParentDashboardAnalytics | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [appUsage, setAppUsage] = useState<AppUsageItem[]>([]);
+  const [managedChildren, setManagedChildren] = useState<ManagedChild[]>([]);
   const [insights, setInsights] = useState<ChildInsight[]>([]);
   const [insightsMenuVisible, setInsightsMenuVisible] = useState(false);
   const [selectedInsightChildId, setSelectedInsightChildId] = useState<string | null>(null);
+  const [usageMenuVisible, setUsageMenuVisible] = useState(false);
+  const [selectedUsageChildId, setSelectedUsageChildId] = useState<string | null>(null);
+  const [usageRefreshing, setUsageRefreshing] = useState(false);
+  const [usageLastRefreshedAt, setUsageLastRefreshedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +219,42 @@ export function ParentOverviewScreen() {
     }, [])
   );
 
+  const loadAppUsageForChild = useCallback(
+    async (childId: string) => {
+      if (!isSupabaseConfigured || !supabase) {
+        setAppUsage([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("child_app_usage_events")
+        .select("id, child_id, package_name, app_label, event_at, duration_seconds")
+        .eq("child_id", childId)
+        .eq("event_type", "foreground")
+        .order("event_at", { ascending: false })
+        .limit(30);
+
+      if (error) {
+        console.warn("[LearnGate] app usage load failed:", error.message);
+        return;
+      }
+
+      setAppUsage(filterReportableUsageRows((data as AppUsageItem[]) ?? []));
+      setUsageLastRefreshedAt(new Date());
+    },
+    [isSupabaseConfigured]
+  );
+
+  const refreshAppUsage = useCallback(async () => {
+    if (!selectedUsageChildId) return;
+    setUsageRefreshing(true);
+    try {
+      await loadAppUsageForChild(selectedUsageChildId);
+    } finally {
+      setUsageRefreshing(false);
+    }
+  }, [selectedUsageChildId, loadAppUsageForChild]);
+
   const loadDashboard = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setStats([
@@ -182,6 +265,8 @@ export function ParentOverviewScreen() {
       ]);
       setAnalytics(null);
       setActivity([]);
+      setAppUsage([]);
+      setManagedChildren([]);
       setInsights([]);
       setIsLoading(false);
       setRefreshing(false);
@@ -276,6 +361,8 @@ export function ParentOverviewScreen() {
       );
     }
 
+    const managed = childRows.map((c) => ({ id: c.id, name: c.name ?? "Child" }));
+
     const built = buildParentDashboardAnalytics({
       children: childRows,
       tasks: taskRows,
@@ -296,13 +383,24 @@ export function ParentOverviewScreen() {
       { label: "Completed This Week", value: String(built.week.totalCompleted) },
     ]);
     setActivity(recentActivity);
+    setManagedChildren(managed);
     setInsights(nextInsights);
     setSelectedInsightChildId((prev) =>
       prev && nextInsights.some((i) => i.childId === prev) ? prev : nextInsights[0]?.childId ?? null
     );
+    const usageChildId =
+      selectedUsageChildId && managed.some((c) => c.id === selectedUsageChildId)
+        ? selectedUsageChildId
+        : managed[0]?.id ?? null;
+    setSelectedUsageChildId(usageChildId);
+    if (usageChildId) {
+      await loadAppUsageForChild(usageChildId);
+    } else {
+      setAppUsage([]);
+    }
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured]);
+  }, [isSupabaseConfigured, loadAppUsageForChild]);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -315,6 +413,11 @@ export function ParentOverviewScreen() {
   const selectedInsight = useMemo(
     () => insights.find((i) => i.childId === selectedInsightChildId) ?? insights[0] ?? null,
     [insights, selectedInsightChildId]
+  );
+
+  const selectedUsageChild = useMemo(
+    () => managedChildren.find((c) => c.id === selectedUsageChildId) ?? managedChildren[0] ?? null,
+    [managedChildren, selectedUsageChildId]
   );
 
   return (
@@ -447,6 +550,106 @@ export function ParentOverviewScreen() {
           </Card.Content>
         </Card>
       ) : null}
+
+      <Card style={styles.sectionCard}>
+        <Card.Title
+          title="Recent apps on child devices"
+          subtitle="User apps only"
+          titleStyle={styles.cardTitle}
+          left={() => <MaterialCommunityIcons name="cellphone-link" size={24} color={colors.primary} />}
+        />
+        <Card.Content style={styles.activityList}>
+          {managedChildren.length === 0 ? (
+            <Text style={styles.emptyText}>Add a child profile to see app activity here.</Text>
+          ) : (
+            <>
+              <Menu
+                visible={usageMenuVisible}
+                onDismiss={() => setUsageMenuVisible(false)}
+                anchor={
+                  <Pressable
+                    onPress={() => setUsageMenuVisible(true)}
+                    style={styles.pickerRow}
+                    accessibilityRole="button"
+                    accessibilityLabel="Select child for app activity"
+                  >
+                    <View style={styles.pickerLeft}>
+                      <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
+                      <View style={styles.pickerTextWrap}>
+                        <Text variant="labelMedium" style={styles.pickerLabel}>
+                          Child
+                        </Text>
+                        <Text variant="titleSmall" style={styles.pickerValue} numberOfLines={1}>
+                          {selectedUsageChild?.name ?? "Select child"}
+                        </Text>
+                      </View>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+                  </Pressable>
+                }
+              >
+                {managedChildren.map((child) => (
+                  <Menu.Item
+                    key={child.id}
+                    title={child.name}
+                    onPress={() => {
+                      setSelectedUsageChildId(child.id);
+                      setUsageMenuVisible(false);
+                      void loadAppUsageForChild(child.id);
+                    }}
+                  />
+                ))}
+              </Menu>
+
+              <Button
+                mode="outlined"
+                loading={usageRefreshing}
+                disabled={usageRefreshing || !selectedUsageChildId}
+                onPress={() => void refreshAppUsage()}
+                icon="refresh"
+                style={styles.usageRefreshBtn}
+                contentStyle={styles.usageRefreshBtnContent}
+              >
+                Refresh app list
+              </Button>
+
+              <Text variant="labelSmall" style={styles.usageMeta}>
+                {usageLastRefreshedAt
+                  ? `You refreshed this list ${formatUsageRelativeTime(usageLastRefreshedAt.toISOString())}. Child phone uploads about every 30 seconds.`
+                  : "Tap Refresh after the child uses other apps. Their phone uploads about every 30 seconds."}
+              </Text>
+
+              {appUsage.length === 0 && !usageRefreshing ? (
+                <Text style={styles.emptyText}>
+                  No user apps logged yet for {selectedUsageChild?.name ?? "this child"}. On their phone: Child
+                  Settings → App activity reporting → turn Usage access on, open apps like YouTube or Chrome, wait a
+                  minute, then tap Refresh app list.
+                </Text>
+              ) : (
+                appUsage.map((item) => (
+                  <View key={item.id} style={styles.activityRow}>
+                    <View style={styles.appUsageIconWrap}>
+                      <MaterialCommunityIcons
+                        name={iconForPackage(item.package_name)}
+                        size={26}
+                        color={colors.primaryDark}
+                      />
+                    </View>
+                    <View style={styles.activityText}>
+                      <Text variant="bodyMedium" style={styles.activityMain} numberOfLines={1}>
+                        {item.app_label ?? item.package_name}
+                      </Text>
+                      <Text variant="labelSmall" style={styles.activityTime}>
+                        {formatAppUsageDetail(item.event_at, item.duration_seconds)}
+                      </Text>
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          )}
+        </Card.Content>
+      </Card>
 
       <Card style={styles.sectionCard}>
         <Card.Title title="Recent activity" titleStyle={styles.cardTitle} />
@@ -611,7 +814,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   activityList: {
-    gap: 10,
+    gap: 12,
+  },
+  usageRefreshBtn: {
+    marginTop: 0,
+  },
+  usageRefreshBtnContent: {
+    paddingVertical: 4,
+  },
+  usageMeta: {
+    color: colors.subtext,
+    lineHeight: 18,
   },
   activityRow: {
     flexDirection: "row",
@@ -620,6 +833,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#F3F4F6",
     borderRadius: radii.sm,
     padding: 12,
+  },
+  appUsageIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
   },
   insightRow: {
     backgroundColor: "#F8FAFC",
@@ -677,7 +898,6 @@ const styles = StyleSheet.create({
   },
   activityMain: {
     color: colors.text,
-    textTransform: "capitalize",
   },
   activityTime: {
     color: colors.subtext,

@@ -20,9 +20,16 @@ function copyNativeSources(projectRoot, platformRoot) {
     return;
   }
 
+  const copied = [];
   for (const name of fs.readdirSync(srcDir)) {
     if (!name.endsWith(".kt")) continue;
     fs.copyFileSync(path.join(srcDir, name), path.join(destDir, name));
+    copied.push(name);
+  }
+  if (copied.length < 8) {
+    console.warn(
+      `[withLearnGateNative] Expected 8+ Kotlin files in native-android, copied ${copied.length}: ${copied.join(", ")}`,
+    );
   }
 }
 
@@ -32,6 +39,7 @@ function ensureMainApplicationPackages(mainApplication) {
   const imports = [
     ["LearnGateBlockerPackage", "import com.pipsjacob.learngate.LearnGateBlockerPackage"],
     ["LearnGateChildLockPackage", "import com.pipsjacob.learngate.LearnGateChildLockPackage"],
+    ["LearnGateUsageStatsPackage", "import com.pipsjacob.learngate.LearnGateUsageStatsPackage"],
   ];
 
   for (const [symbol, importLine] of imports) {
@@ -43,7 +51,11 @@ function ensureMainApplicationPackages(mainApplication) {
     }
   }
 
-  if (!src.includes("LearnGateBlockerPackage()") || !src.includes("LearnGateChildLockPackage()")) {
+  if (
+    !src.includes("LearnGateBlockerPackage()") ||
+    !src.includes("LearnGateChildLockPackage()") ||
+    !src.includes("LearnGateUsageStatsPackage()")
+  ) {
     if (src.includes("PackageList(this).packages.apply {")) {
       const additions = [];
       if (!src.includes("LearnGateBlockerPackage()")) {
@@ -51,6 +63,9 @@ function ensureMainApplicationPackages(mainApplication) {
       }
       if (!src.includes("LearnGateChildLockPackage()")) {
         additions.push("              add(LearnGateChildLockPackage())");
+      }
+      if (!src.includes("LearnGateUsageStatsPackage()")) {
+        additions.push("              add(LearnGateUsageStatsPackage())");
       }
       if (additions.length > 0) {
         src = src.replace(
@@ -105,6 +120,24 @@ function withLearnGateNative(config) {
     const manifest = mod.modResults;
     const activity = AndroidConfig.Manifest.getMainActivityOrThrow(manifest);
     activity.$["android:lockTaskMode"] = "always";
+
+    const usesPermissions = manifest.manifest["uses-permission"] ?? [];
+    const permList = Array.isArray(usesPermissions) ? usesPermissions : [usesPermissions];
+    const hasUsagePerm = permList.some(
+      (p) => p?.$?.["android:name"] === "android.permission.PACKAGE_USAGE_STATS",
+    );
+    if (!hasUsagePerm) {
+      manifest.manifest["uses-permission"] = [
+        ...permList,
+        {
+          $: {
+            "android:name": "android.permission.PACKAGE_USAGE_STATS",
+            "tools:ignore": "ProtectedPermissions",
+          },
+        },
+      ];
+    }
+
     mod.modResults = ensureAccessibilityService(manifest);
     return mod;
   });

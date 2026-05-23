@@ -34,6 +34,10 @@ class LearnGateChildLockModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Hides system bars while locked. Does NOT call startLockTask() — on personal phones that
+   * triggers the "App is pinned" system dialog every time. Enforcement uses Accessibility + nav hide.
+   */
   @ReactMethod
   fun startKiosk(promise: Promise) {
     val activity: Activity? = reactApplicationContext.getCurrentActivity()
@@ -44,13 +48,6 @@ class LearnGateChildLockModule(reactContext: ReactApplicationContext) :
     activity.runOnUiThread {
       try {
         applyImmersive(activity)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-          try {
-            activity.startLockTask()
-          } catch (_: SecurityException) {
-            // Consumer devices without lock-task permission still get immersive + accessibility.
-          }
-        }
         promise.resolve(true)
       } catch (e: Exception) {
         promise.reject("KIOSK_START", e.message, e)
@@ -67,16 +64,28 @@ class LearnGateChildLockModule(reactContext: ReactApplicationContext) :
     }
     activity.runOnUiThread {
       try {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-          try {
-            activity.stopLockTask()
-          } catch (_: Exception) {
-          }
-        }
         clearImmersive(activity)
         promise.resolve(true)
       } catch (e: Exception) {
         promise.reject("KIOSK_STOP", e.message, e)
+      }
+    }
+  }
+
+  /** Re-apply immersive mode without lock task (safe to call on a timer). */
+  @ReactMethod
+  fun reapplyImmersive(promise: Promise) {
+    val activity: Activity? = reactApplicationContext.getCurrentActivity()
+    if (activity == null) {
+      promise.resolve(false)
+      return
+    }
+    activity.runOnUiThread {
+      try {
+        applyImmersive(activity)
+        promise.resolve(true)
+      } catch (e: Exception) {
+        promise.reject("KIOSK_IMMERSIVE", e.message, e)
       }
     }
   }

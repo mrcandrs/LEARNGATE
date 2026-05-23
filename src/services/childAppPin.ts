@@ -4,7 +4,7 @@ type NativeChildLock = {
   setScreenLocked: (locked: boolean) => Promise<boolean>;
   startKiosk: () => Promise<boolean>;
   stopKiosk: () => Promise<boolean>;
-  isInLockTask: () => Promise<boolean>;
+  reapplyImmersive: () => Promise<boolean>;
 };
 
 const native: NativeChildLock | undefined = NativeModules.LearnGateChildLock;
@@ -42,13 +42,13 @@ async function applyAndroidChildLock(): Promise<void> {
   try {
     await native?.setScreenLocked(true);
   } catch {
-    // Native module missing until dev build with withLearnGateNative
+    // Native module missing until build includes withLearnGateNative
   }
 
   try {
     await native?.startKiosk();
   } catch {
-    // Lock task may be denied on some devices; accessibility still enforces return.
+    // Immersive-only; no screen pinning dialog
   }
 
   try {
@@ -57,7 +57,7 @@ async function applyAndroidChildLock(): Promise<void> {
     navVisibilitySub = NavigationBar.addVisibilityListener(({ visibility }) => {
       if (visibility === "visible") {
         void hideAndroidNavBar();
-        void native?.startKiosk();
+        void native?.reapplyImmersive();
       }
     });
   } catch {
@@ -67,7 +67,7 @@ async function applyAndroidChildLock(): Promise<void> {
   if (!reapplyTimer) {
     reapplyTimer = setInterval(() => {
       void hideAndroidNavBar();
-      void native?.startKiosk();
+      void native?.reapplyImmersive();
     }, 2000);
   }
 
@@ -103,13 +103,7 @@ async function releaseAndroidChildLock(): Promise<void> {
 }
 
 /**
- * Android kiosk layer while LearnGate child lock is active:
- * - Lock Task + immersive mode (blocks Home/Recents when the OS allows)
- * - Re-hide navigation bar if the child swipes it back (3-button nav)
- * - Accessibility flag so LearnGateAccessibilityService pulls user back from launcher/other apps
- *
- * Requires a dev build (`npm run android`), not Expo Go. Parent should enable
- * Settings → Accessibility → LearnGate on the child device.
+ * Android child lock: immersive UI + Accessibility flag (no startLockTask / "App is pinned" dialog).
  */
 export async function setChildSystemNavLocked(locked: boolean): Promise<void> {
   if (Platform.OS !== "android") {

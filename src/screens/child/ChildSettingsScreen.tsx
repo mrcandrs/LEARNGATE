@@ -17,6 +17,13 @@ import {
   isAppBlockingAvailable,
   openAccessibilitySettings,
 } from "@/services/appBlocking";
+import {
+  getUsageAccessGranted,
+  isUsageStatsAvailable,
+  openUsageAccessSettings,
+} from "@/services/appUsageStats";
+import { resetChildAppUsageSyncCursor, syncChildAppUsageEvents } from "@/services/childAppUsageSync";
+import { hasLearnGateNativeModules } from "@/services/learnGateNative";
 
 export function ChildSettingsScreen() {
   const { signOut } = useAuth();
@@ -26,18 +33,31 @@ export function ChildSettingsScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessibilityOn, setAccessibilityOn] = useState<boolean | null>(null);
+  const [usageAccessOn, setUsageAccessOn] = useState<boolean | null>(null);
+  const [usageUploading, setUsageUploading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
+
       if (Platform.OS !== "android" || !isAppBlockingAvailable()) {
         setAccessibilityOn(null);
-        return;
+      } else {
+        void (async () => {
+          const on = await getAccessibilityEnabled();
+          if (active) setAccessibilityOn(on);
+        })();
       }
-      let active = true;
-      void (async () => {
-        const on = await getAccessibilityEnabled();
-        if (active) setAccessibilityOn(on);
-      })();
+
+      if (Platform.OS !== "android" || !isUsageStatsAvailable()) {
+        setUsageAccessOn(null);
+      } else {
+        void (async () => {
+          const on = await getUsageAccessGranted();
+          if (active) setUsageAccessOn(on);
+        })();
+      }
+
       return () => {
         active = false;
       };
@@ -45,6 +65,8 @@ export function ChildSettingsScreen() {
   );
 
   const blockedLabels = blockedPackagesToLabels(child?.blocked_apps_json ?? []);
+  const nativeReady = hasLearnGateNativeModules();
+  const showAndroidDeviceFeatures = Platform.OS === "android";
 
   const onToggleAudio = async (next: boolean) => {
     audio.setEnabled(next);
@@ -95,39 +117,101 @@ export function ChildSettingsScreen() {
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-      {isAppBlockingAvailable() ? (
+      {showAndroidDeviceFeatures ? (
         <View style={styles.card}>
           <Text variant="titleMedium" style={styles.title}>
             App blocking (this phone)
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Your parent picks which apps to block.
+          {!nativeReady || !isAppBlockingAvailable() ? (
+            <>
+              <Text variant="bodyMedium" style={styles.subtitle}>
+                This install does not include LearnGate device controls. Rebuild and reinstall: run{" "}
+                <Text style={styles.mono}>npm run android</Text> locally, or create a new EAS APK after the latest code is
+                pushed to git.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text variant="bodyMedium" style={styles.subtitle}>
+                Your parent picks which apps to block.
+              </Text>
+              <Text variant="bodySmall" style={styles.sectionLabel}>
+                Blocked apps right now
+              </Text>
+              {blockedLabels.length === 0 ? (
+                <Text variant="bodyMedium" style={styles.mutedSmall}>
+                  None right now.
+                </Text>
+              ) : (
+                <View style={styles.blockedChipRow}>
+                  {blockedLabels.map((label) => (
+                    <Chip key={label} mode="flat" compact style={styles.blockedChip}>
+                      {label}
+                    </Chip>
+                  ))}
+                </View>
+              )}
+              <Text variant="bodyMedium" style={styles.statusLine}>
+                LearnGate Accessibility: {accessibilityOn === null ? "…" : accessibilityOn ? "On" : "Off"}
+              </Text>
+              <Text variant="bodySmall" style={styles.mutedSmall}>
+                Required for screen-time and bedtime lock: blocks Home, Recents, and other apps while LearnGate is locked.
+              </Text>
+              <Button mode="outlined" onPress={() => openAccessibilitySettings()} style={styles.marginTopBtn}>
+                Open Accessibility settings
+              </Button>
+            </>
+          )}
+        </View>
+      ) : null}
+
+      {showAndroidDeviceFeatures ? (
+        <View style={styles.card}>
+          <Text variant="titleMedium" style={styles.title}>
+            App activity reporting
           </Text>
-          <Text variant="bodySmall" style={styles.sectionLabel}>
-            Blocked apps right now
-          </Text>
-          {blockedLabels.length === 0 ? (
-            <Text variant="bodyMedium" style={styles.mutedSmall}>
-              None right now.
+          {!nativeReady || !isUsageStatsAvailable() ? (
+            <Text variant="bodyMedium" style={styles.subtitle}>
+              Usage monitoring needs the same native LearnGate build as app blocking. Install a fresh APK after rebuilding
+              with the steps above.
             </Text>
           ) : (
-            <View style={styles.blockedChipRow}>
-              {blockedLabels.map((label) => (
-                <Chip key={label} mode="flat" compact style={styles.blockedChip}>
-                  {label}
-                </Chip>
-              ))}
-            </View>
+            <>
+              <Text variant="bodyMedium" style={styles.subtitle}>
+                Lets your parent see which apps you open on this phone (recent apps on their dashboard).
+              </Text>
+              <Text variant="bodyMedium" style={styles.statusLine}>
+                Usage access: {usageAccessOn === null ? "…" : usageAccessOn ? "On" : "Off"}
+              </Text>
+              <Button mode="outlined" onPress={() => openUsageAccessSettings()} style={styles.marginTopBtn}>
+                Open Usage access settings
+              </Button>
+              <Button
+                mode="contained-tonal"
+                loading={usageUploading}
+                disabled={usageUploading || !usageAccessOn || !child?.id}
+                style={styles.marginTopBtn}
+                onPress={() => {
+                  if (!child?.id) return;
+                  setUsageUploading(true);
+                  void (async () => {
+                    try {
+                      await resetChildAppUsageSyncCursor(child.id);
+                      await syncChildAppUsageEvents(child.id);
+                    } finally {
+                      setUsageUploading(false);
+                    }
+                  })();
+                }}
+              >
+                Send recent apps to parent now
+              </Button>
+              <Text variant="bodySmall" style={styles.mutedSmall}>
+                Use this after opening apps like Instagram or YouTube, then ask your parent to tap Refresh on their
+                dashboard.
+              </Text>
+            </>
           )}
-          <Text variant="bodyMedium" style={styles.statusLine}>
-            LearnGate Accessibility: {accessibilityOn === null ? "…" : accessibilityOn ? "On" : "Off"}
-          </Text>
-          <Text variant="bodySmall" style={styles.mutedSmall}>
-            Required for screen-time and bedtime lock: blocks Home, Recents, and other apps while LearnGate is locked.
-          </Text>
-          <Button mode="outlined" onPress={() => openAccessibilitySettings()} style={styles.marginTopBtn}>
-            Open Accessibility settings
-          </Button>
         </View>
       ) : null}
 
@@ -187,6 +271,10 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: colors.subtext,
+  },
+  mono: {
+    fontFamily: "monospace",
+    color: colors.text,
   },
   chipRow: {
     flexDirection: "row",

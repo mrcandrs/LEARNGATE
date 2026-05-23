@@ -33,8 +33,61 @@ const LABEL_BY_PACKAGE = (() => {
   return map;
 })();
 
+const ICON_BY_PACKAGE = (() => {
+  const map: Record<string, BlockableIconName> = {};
+  for (const g of BLOCKABLE_APP_GROUPS) {
+    for (const p of g.packages) map[p] = g.icon;
+  }
+  return map;
+})();
+
+/** Extra packages shown on the parent usage dashboard (not only block-list apps). */
+const EXTRA_PACKAGE_LABELS: Record<string, string> = {
+  "com.android.settings": "Settings",
+  "com.google.android.apps.messaging": "Messages",
+  "com.android.vending": "Play Store",
+  "com.google.android.gm": "Gmail",
+  "com.google.android.apps.photos": "Photos",
+  "com.snapchat.android": "Snapchat",
+  "com.whatsapp": "WhatsApp",
+  "com.spotify.music": "Spotify",
+  "com.netflix.mediaclient": "Netflix",
+  "com.roblox.client": "Roblox",
+  "com.microsoft.minecraft": "Minecraft",
+  "com.sec.android.app.launcher": "Samsung Home",
+  "com.google.android.apps.nexuslauncher": "Home",
+};
+
+const EXTRA_PACKAGE_ICONS: Record<string, BlockableIconName> = {
+  "com.google.android.apps.messaging": "message-text-outline",
+  "com.android.vending": "google-play",
+  "com.google.android.gm": "gmail",
+  "com.google.android.apps.photos": "image-multiple",
+  "com.snapchat.android": "ghost",
+  "com.whatsapp": "whatsapp",
+  "com.spotify.music": "spotify",
+  "com.netflix.mediaclient": "netflix",
+  "com.roblox.client": "gamepad-variant",
+  "com.microsoft.minecraft": "gamepad-variant-outline",
+};
+
+export function labelForPackage(packageName: string): string {
+  return LABEL_BY_PACKAGE[packageName] ?? EXTRA_PACKAGE_LABELS[packageName] ?? humanizePackage(packageName);
+}
+
+/** Icon for parent dashboard (device APK icons are not available on the parent phone). */
+export function iconForPackage(packageName: string): BlockableIconName {
+  return ICON_BY_PACKAGE[packageName] ?? EXTRA_PACKAGE_ICONS[packageName] ?? "application-outline";
+}
+
 export function labelForBlockedPackage(packageName: string): string {
-  return LABEL_BY_PACKAGE[packageName] ?? packageName;
+  return labelForPackage(packageName);
+}
+
+function humanizePackage(packageName: string): string {
+  const segment = packageName.split(".").pop() ?? packageName;
+  if (!segment) return packageName;
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
 }
 
 /** Unique readable names for blocked packages (e.g. child settings list). */
