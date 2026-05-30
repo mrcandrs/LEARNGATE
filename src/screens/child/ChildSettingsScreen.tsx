@@ -1,40 +1,62 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Platform, StyleSheet, View } from "react-native";
 import { Button, Chip, Dialog, Portal, Switch, Text } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { blockedPackagesToLabels } from "@/constants/blockedAppPackages";
+import { blockedAppsForDisplay } from "@/constants/blockedAppPackages";
 import { useAuth } from "@/store/AuthContext";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
 import { useThemeMode } from "@/store/ThemeModeContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
-import {
-  clearBlockedPackagesFromNative,
-  getAccessibilityEnabled,
-  isAppBlockingAvailable,
-  openAccessibilitySettings,
-} from "@/services/appBlocking";
-import {
-  getUsageAccessGranted,
-  isUsageStatsAvailable,
-  openUsageAccessSettings,
-} from "@/services/appUsageStats";
-import { resetChildAppUsageSyncCursor, syncChildAppUsageEvents } from "@/services/childAppUsageSync";
+import { clearBlockedPackagesFromNative, getAccessibilityEnabled, isAppBlockingAvailable } from "@/services/appBlocking";
+import { getUsageAccessGranted, isUsageStatsAvailable } from "@/services/appUsageStats";
 import { hasLearnGateNativeModules } from "@/services/learnGateNative";
+
+function StatusInfoRow({
+  label,
+  enabled,
+  description,
+  colors: c,
+}: {
+  label: string;
+  enabled: boolean | null;
+  description: string;
+  colors: ReturnType<typeof useAppColors>;
+}) {
+  const statusText = enabled === null ? "Checking…" : enabled ? "On" : "Off";
+  const statusColor = enabled ? c.primary : c.subtext;
+
+  return (
+    <View style={[statusStyles.card, { backgroundColor: c.mutedSurface, borderColor: c.border }]}>
+      <View style={statusStyles.header}>
+        <View style={[statusStyles.dot, { backgroundColor: statusColor }]} />
+        <Text variant="titleSmall" style={[statusStyles.title, { color: c.text }]}>
+          {label}: {statusText}
+        </Text>
+      </View>
+      <Text variant="bodySmall" style={[statusStyles.description, { color: c.subtext }]}>
+        {description}
+      </Text>
+    </View>
+  );
+}
 
 export function ChildSettingsScreen() {
   const { signOut } = useAuth();
   const audio = useAudioGuidance();
   const { child, refresh } = useChildProfile();
   const themeMode = useThemeMode();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accessibilityOn, setAccessibilityOn] = useState<boolean | null>(null);
   const [usageAccessOn, setUsageAccessOn] = useState<boolean | null>(null);
-  const [usageUploading, setUsageUploading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +86,7 @@ export function ChildSettingsScreen() {
     }, [])
   );
 
-  const blockedLabels = blockedPackagesToLabels(child?.blocked_apps_json ?? []);
+  const blockedApps = useMemo(() => blockedAppsForDisplay(child?.blocked_apps_json ?? []), [child?.blocked_apps_json]);
   const nativeReady = hasLearnGateNativeModules();
   const showAndroidDeviceFeatures = Platform.OS === "android";
 
@@ -86,7 +108,10 @@ export function ChildSettingsScreen() {
           Appearance
         </Text>
         <Text variant="bodyMedium" style={styles.subtitle}>
-          Pick your app look.
+          Pick your color theme and display mode.
+        </Text>
+        <Text variant="labelLarge" style={styles.groupLabel}>
+          Color theme
         </Text>
         <View style={styles.chipRow}>
           <Chip selected={themeMode.mode === "mint"} onPress={() => themeMode.setMode("mint")}>
@@ -97,6 +122,17 @@ export function ChildSettingsScreen() {
           </Chip>
           <Chip selected={themeMode.mode === "midnight"} onPress={() => themeMode.setMode("midnight")}>
             Midnight
+          </Chip>
+        </View>
+        <Text variant="labelLarge" style={styles.groupLabel}>
+          Display mode
+        </Text>
+        <View style={styles.chipRow}>
+          <Chip selected={themeMode.appearance === "light"} onPress={() => themeMode.setAppearance("light")}>
+            Light
+          </Chip>
+          <Chip selected={themeMode.appearance === "dark"} onPress={() => themeMode.setAppearance("dark")}>
+            Dark
           </Chip>
         </View>
       </View>
@@ -123,43 +159,44 @@ export function ChildSettingsScreen() {
             App blocking (this phone)
           </Text>
           {!nativeReady || !isAppBlockingAvailable() ? (
-            <>
-              <Text variant="bodyMedium" style={styles.subtitle}>
-                This install does not include LearnGate device controls. Rebuild and reinstall: run{" "}
-                <Text style={styles.mono}>npm run android</Text> locally, or create a new EAS APK after the latest code is
-                pushed to git.
-              </Text>
-            </>
+            <Text variant="bodyMedium" style={styles.subtitle}>
+              This install does not include LearnGate device controls. Rebuild and reinstall: run{" "}
+              <Text style={styles.mono}>npm run android</Text> locally, or create a new EAS APK after the latest code is
+              pushed to git.
+            </Text>
           ) : (
             <>
               <Text variant="bodyMedium" style={styles.subtitle}>
-                Your parent picks which apps to block.
+                Your parent picks which apps to block on this phone.
               </Text>
               <Text variant="bodySmall" style={styles.sectionLabel}>
                 Blocked apps right now
               </Text>
-              {blockedLabels.length === 0 ? (
+              {blockedApps.length === 0 ? (
                 <Text variant="bodyMedium" style={styles.mutedSmall}>
                   None right now.
                 </Text>
               ) : (
-                <View style={styles.blockedChipRow}>
-                  {blockedLabels.map((label) => (
-                    <Chip key={label} mode="flat" compact style={styles.blockedChip}>
-                      {label}
-                    </Chip>
+                <View style={styles.blockedList}>
+                  {blockedApps.map((app) => (
+                    <View key={app.key} style={[styles.blockedRow, { borderColor: c.border }]}>
+                      <View style={[styles.blockedIconWrap, { backgroundColor: c.surfaceTint }]}>
+                        <MaterialCommunityIcons name={app.icon} size={24} color={c.primaryDark} />
+                      </View>
+                      <Text variant="bodyLarge" style={[styles.blockedLabel, { color: c.text }]}>
+                        {app.label}
+                      </Text>
+                      <MaterialCommunityIcons name="lock" size={18} color={c.warning} />
+                    </View>
                   ))}
                 </View>
               )}
-              <Text variant="bodyMedium" style={styles.statusLine}>
-                LearnGate Accessibility: {accessibilityOn === null ? "…" : accessibilityOn ? "On" : "Off"}
-              </Text>
-              <Text variant="bodySmall" style={styles.mutedSmall}>
-                Required for screen-time and bedtime lock: blocks Home, Recents, and other apps while LearnGate is locked.
-              </Text>
-              <Button mode="outlined" onPress={() => openAccessibilitySettings()} style={styles.marginTopBtn}>
-                Open Accessibility settings
-              </Button>
+              <StatusInfoRow
+                label="LearnGate Accessibility"
+                enabled={accessibilityOn}
+                description="Keeps screen-time and bedtime lock working. It blocks Home, Recents, and other apps while LearnGate is locked."
+                colors={c}
+              />
             </>
           )}
         </View>
@@ -178,38 +215,14 @@ export function ChildSettingsScreen() {
           ) : (
             <>
               <Text variant="bodyMedium" style={styles.subtitle}>
-                Lets your parent see which apps you open on this phone (recent apps on their dashboard).
+                Lets your parent see which apps you open on this phone in their Recent Activity list.
               </Text>
-              <Text variant="bodyMedium" style={styles.statusLine}>
-                Usage access: {usageAccessOn === null ? "…" : usageAccessOn ? "On" : "Off"}
-              </Text>
-              <Button mode="outlined" onPress={() => openUsageAccessSettings()} style={styles.marginTopBtn}>
-                Open Usage access settings
-              </Button>
-              <Button
-                mode="contained-tonal"
-                loading={usageUploading}
-                disabled={usageUploading || !usageAccessOn || !child?.id}
-                style={styles.marginTopBtn}
-                onPress={() => {
-                  if (!child?.id) return;
-                  setUsageUploading(true);
-                  void (async () => {
-                    try {
-                      await resetChildAppUsageSyncCursor(child.id);
-                      await syncChildAppUsageEvents(child.id);
-                    } finally {
-                      setUsageUploading(false);
-                    }
-                  })();
-                }}
-              >
-                Send recent apps to parent now
-              </Button>
-              <Text variant="bodySmall" style={styles.mutedSmall}>
-                Use this after opening apps like Instagram or YouTube, then ask your parent to tap Refresh on their
-                dashboard.
-              </Text>
+              <StatusInfoRow
+                label="Usage access"
+                enabled={usageAccessOn}
+                description="When on, LearnGate shares app opens with your parent automatically in the background."
+                colors={c}
+              />
             </>
           )}
         </View>
@@ -257,83 +270,138 @@ export function ChildSettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(c: ReturnType<typeof useAppColors>) {
+  return StyleSheet.create({
+    card: {
+      backgroundColor: c.card,
+      borderRadius: radii.md,
+      padding: 16,
+      gap: 10,
+      borderWidth: 1,
+      borderColor: c.border,
+      ...shadows.card,
+    },
+    title: {
+      color: c.text,
+      fontWeight: "700",
+    },
+    subtitle: {
+      color: c.subtext,
+    },
+    mono: {
+      fontFamily: "monospace",
+      color: c.text,
+    },
+    groupLabel: {
+      color: c.text,
+      marginTop: 4,
+    },
+    chipRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 4,
+    },
+    rowLabel: {
+      color: c.text,
+    },
+    logoutButton: {
+      backgroundColor: "#B91C1C",
+      marginTop: 8,
+    },
+    logoutButtonContent: {
+      minHeight: 46,
+    },
+    dialogLogout: {
+      backgroundColor: "#B91C1C",
+    },
+    errorText: {
+      color: "#B91C1C",
+    },
+    sectionLabel: {
+      color: c.subtext,
+      fontWeight: "600",
+      marginTop: 8,
+    },
+    mutedSmall: {
+      color: c.subtext,
+      marginTop: 2,
+    },
+    blockedList: {
+      gap: 8,
+      marginTop: 4,
+    },
+    blockedRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+    },
+    blockedIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    blockedLabel: {
+      flex: 1,
+      fontWeight: "600",
+    },
+    statusCard: {
+      marginTop: 12,
+      padding: 12,
+      borderRadius: radii.sm,
+      borderWidth: 1,
+      gap: 6,
+    },
+    statusHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    statusDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+    },
+    statusTitle: {
+      fontWeight: "700",
+    },
+    statusDescription: {
+      lineHeight: 18,
+    },
+  });
+}
+
+const statusStyles = StyleSheet.create({
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: radii.md,
-    padding: 16,
-    gap: 10,
-    ...shadows.card,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    gap: 6,
   },
-  title: {
-    color: colors.text,
-    fontWeight: "700",
-  },
-  subtitle: {
-    color: colors.subtext,
-  },
-  mono: {
-    fontFamily: "monospace",
-    color: colors.text,
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 4,
-  },
-  row: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  rowLabel: {
-    color: colors.text,
-  },
-  logoutButton: {
-    backgroundColor: "#B91C1C",
-    marginTop: 8,
-  },
-  logoutButtonContent: {
-    minHeight: 46,
-  },
-  dialogLogout: {
-    backgroundColor: "#B91C1C",
-  },
-  errorText: {
-    color: "#B91C1C",
-  },
-  statusLine: {
-    color: colors.text,
-    marginTop: 4,
-    fontWeight: "600",
-  },
-  marginTopBtn: {
-    marginTop: 8,
-  },
-  sectionLabel: {
-    color: colors.subtext,
-    fontWeight: "600",
-    marginTop: 8,
-  },
-  mutedSmall: {
-    color: colors.subtext,
-    marginTop: 2,
-  },
-  blockedChipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: 8,
-    marginTop: 6,
   },
-  blockedChip: {
-    alignSelf: "flex-start",
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  accessibilityNote: {
-    color: colors.subtext,
-    marginTop: 12,
+  title: {
+    fontWeight: "700",
+  },
+  description: {
     lineHeight: 18,
   },
 });
-

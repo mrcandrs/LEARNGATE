@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
 import { ActivityIndicator, Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import type { ComponentProps } from "react";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows, colors as legacyColors } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { useChildAchievements } from "@/hooks/useChildAchievements";
@@ -15,13 +17,32 @@ import { formatAppError } from "@/utils/errors";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { ChildTabParamList } from "@/types/navigation";
 
+type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
 type TaskPreview = {
   id: string;
   title: string;
+  category: "learning" | "exercise" | "chore";
+  xp_reward: number;
+  status: "pending" | "in_progress" | "submitted";
 };
+
+function categoryMeta(category: TaskPreview["category"]): { icon: IconName; label: string } {
+  if (category === "learning") return { icon: "book-open-variant", label: "Learning" };
+  if (category === "exercise") return { icon: "run", label: "Exercise" };
+  return { icon: "broom", label: "Chore" };
+}
+
+function statusLabel(status: TaskPreview["status"]): string {
+  if (status === "in_progress") return "In progress";
+  if (status === "submitted") return "Waiting for review";
+  return "Not started";
+}
 
 export function ChildHomeScreen() {
   const navigation = useNavigation<NavigationProp<ChildTabParamList>>();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskPreview[]>([]);
@@ -48,11 +69,11 @@ export function ChildHomeScreen() {
 
       const { data: pendingTasks, error: tasksError } = await supabase
         .from("tasks")
-        .select("id, title")
+        .select("id, title, category, xp_reward, status")
         .eq("child_id", child.id)
-        .in("status", ["pending", "in_progress"])
+        .in("status", ["pending", "in_progress", "submitted"])
         .order("created_at", { ascending: true })
-        .limit(3);
+        .limit(5);
 
       if (tasksError) {
         setError(formatAppError(tasksError));
@@ -83,9 +104,8 @@ export function ChildHomeScreen() {
   }, [refreshProfile, loadHomeData, refreshAchievements]);
 
   const streakDays = achievementStats?.dailyStreak ?? 0;
-  const completedCount = achievementStats?.completedTasks ?? 0;
-
   const showError = profileError ?? error;
+  const previewTasks = tasks.slice(0, 4);
 
   return (
     <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
@@ -100,7 +120,7 @@ export function ChildHomeScreen() {
         ) : null}
 
         <View style={styles.pad}>
-          {profileLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+          {profileLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
           {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
 
           <Card style={styles.streakCard}>
@@ -126,24 +146,60 @@ export function ChildHomeScreen() {
             </Card.Content>
           </Card>
 
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Today&apos;s Tasks
-          </Text>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text variant="titleLarge" style={styles.sectionTitle}>
+                Today&apos;s Tasks
+              </Text>
+              <Text variant="bodySmall" style={styles.sectionSub}>
+                {tasks.length === 0 ? "You're all caught up" : `${tasks.length} to do today`}
+              </Text>
+            </View>
+            <Pressable onPress={() => navigation.navigate("Tasks")} accessibilityRole="button">
+              <Text style={styles.seeAll}>See all</Text>
+            </Pressable>
+          </View>
+
           <Card style={styles.taskCard}>
             <Card.Content style={styles.listBlock}>
-              {loading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-              {!loading && tasks.length === 0 ? (
+              {loading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
+              {!loading && previewTasks.length === 0 ? (
                 <Text style={styles.emptyText}>No pending tasks yet. You&apos;re all caught up!</Text>
               ) : (
-                tasks.map((task) => (
-                  <View key={task.id} style={styles.taskRow}>
-                    <MaterialCommunityIcons name="book-open-variant" size={22} color={colors.primary} />
-                    <Text variant="bodyLarge" style={styles.taskTitle}>
-                      {task.title}
-                    </Text>
-                  </View>
-                ))
+                previewTasks.map((task, index) => {
+                  const meta = categoryMeta(task.category);
+                  return (
+                    <Pressable
+                      key={task.id}
+                      onPress={() => navigation.navigate("Tasks")}
+                      style={[
+                        styles.taskRow,
+                        index < previewTasks.length - 1 && { borderBottomColor: c.border, borderBottomWidth: 1 },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open task ${task.title}`}
+                    >
+                      <View style={[styles.taskIconWrap, { backgroundColor: c.surfaceTint }]}>
+                        <MaterialCommunityIcons name={meta.icon} size={22} color={c.primaryDark} />
+                      </View>
+                      <View style={styles.taskText}>
+                        <Text variant="bodyLarge" style={styles.taskTitle} numberOfLines={1}>
+                          {task.title}
+                        </Text>
+                        <Text variant="bodySmall" style={styles.taskMeta}>
+                          {meta.label} · {statusLabel(task.status)}
+                        </Text>
+                      </View>
+                      <Text style={styles.taskReward}>+{task.xp_reward}</Text>
+                    </Pressable>
+                  );
+                })
               )}
+              {tasks.length > previewTasks.length ? (
+                <Pressable onPress={() => navigation.navigate("Tasks")} style={styles.moreTasksBtn}>
+                  <Text style={styles.moreTasksText}>+{tasks.length - previewTasks.length} more in Tasks</Text>
+                </Pressable>
+              ) : null}
             </Card.Content>
           </Card>
 
@@ -185,107 +241,157 @@ export function ChildHomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    flex: 1,
-  },
-  pad: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    gap: 12,
-  },
-  streakCard: {
-    backgroundColor: colors.streak,
-    borderRadius: radii.md,
-    ...shadows.card,
-  },
-  streakInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  streakText: {
-    flex: 1,
-  },
-  streakTitle: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-  streakSub: {
-    color: "rgba(255,255,255,0.95)",
-    marginTop: 4,
-  },
-  streakBadge: {
-    backgroundColor: "rgba(255,255,255,0.25)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radii.sm,
-  },
-  streakBadgeText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  taskCard: {
-    borderRadius: radii.md,
-    ...shadows.card,
-  },
-  listBlock: {
-    gap: 12,
-  },
-  taskRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  taskTitle: {
-    color: colors.text,
-    flex: 1,
-  },
-  emptyText: {
-    color: colors.subtext,
-  },
-  gameRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  gameMiniWrap: {
-    flex: 1,
-  },
-  gameMiniPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  gameMini: {
-    flex: 1,
-    minHeight: 108,
-    padding: 12,
-    borderRadius: radii.md,
-    justifyContent: "space-between",
-  },
-  gameMiniTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  gameMiniTitle: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "800",
-  },
-  gameMiniSub: {
-    color: "rgba(255,255,255,0.95)",
-    marginTop: 4,
-  },
-  xp: {
-    color: "rgba(255,255,255,0.9)",
-    marginTop: 8,
-  },
-  errorText: {
-    color: "#B91C1C",
-  },
-});
+function createStyles(c: ReturnType<typeof useAppColors>) {
+  return StyleSheet.create({
+    content: {
+      flex: 1,
+    },
+    pad: {
+      paddingHorizontal: 16,
+      paddingBottom: 24,
+      gap: 12,
+    },
+    streakCard: {
+      backgroundColor: legacyColors.streak,
+      borderRadius: radii.md,
+      ...shadows.card,
+    },
+    streakInner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    streakText: {
+      flex: 1,
+    },
+    streakTitle: {
+      color: "#FFFFFF",
+      fontWeight: "700",
+    },
+    streakSub: {
+      color: "rgba(255,255,255,0.95)",
+      marginTop: 4,
+    },
+    streakBadge: {
+      backgroundColor: "rgba(255,255,255,0.25)",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: radii.sm,
+    },
+    streakBadgeText: {
+      color: "#FFFFFF",
+      fontWeight: "800",
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      marginTop: 4,
+      gap: 12,
+    },
+    sectionTitle: {
+      color: c.text,
+      fontWeight: "700",
+    },
+    sectionSub: {
+      color: c.subtext,
+      marginTop: 2,
+    },
+    seeAll: {
+      color: c.primary,
+      fontWeight: "700",
+      fontSize: 14,
+    },
+    taskCard: {
+      borderRadius: radii.md,
+      backgroundColor: c.card,
+      borderWidth: 1,
+      borderColor: c.border,
+      ...shadows.card,
+    },
+    listBlock: {
+      gap: 0,
+    },
+    taskRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 12,
+    },
+    taskIconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    taskText: {
+      flex: 1,
+      gap: 2,
+      minWidth: 0,
+    },
+    taskTitle: {
+      color: c.text,
+      fontWeight: "700",
+    },
+    taskMeta: {
+      color: c.subtext,
+    },
+    taskReward: {
+      color: c.warning,
+      fontWeight: "800",
+      fontSize: 15,
+    },
+    moreTasksBtn: {
+      paddingTop: 10,
+      alignItems: "center",
+    },
+    moreTasksText: {
+      color: c.primaryDark,
+      fontWeight: "700",
+    },
+    emptyText: {
+      color: c.subtext,
+      paddingVertical: 8,
+    },
+    gameRow: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    gameMiniWrap: {
+      flex: 1,
+    },
+    gameMiniPressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.98 }],
+    },
+    gameMini: {
+      flex: 1,
+      minHeight: 108,
+      padding: 12,
+      borderRadius: radii.md,
+      justifyContent: "space-between",
+    },
+    gameMiniTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    gameMiniTitle: {
+      color: "#FFFFFF",
+      fontSize: 28,
+      fontWeight: "800",
+    },
+    gameMiniSub: {
+      color: "rgba(255,255,255,0.95)",
+      marginTop: 4,
+    },
+    xp: {
+      color: "rgba(255,255,255,0.9)",
+      marginTop: 8,
+    },
+    errorText: {
+      color: "#B91C1C",
+    },
+  });
+}

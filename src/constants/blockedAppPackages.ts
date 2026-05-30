@@ -152,6 +152,12 @@ function humanizePackage(packageName: string): string {
   return segment.charAt(0).toUpperCase() + segment.slice(1);
 }
 
+export type BlockedAppDisplayItem = {
+  key: string;
+  label: string;
+  icon: BlockableIconName;
+};
+
 /** Unique readable names for blocked packages (e.g. child settings list). */
 export function blockedPackagesToLabels(packages: string[]): string[] {
   const seen = new Map<string, true>();
@@ -169,6 +175,28 @@ export function blockedPackagesToLabels(packages: string[]): string[] {
 
 export function isGroupFullySelected(blockedPackages: string[], group: BlockableAppGroup): boolean {
   return group.packages.some((p) => blockedPackages.includes(p));
+}
+
+/** Blocked apps for child settings list (grouped labels + icons). */
+export function blockedAppsForDisplay(blockedPackages: string[]): BlockedAppDisplayItem[] {
+  const items: BlockedAppDisplayItem[] = [];
+  const covered = new Set<string>();
+
+  for (const group of BLOCKABLE_APP_GROUPS) {
+    if (isGroupFullySelected(blockedPackages, group)) {
+      items.push({ key: group.slug, label: group.label, icon: group.icon });
+      for (const pkg of group.packages) {
+        covered.add(pkg);
+      }
+    }
+  }
+
+  for (const pkg of blockedPackages) {
+    if (covered.has(pkg)) continue;
+    items.push({ key: pkg, label: labelForPackage(pkg), icon: iconForPackage(pkg) });
+  }
+
+  return items.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function toggleBlockedGroup(blockedPackages: string[], group: BlockableAppGroup): string[] {
