@@ -20,7 +20,7 @@ import { env } from "@/config/env";
 import { EXERCISES, type ExerciseId } from "@/data/exercises";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { GameId } from "@/data/childGames";
-import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
+import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, rewardMultiplierForDifficultyLevel, type DifficultyTier } from "@/utils/difficulty";
 import {
   BLOCKABLE_APP_GROUPS,
   isGroupFullySelected,
@@ -350,12 +350,14 @@ export function ParentChildrenScreen() {
     return true;
   };
 
-  const saveScreenRules = async (childId: string): Promise<boolean> => {
+  const saveScreenRules = async (childId: string, difficultyLevel?: number): Promise<boolean> => {
     if (!supabase || !screenRule) {
       return false;
     }
+    const rewardMultiplier =
+      difficultyLevel != null ? rewardMultiplierForDifficultyLevel(difficultyLevel) : screenRule.reward_multiplier;
     const { error: upsertError } = await supabase.from("screen_rules").upsert(
-      { ...screenRule, child_id: childId },
+      { ...screenRule, child_id: childId, reward_multiplier: rewardMultiplier },
       { onConflict: "child_id" }
     );
     if (upsertError) {
@@ -369,7 +371,8 @@ export function ParentChildrenScreen() {
     setSaveBusyChildId(childId);
     try {
       const childOk = await saveChild(childId);
-      const rulesOk = childOk ? await saveScreenRules(childId) : false;
+      const difficultyLevel = selectedDraft ? difficultyTierToLevel(selectedDraft.difficulty_level) : undefined;
+      const rulesOk = childOk ? await saveScreenRules(childId, difficultyLevel) : false;
       if (childOk && rulesOk) {
         showSuccess("All changes saved.");
         await loadScreenRules(childId);

@@ -9,7 +9,7 @@ import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
-import { levelToDifficultyLabel } from "@/utils/difficulty";
+import { levelToDifficultyLabel, formatRewardMultiplier, rewardMultiplierForDifficultyLevel } from "@/utils/difficulty";
 import { useThemeMode } from "@/store/ThemeModeContext";
 import {
   enqueueParentTestPush,
@@ -45,7 +45,6 @@ export function ParentSettingsScreen() {
   const [childMenuVisible, setChildMenuVisible] = useState(false);
   const [rule, setRule] = useState<ScreenRule | null>(null);
   const [taskRequirementsInput, setTaskRequirementsInput] = useState("");
-  const [rewardMultiplierInput, setRewardMultiplierInput] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +100,6 @@ export function ParentSettingsScreen() {
     if (!nextChildId) {
       setRule(null);
       setTaskRequirementsInput("");
-      setRewardMultiplierInput("");
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -132,7 +130,6 @@ export function ParentSettingsScreen() {
     const loadedRule = (rulesData as ScreenRule | null) ?? fallbackRule;
     setRule(loadedRule);
     setTaskRequirementsInput(String(loadedRule.unlock_after_task_count));
-    setRewardMultiplierInput(String(loadedRule.reward_multiplier));
     setIsLoading(false);
     setRefreshing(false);
   }, [isSupabaseConfigured, selectedChildId]);
@@ -153,17 +150,19 @@ export function ParentSettingsScreen() {
     }
     setError(null);
 
-    if (!taskRequirementsInput.trim() || !rewardMultiplierInput.trim()) {
-      setError("Task requirements and reward multiplier are required.");
+    if (!taskRequirementsInput.trim()) {
+      setError("Task requirements are required.");
       return;
     }
 
     const taskCount = Number(taskRequirementsInput);
-    const multiplier = Number(rewardMultiplierInput);
-    if (Number.isNaN(taskCount) || Number.isNaN(multiplier)) {
+    if (Number.isNaN(taskCount)) {
       setError("Please enter valid numeric values.");
       return;
     }
+
+    const difficultyLevel = selectedChild?.difficulty_level ?? 5;
+    const multiplier = rewardMultiplierForDifficultyLevel(difficultyLevel);
 
     const payload: ScreenRule = {
       ...rule,
@@ -241,6 +240,11 @@ export function ParentSettingsScreen() {
         <Card.Title title="Learning Settings" />
         <Card.Content style={styles.block}>
           <Text>Default Difficulty: {selectedChild ? levelToDifficultyLabel(selectedChild.difficulty_level) : "N/A"}</Text>
+          <Text variant="bodySmall" style={styles.autoHint}>
+            Reward multiplier:{" "}
+            {selectedChild ? `${formatRewardMultiplier(selectedChild.difficulty_level)}×` : "—"} (automatic from
+            difficulty)
+          </Text>
           <Divider />
           <TextInput
             label="Task Requirements"
@@ -249,15 +253,6 @@ export function ParentSettingsScreen() {
             value={taskRequirementsInput}
             disabled={!rule}
             onChangeText={(value) => setTaskRequirementsInput(value.replace(/[^0-9]/g, ""))}
-          />
-          <Divider />
-          <TextInput
-            label="Reward Multiplier"
-            mode="outlined"
-            keyboardType="decimal-pad"
-            value={rewardMultiplierInput}
-            disabled={!rule}
-            onChangeText={(value) => setRewardMultiplierInput(value.replace(/[^0-9.]/g, ""))}
           />
         </Card.Content>
       </Card>
@@ -416,6 +411,10 @@ const styles = StyleSheet.create({
   },
   appearanceLabel: {
     marginTop: 8,
+  },
+  autoHint: {
+    color: colors.subtext,
+    lineHeight: 18,
   },
   blockedHint: {
     marginTop: 4,

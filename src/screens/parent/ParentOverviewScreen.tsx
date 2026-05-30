@@ -21,7 +21,7 @@ import {
   type ParentDashboardAnalytics,
   type TaskRow,
 } from "@/services/parentDashboardAnalytics";
-import { iconForPackage } from "@/constants/blockedAppPackages";
+import { displayAppUsageLabel, iconForPackage } from "@/constants/blockedAppPackages";
 import { formatAppError } from "@/utils/errors";
 import { filterReportableUsageRows } from "@/utils/appUsagePackages";
 import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotifications";
@@ -565,7 +565,7 @@ export function ParentOverviewScreen() {
                   </View>
                   <View style={styles.activityText}>
                     <Text style={[styles.activityMain, { color: c.text }]} numberOfLines={1}>
-                      {item.app_label ?? item.package_name} opened
+                      {displayAppUsageLabel(item.app_label, item.package_name)} opened
                     </Text>
                     <Text style={[styles.activityTime, { color: c.subtext }]}>
                       {formatAppUsageDetail(item.event_at, item.duration_seconds)}

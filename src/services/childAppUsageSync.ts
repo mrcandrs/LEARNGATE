@@ -102,9 +102,13 @@ async function enrichRowsWithDeviceLabels(rows: ChildAppUsageRow[]): Promise<Chi
   return Promise.all(
     rows.map(async (row) => {
       const deviceLabel = await resolveAppLabelOnDevice(row.package_name);
+      const usableDeviceLabel =
+        deviceLabel &&
+        deviceLabel.trim() !== row.package_name &&
+        !/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/i.test(deviceLabel.trim());
       return {
         ...row,
-        app_label: deviceLabel ?? row.app_label,
+        app_label: usableDeviceLabel ? deviceLabel!.trim() : labelForPackage(row.package_name),
       };
     })
   );

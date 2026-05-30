@@ -56,6 +56,25 @@ const EXTRA_PACKAGE_LABELS: Record<string, string> = {
   "com.microsoft.minecraft": "Minecraft",
   "com.sec.android.app.launcher": "Samsung Home",
   "com.google.android.apps.nexuslauncher": "Home",
+  "com.facebook.orca": "Messenger",
+  "com.facebook.mlite": "Messenger Lite",
+  "com.transsion.XOSLauncher": "Home",
+  "com.transsion.hilauncher": "Home",
+  "com.android.chrome": "Chrome",
+  "com.google.android.apps.maps": "Maps",
+  "com.google.android.calendar": "Calendar",
+  "com.google.android.dialer": "Phone",
+  "com.google.android.contacts": "Contacts",
+  "com.google.android.calculator": "Calculator",
+  "com.google.android.apps.docs": "Google Docs",
+  "com.google.android.youtube.kids": "YouTube Kids",
+  "com.discord": "Discord",
+  "com.twitter.android": "X",
+  "com.zhiliaoapp.musically": "TikTok",
+  "com.ss.android.ugc.trill": "TikTok",
+  "com.instagram.android": "Instagram",
+  "com.facebook.katana": "Facebook",
+  "com.facebook.lite": "Facebook Lite",
 };
 
 const EXTRA_PACKAGE_ICONS: Record<string, BlockableIconName> = {
@@ -69,10 +88,40 @@ const EXTRA_PACKAGE_ICONS: Record<string, BlockableIconName> = {
   "com.netflix.mediaclient": "netflix",
   "com.roblox.client": "gamepad-variant",
   "com.microsoft.minecraft": "gamepad-variant-outline",
+  "com.facebook.orca": "facebook-messenger",
+  "com.facebook.mlite": "facebook-messenger",
+  "com.transsion.XOSLauncher": "home-outline",
+  "com.transsion.hilauncher": "home-outline",
+  "com.google.android.apps.maps": "map-marker-outline",
+  "com.google.android.calendar": "calendar-outline",
+  "com.google.android.dialer": "phone-outline",
+  "com.discord": "discord",
+  "com.twitter.android": "twitter",
 };
 
 export function labelForPackage(packageName: string): string {
-  return LABEL_BY_PACKAGE[packageName] ?? EXTRA_PACKAGE_LABELS[packageName] ?? humanizePackage(packageName);
+  const key = packageName.trim();
+  const lower = key.toLowerCase();
+  return (
+    LABEL_BY_PACKAGE[key] ??
+    LABEL_BY_PACKAGE[lower] ??
+    EXTRA_PACKAGE_LABELS[key] ??
+    EXTRA_PACKAGE_LABELS[lower] ??
+    humanizePackage(key)
+  );
+}
+
+/** Prefer a friendly label on the parent dashboard (never show raw package ids when avoidable). */
+export function displayAppUsageLabel(appLabel: string | null | undefined, packageName: string): string {
+  const normalized = appLabel?.trim();
+  if (normalized && normalized !== packageName && !looksLikePackageId(normalized)) {
+    return normalized;
+  }
+  return labelForPackage(packageName);
+}
+
+function looksLikePackageId(value: string): boolean {
+  return /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/i.test(value);
 }
 
 /** Icon for parent dashboard (device APK icons are not available on the parent phone). */
@@ -85,7 +134,20 @@ export function labelForBlockedPackage(packageName: string): string {
 }
 
 function humanizePackage(packageName: string): string {
-  const segment = packageName.split(".").pop() ?? packageName;
+  const lower = packageName.toLowerCase();
+  const knownSuffixes: Record<string, string> = {
+    orca: "Messenger",
+    katana: "Facebook",
+    musically: "TikTok",
+    trill: "TikTok",
+    mediaclient: "Netflix",
+    xoslauncher: "Home",
+    hilauncher: "Home",
+  };
+  const segment = lower.split(".").pop() ?? lower;
+  if (knownSuffixes[segment]) {
+    return knownSuffixes[segment];
+  }
   if (!segment) return packageName;
   return segment.charAt(0).toUpperCase() + segment.slice(1);
 }

@@ -15,6 +15,8 @@ const IGNORED_EXACT = new Set([
   "com.huawei.android.launcher",
   "com.oppo.launcher",
   "com.oneplus.launcher",
+  "com.transsion.xoslauncher",
+  "com.transsion.hilauncher",
   "com.android.settings",
   "com.google.android.permissioncontroller",
   "com.android.permissioncontroller",
@@ -48,6 +50,8 @@ const IGNORED_SUBSTRINGS = [
   "recents",
   ".gms",
   "googlequicksearchbox",
+  "xoslauncher",
+  "hilauncher",
 ];
 
 /**

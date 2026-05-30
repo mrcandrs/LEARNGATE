@@ -22,3 +22,16 @@ export function difficultyTierToLevel(tier: DifficultyTier): number {
   return 5;
 }
 
+/** Synced to screen_rules.reward_multiplier from the child's difficulty tier. */
+export function rewardMultiplierForDifficultyLevel(level: number): number {
+  const tier = levelToDifficultyTier(level);
+  if (tier === "easy") return 1;
+  if (tier === "hard") return 1.5;
+  return 1.25;
+}
+
+export function formatRewardMultiplier(level: number): string {
+  const value = rewardMultiplierForDifficultyLevel(level);
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+}
+
