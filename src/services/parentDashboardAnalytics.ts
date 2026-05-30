@@ -16,6 +16,7 @@ export type ChildRow = {
   is_online: boolean;
   last_seen_at: string | null;
   child_user_id: string | null;
+  avatar_url?: string | null;
 };
 
 export type ChildMonitor = {

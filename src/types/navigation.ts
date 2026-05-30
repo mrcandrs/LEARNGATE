@@ -12,9 +12,7 @@ export type AuthStackParamList = {
 export type ParentTabParamList = {
   Overview: undefined;
   Children: undefined;
-  Location: undefined;
   Settings: undefined;
-  Review: undefined;
 };
 
 export type ChildGamesStackParamList = {

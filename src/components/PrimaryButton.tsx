@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 import { Button } from "react-native-paper";
 
 type PrimaryButtonProps = {
@@ -5,12 +6,29 @@ type PrimaryButtonProps = {
   onPress: () => void;
   mode?: "contained" | "outlined" | "text";
   disabled?: boolean;
+  loading?: boolean;
 };
 
-export function PrimaryButton({ label, onPress, mode = "contained", disabled }: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, mode = "contained", disabled, loading }: PrimaryButtonProps) {
   return (
-    <Button mode={mode} onPress={onPress} disabled={disabled} style={{ marginTop: 8 }}>
+    <Button
+      mode={mode}
+      onPress={onPress}
+      loading={loading}
+      disabled={disabled || loading}
+      style={[mode === "text" ? styles.textButton : styles.defaultButton]}
+    >
       {label}
     </Button>
   );
 }
+
+const styles = StyleSheet.create({
+  defaultButton: {
+    marginTop: 8,
+  },
+  textButton: {
+    marginTop: 0,
+    marginVertical: 0,
+  },
+});

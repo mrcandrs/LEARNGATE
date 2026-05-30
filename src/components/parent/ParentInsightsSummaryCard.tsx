@@ -1,0 +1,150 @@
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
+import type { WeekAnalytics } from "@/services/parentDashboardAnalytics";
+import { useAppColors } from "@/theme/useAppColors";
+import { radii, shadows } from "@/theme/theme";
+
+export type ParentChildInsight = {
+  childName: string;
+  summary: string;
+  latestTaskLine: string;
+  focusAreas: string;
+  recommendation: string;
+  nextBestStep: string;
+};
+
+type ParentInsightsSummaryCardProps = {
+  week: WeekAnalytics;
+  insight: ParentChildInsight | null;
+  expanded: boolean;
+  onTogglePlan: () => void;
+};
+
+export function ParentInsightsSummaryCard({ week, insight, expanded, onTogglePlan }: ParentInsightsSummaryCardProps) {
+  const c = useAppColors();
+  const trendLine =
+    week.totalCompleted > week.priorWeekCompleted
+      ? "Completions improved from last week"
+      : week.totalCompleted < week.priorWeekCompleted
+        ? "Completions dipped vs last week"
+        : week.trendLabel;
+
+  return (
+    <View style={styles.wrap}>
+      <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>AI-Assisted Insights</Text>
+      <View style={[styles.card, { backgroundColor: c.insightCardBg, borderColor: c.insightCardBorder }]}>
+        <View style={styles.topRow}>
+          <View style={styles.summaryCol}>
+            <Text style={[styles.kicker, { color: c.primaryDark }]}>This week summary</Text>
+            <Text style={[styles.bigNumber, { color: c.primaryDark }]}>{week.totalCompleted}</Text>
+            <Text style={[styles.trend, { color: c.primaryDark }]}>{trendLine}</Text>
+          </View>
+          <Pressable
+            onPress={onTogglePlan}
+            style={[styles.planBtn, { backgroundColor: c.primaryDark }]}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? "Hide more insights" : "View more insights"}
+          >
+            <Text style={styles.planBtnText}>{expanded ? "Hide More" : "View More"}</Text>
+          </Pressable>
+        </View>
+
+        {expanded && insight ? (
+          <View style={[styles.detail, { borderTopColor: c.insightCardBorder }]}>
+            <Text style={[styles.detailName, { color: c.primaryDark }]}>{insight.childName}</Text>
+            <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.summary}</Text>
+            <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.latestTaskLine}</Text>
+            <Text style={styles.detailFocus}>{insight.focusAreas}</Text>
+            <Text style={[styles.detailRec, { color: c.text }]}>{insight.recommendation}</Text>
+            <Text style={[styles.detailStep, { color: c.primaryDark }]}>{insight.nextBestStep}</Text>
+            <Text style={[styles.aiNote, { color: c.subtext }]}>
+              Recommendations are generated from recent in-app behavior patterns.
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    gap: 10,
+    marginTop: 4,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  card: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    ...shadows.card,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  summaryCol: {
+    flex: 1,
+    gap: 2,
+  },
+  kicker: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  bigNumber: {
+    fontSize: 36,
+    fontWeight: "800",
+    lineHeight: 40,
+  },
+  trend: {
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 20,
+  },
+  planBtn: {
+    borderRadius: radii.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  planBtnText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  detail: {
+    borderTopWidth: 1,
+    paddingTop: 12,
+    gap: 6,
+  },
+  detailName: {
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  detailLine: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  detailFocus: {
+    color: "#7C3AED",
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  detailRec: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  detailStep: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  aiNote: {
+    fontStyle: "italic",
+    fontSize: 12,
+    marginTop: 4,
+  },
+});

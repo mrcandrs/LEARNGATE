@@ -16,7 +16,6 @@ import {
   registerAndSavePushToken,
   showDeviceTestNotification,
 } from "@/services/pushNotifications";
-import { BLOCKABLE_APP_GROUPS, isGroupFullySelected, toggleBlockedGroup as applyBlockedGroupToggle, type BlockableAppGroup } from "@/constants/blockedAppPackages";
 
 type ChildSummary = {
   id: string;
@@ -147,18 +146,6 @@ export function ParentSettingsScreen() {
   }, [loadSettings]);
 
   const selectedChild = children.find((child) => child.id === selectedChildId);
-  const selectedRate = selectedChild?.audio_guide_rate ?? 0.92;
-
-  const updateAudioRate = async (rate: number) => {
-    if (!supabase || !selectedChildId) return;
-    const { error: updateError } = await supabase.from("children").update({ audio_guide_rate: rate }).eq("id", selectedChildId);
-    if (updateError) {
-      setError(formatAppError(updateError));
-      return;
-    }
-    setChildren((prev) => prev.map((child) => (child.id === selectedChildId ? { ...child, audio_guide_rate: rate } : child)));
-    setSnackbar("Audio guide pace saved.");
-  };
 
   const saveRules = async () => {
     if (!supabase || !rule || !selectedChildId) {
@@ -195,20 +182,10 @@ export function ParentSettingsScreen() {
     await loadSettings(false);
   };
 
-  const toggleBlockedGroup = (group: BlockableAppGroup) => {
-    setRule((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        blocked_apps_json: applyBlockedGroupToggle(prev.blocked_apps_json, group),
-      };
-    });
-  };
-
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
-        Screen time rules, learning defaults, and notifications per child.
+        Learning defaults, notifications, and account preferences. Screen limits and app blocking are in Manage Children.
       </Text>
 
       {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
@@ -259,55 +236,6 @@ export function ParentSettingsScreen() {
       ) : (
         <Text>No child profile found yet. Add a child first in Manage Children.</Text>
       )}
-
-      <Card style={styles.card}>
-        <Card.Title title="Screen Time Controls" />
-        <Card.Content style={styles.block}>
-          <Text>Daily Time Limit: {selectedChild ? `${selectedChild.daily_limit_minutes} minutes` : "N/A"}</Text>
-          <Divider />
-          <Text>
-            Bedtime Schedule: {selectedChild ? `${selectedChild.bedtime_start} - ${selectedChild.bedtime_end}` : "N/A"}
-          </Text>
-          <Divider />
-          <Text>Blocked Apps</Text>
-          <Text variant="bodySmall" style={[styles.blockedHint, { color: theme.colors.onSurfaceVariant }]}>
-            One tap blocks every common install variant (e.g. TikTok and TikTok Lite). Save after changing, then have the child reopen the app once so the phone gets the new list.
-          </Text>
-          <View style={styles.appGrid}>
-            {BLOCKABLE_APP_GROUPS.map((app) => {
-              const selected = rule ? isGroupFullySelected(rule.blocked_apps_json, app) : false;
-              return (
-                <Pressable
-                  key={app.slug}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Toggle ${app.label}`}
-                  style={[
-                    styles.appTile,
-                    {
-                      backgroundColor: selected ? theme.colors.primary : theme.colors.surfaceVariant,
-                      borderColor: selected ? theme.colors.primary : theme.colors.outline,
-                    },
-                  ]}
-                  onPress={() => toggleBlockedGroup(app)}
-                  disabled={!rule}
-                >
-                  <MaterialCommunityIcons
-                    name={app.icon}
-                    size={22}
-                    color={selected ? theme.colors.onPrimary : theme.colors.primary}
-                  />
-                  <Text
-                    variant="bodySmall"
-                    style={[styles.appTileLabel, { color: selected ? theme.colors.onPrimary : theme.colors.onSurface }]}
-                  >
-                    {app.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </Card.Content>
-      </Card>
 
       <Card style={styles.card}>
         <Card.Title title="Learning Settings" />
@@ -409,7 +337,7 @@ export function ParentSettingsScreen() {
       <Card style={styles.card}>
         <Card.Title title="Appearance" />
         <Card.Content style={styles.block}>
-          <Text>App Theme</Text>
+          <Text variant="labelLarge">Color theme</Text>
           <View style={styles.chipRow}>
             <Chip selected={themeMode.mode === "mint"} onPress={() => themeMode.setMode("mint")}>
               Mint
@@ -421,22 +349,15 @@ export function ParentSettingsScreen() {
               Midnight
             </Chip>
           </View>
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.card}>
-        <Card.Title title="Audio Guide" />
-        <Card.Content style={styles.block}>
-          <Text>Speech Pace</Text>
+          <Text variant="labelLarge" style={styles.appearanceLabel}>
+            Display mode
+          </Text>
           <View style={styles.chipRow}>
-            <Chip selected={selectedRate <= 0.86} onPress={() => void updateAudioRate(0.84)}>
-              Slow
+            <Chip selected={themeMode.appearance === "light"} onPress={() => themeMode.setAppearance("light")}>
+              Light
             </Chip>
-            <Chip selected={selectedRate > 0.86 && selectedRate < 0.98} onPress={() => void updateAudioRate(0.92)}>
-              Normal
-            </Chip>
-            <Chip selected={selectedRate >= 0.98} onPress={() => void updateAudioRate(1.05)}>
-              Fast
+            <Chip selected={themeMode.appearance === "dark"} onPress={() => themeMode.setAppearance("dark")}>
+              Dark
             </Chip>
           </View>
         </Card.Content>
@@ -492,6 +413,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  appearanceLabel: {
+    marginTop: 8,
   },
   blockedHint: {
     marginTop: 4,

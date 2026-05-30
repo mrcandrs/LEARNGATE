@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Button, Card, Menu, Text } from "react-native-paper";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Button, Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { StatCard } from "@/components/StatCard";
-import { CategoryBarChart } from "@/components/parent/CategoryBarChart";
-import { ChildMonitorCard } from "@/components/parent/ChildMonitorCard";
-import { TaskPipelineCard } from "@/components/parent/TaskPipelineCard";
+import { ParentDashboardCarousel } from "@/components/parent/ParentDashboardCarousel";
+import { ParentHeroAffirmationCard } from "@/components/parent/ParentHeroAffirmationCard";
+import { ParentInsightsSummaryCard } from "@/components/parent/ParentInsightsSummaryCard";
+import { ParentLiveMonitoringCard } from "@/components/parent/ParentLiveMonitoringCard";
+import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { useAuth } from "@/store/AuthContext";
-import { colors, radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
+import { radii, shadows } from "@/theme/theme";
 import { ParentStat } from "@/types/app";
 import { supabase } from "@/services/supabase";
 import {
@@ -23,6 +25,11 @@ import { iconForPackage } from "@/constants/blockedAppPackages";
 import { formatAppError } from "@/utils/errors";
 import { filterReportableUsageRows } from "@/utils/appUsagePackages";
 import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotifications";
+
+type OverviewToast = {
+  message: string;
+  variant: "success" | "error";
+};
 
 type ActivityItem = {
   id: string;
@@ -43,13 +50,6 @@ type ChildInsight = {
 };
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
-
-const STAT_ICONS: Record<string, { icon: IconName; color: string }> = {
-  "Children Managed": { icon: "account-group-outline", color: colors.primary },
-  "Active Now": { icon: "access-point", color: colors.primary },
-  "Pending Reviews": { icon: "camera-account", color: colors.warning },
-  "Completed This Week": { icon: "calendar-check", color: colors.info },
-};
 
 const ACTIVITY_ICONS: Record<string, IconName> = {
   task_completed: "check-circle-outline",
@@ -104,7 +104,7 @@ function formatAppUsageDetail(eventAt: string, durationSeconds: number | null): 
   return used ? `${opened} · ${used}` : opened;
 }
 
-type ManagedChild = { id: string; name: string };
+type ManagedChild = { id: string; name: string; avatar_url: string | null };
 
 function buildInsights(children: ChildRow[], rows: TaskRow[]): ChildInsight[] {
   const now = Date.now();
@@ -189,23 +189,32 @@ function buildInsights(children: ChildRow[], rows: TaskRow[]): ChildInsight[] {
 
 export function ParentOverviewScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const c = useAppColors();
   const [stats, setStats] = useState<ParentStat[]>([]);
   const [analytics, setAnalytics] = useState<ParentDashboardAnalytics | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [appUsage, setAppUsage] = useState<AppUsageItem[]>([]);
   const [managedChildren, setManagedChildren] = useState<ManagedChild[]>([]);
   const [insights, setInsights] = useState<ChildInsight[]>([]);
-  const [insightsMenuVisible, setInsightsMenuVisible] = useState(false);
-  const [selectedInsightChildId, setSelectedInsightChildId] = useState<string | null>(null);
-  const [usageMenuVisible, setUsageMenuVisible] = useState(false);
-  const [selectedUsageChildId, setSelectedUsageChildId] = useState<string | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [monitorMenuVisible, setMonitorMenuVisible] = useState(false);
+  const [insightExpanded, setInsightExpanded] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [usageRefreshing, setUsageRefreshing] = useState(false);
   const [usageLastRefreshedAt, setUsageLastRefreshedAt] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<OverviewToast | null>(null);
   const [pushTokenReady, setPushTokenReady] = useState<boolean | null>(null);
   const [pushRegistering, setPushRegistering] = useState(false);
+
+  const showError = useCallback((message: string) => {
+    setToast({ message, variant: "error" });
+  }, []);
+
+  const showSuccess = useCallback((message: string) => {
+    setToast({ message, variant: "success" });
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -246,14 +255,15 @@ export function ParentOverviewScreen() {
   );
 
   const refreshAppUsage = useCallback(async () => {
-    if (!selectedUsageChildId) return;
+    if (!selectedChildId) return;
     setUsageRefreshing(true);
     try {
-      await loadAppUsageForChild(selectedUsageChildId);
+      await loadAppUsageForChild(selectedChildId);
+      showSuccess("Recent activity refreshed.");
     } finally {
       setUsageRefreshing(false);
     }
-  }, [selectedUsageChildId, loadAppUsageForChild]);
+  }, [selectedChildId, loadAppUsageForChild, showSuccess]);
 
   const loadDashboard = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -275,7 +285,6 @@ export function ParentOverviewScreen() {
 
     if (fromPull) setRefreshing(true);
     else setIsLoading(true);
-    setError(null);
 
     const {
       data: { user },
@@ -283,7 +292,7 @@ export function ParentOverviewScreen() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error("Not signed in.")));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -292,12 +301,12 @@ export function ParentOverviewScreen() {
     const { data: children, error: childrenError } = await supabase
       .from("children")
       .select(
-        "id, name, stars, daily_limit_minutes, difficulty_level, is_online, last_seen_at, child_user_id"
+        "id, name, stars, daily_limit_minutes, difficulty_level, is_online, last_seen_at, child_user_id, avatar_url"
       )
       .eq("parent_id", user.id);
 
     if (childrenError || !children) {
-      setError(formatAppError(childrenError ?? new Error("Failed to load children.")));
+      showError(formatAppError(childrenError ?? new Error("Failed to load children.")));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -335,13 +344,13 @@ export function ParentOverviewScreen() {
       ]);
 
       if (tasksRes.error) {
-        setError(formatAppError(tasksRes.error));
+        showError(formatAppError(tasksRes.error));
         setIsLoading(false);
         setRefreshing(false);
         return;
       }
       if (logsRes.error) {
-        setError(formatAppError(logsRes.error));
+        showError(formatAppError(logsRes.error));
         setIsLoading(false);
         setRefreshing(false);
         return;
@@ -361,7 +370,11 @@ export function ParentOverviewScreen() {
       );
     }
 
-    const managed = childRows.map((c) => ({ id: c.id, name: c.name ?? "Child" }));
+    const managed = childRows.map((c) => ({
+      id: c.id,
+      name: c.name ?? "Child",
+      avatar_url: c.avatar_url ?? null,
+    }));
 
     const built = buildParentDashboardAnalytics({
       children: childRows,
@@ -385,14 +398,13 @@ export function ParentOverviewScreen() {
     setActivity(recentActivity);
     setManagedChildren(managed);
     setInsights(nextInsights);
-    setSelectedInsightChildId((prev) =>
-      prev && nextInsights.some((i) => i.childId === prev) ? prev : nextInsights[0]?.childId ?? null
+    setSelectedChildId((prev) =>
+      prev && managed.some((c) => c.id === prev) ? prev : managed[0]?.id ?? null
     );
     const usageChildId =
-      selectedUsageChildId && managed.some((c) => c.id === selectedUsageChildId)
-        ? selectedUsageChildId
+      selectedChildId && managed.some((c) => c.id === selectedChildId)
+        ? selectedChildId
         : managed[0]?.id ?? null;
-    setSelectedUsageChildId(usageChildId);
     if (usageChildId) {
       await loadAppUsageForChild(usageChildId);
     } else {
@@ -400,7 +412,7 @@ export function ParentOverviewScreen() {
     }
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured, loadAppUsageForChild]);
+  }, [isSupabaseConfigured, loadAppUsageForChild, selectedChildId, showError]);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -410,33 +422,45 @@ export function ParentOverviewScreen() {
     void loadDashboard(true);
   }, [loadDashboard]);
 
-  const selectedInsight = useMemo(
-    () => insights.find((i) => i.childId === selectedInsightChildId) ?? insights[0] ?? null,
-    [insights, selectedInsightChildId]
+  const selectedInsight = useMemo(() => {
+    const childId = selectedChildId ?? insights[0]?.childId;
+    return insights.find((i) => i.childId === childId) ?? insights[0] ?? null;
+  }, [insights, selectedChildId]);
+
+  const selectedMonitor = useMemo(() => {
+    const childId = selectedChildId ?? analytics?.monitors[0]?.childId;
+    return analytics?.monitors.find((m) => m.childId === childId) ?? analytics?.monitors[0] ?? null;
+  }, [analytics, selectedChildId]);
+
+  const visibleAppUsage = useMemo(
+    () => (activityExpanded ? appUsage : appUsage.slice(0, 5)),
+    [activityExpanded, appUsage]
   );
 
-  const selectedUsageChild = useMemo(
-    () => managedChildren.find((c) => c.id === selectedUsageChildId) ?? managedChildren[0] ?? null,
-    [managedChildren, selectedUsageChildId]
+  const visibleActivity = useMemo(
+    () => (activityExpanded ? activity : activity.slice(0, 5)),
+    [activityExpanded, activity]
+  );
+
+  const hasMoreActivity = appUsage.length > 5 || activity.length > 5;
+
+  const onSelectChild = useCallback(
+    (childId: string) => {
+      setSelectedChildId(childId);
+      void loadAppUsageForChild(childId);
+    },
+    [loadAppUsageForChild]
   );
 
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
-      <Text variant="titleMedium" style={styles.kicker}>
-        Overview
-      </Text>
-      <Text variant="bodyMedium" style={styles.subKicker}>
-        Monitoring & analytics for your family
-      </Text>
-
-      {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      <ParentHeroAffirmationCard />
 
       {pushTokenReady === false ? (
-        <Card style={styles.pushBanner}>
+        <Card style={[styles.pushBanner, { borderColor: c.warning }]}>
           <Card.Content>
             <Text variant="titleSmall">Alerts not enabled on this device</Text>
-            <Text variant="bodySmall" style={styles.pushBannerHint}>
+            <Text variant="bodySmall" style={[styles.pushBannerHint, { color: c.subtext }]}>
               Parent notifications (task completed, submissions) need a push token saved for your account. Use a
               separate phone/emulator from the child account.
             </Text>
@@ -450,8 +474,10 @@ export function ParentOverviewScreen() {
                 try {
                   const result = await registerAndSavePushToken();
                   setPushTokenReady(result.ok);
-                  if (!result.ok) {
-                    setError(result.message);
+                  if (result.ok) {
+                    showSuccess("Alerts enabled on this device.");
+                  } else {
+                    showError(result.message);
                   }
                 } finally {
                   setPushRegistering(false);
@@ -464,459 +490,216 @@ export function ParentOverviewScreen() {
         </Card>
       ) : null}
 
-      <View style={styles.grid}>
-        {stats.map((item) => {
-          const meta = STAT_ICONS[item.label];
-          return (
-            <View key={item.label} style={styles.gridItem}>
-              <StatCard
-                label={item.label}
-                value={item.value}
-                iconName={meta?.icon ?? "chart-box-outline"}
-                iconColor={meta?.color ?? colors.primary}
-              />
-            </View>
-          );
-        })}
-      </View>
+      {analytics ? <ParentDashboardCarousel stats={stats} analytics={analytics} /> : null}
 
-      {analytics && analytics.monitors.length > 0 ? (
-        <Card style={styles.sectionCard}>
-          <Card.Title
-            title="Live monitoring"
-            subtitle="Presence, tasks, and reviews per child"
-            titleStyle={styles.cardTitle}
-            left={() => <MaterialCommunityIcons name="monitor-dashboard" size={24} color={colors.primary} />}
-          />
-          <Card.Content>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.monitorScroll}>
-              {analytics.monitors.map((m) => (
-                <ChildMonitorCard key={m.childId} monitor={m} />
-              ))}
-            </ScrollView>
-          </Card.Content>
-        </Card>
-      ) : null}
-
-      {analytics ? (
-        <Card style={styles.sectionCard}>
-          <Card.Title
-            title="Task pipeline"
-            subtitle="All children — current workload"
-            titleStyle={styles.cardTitle}
-            left={() => <MaterialCommunityIcons name="transit-connection-variant" size={24} color={colors.info} />}
-          />
-          <Card.Content>
-            <TaskPipelineCard pipeline={analytics.pipeline} />
-          </Card.Content>
-        </Card>
-      ) : null}
-
-      {analytics ? (
-        <Card style={styles.sectionCard}>
-          <Card.Title
-            title="Weekly analytics"
-            subtitle={analytics.week.trendLabel}
-            titleStyle={styles.cardTitle}
-            left={() => <MaterialCommunityIcons name="chart-bar" size={24} color={colors.warning} />}
-          />
-          <Card.Content style={styles.weekContent}>
-            <View style={styles.weekHighlightRow}>
-              <View style={styles.weekHighlight}>
-                <Text variant="headlineMedium" style={styles.weekNumber}>
-                  {analytics.week.totalCompleted}
-                </Text>
-                <Text variant="labelMedium" style={styles.weekLabel}>
-                  Completions (7d)
-                </Text>
-              </View>
-              <View style={styles.weekHighlight}>
-                <Text variant="headlineMedium" style={[styles.weekNumber, { color: colors.warning }]}>
-                  {analytics.week.pointsThisWeek}
-                </Text>
-                <Text variant="labelMedium" style={styles.weekLabel}>
-                  Activity points
-                </Text>
-              </View>
-            </View>
-            <Text variant="titleSmall" style={styles.chartHeading}>
-              By category
-            </Text>
-            <CategoryBarChart
-              learning={analytics.week.byCategory.learning}
-              exercise={analytics.week.byCategory.exercise}
-              chore={analytics.week.byCategory.chore}
-            />
-          </Card.Content>
-        </Card>
-      ) : null}
-
-      <Card style={styles.sectionCard}>
-        <Card.Title
-          title="Recent apps on child devices"
-          subtitle="User apps only"
-          titleStyle={styles.cardTitle}
-          left={() => <MaterialCommunityIcons name="cellphone-link" size={24} color={colors.primary} />}
+      {selectedMonitor && managedChildren.length > 0 ? (
+        <ParentLiveMonitoringCard
+          monitor={selectedMonitor}
+          childOptions={managedChildren}
+          selectedChildId={selectedChildId ?? selectedMonitor.childId}
+          menuVisible={monitorMenuVisible}
+          onOpenMenu={() => setMonitorMenuVisible(true)}
+          onDismissMenu={() => setMonitorMenuVisible(false)}
+          onSelectChild={onSelectChild}
         />
-        <Card.Content style={styles.activityList}>
-          {managedChildren.length === 0 ? (
-            <Text style={styles.emptyText}>Add a child profile to see app activity here.</Text>
-          ) : (
-            <>
-              <Menu
-                visible={usageMenuVisible}
-                onDismiss={() => setUsageMenuVisible(false)}
-                anchor={
-                  <Pressable
-                    onPress={() => setUsageMenuVisible(true)}
-                    style={styles.pickerRow}
-                    accessibilityRole="button"
-                    accessibilityLabel="Select child for app activity"
-                  >
-                    <View style={styles.pickerLeft}>
-                      <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
-                      <View style={styles.pickerTextWrap}>
-                        <Text variant="labelMedium" style={styles.pickerLabel}>
-                          Child
-                        </Text>
-                        <Text variant="titleSmall" style={styles.pickerValue} numberOfLines={1}>
-                          {selectedUsageChild?.name ?? "Select child"}
-                        </Text>
-                      </View>
-                    </View>
-                    <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
-                  </Pressable>
-                }
-              >
-                {managedChildren.map((child) => (
-                  <Menu.Item
-                    key={child.id}
-                    title={child.name}
-                    onPress={() => {
-                      setSelectedUsageChildId(child.id);
-                      setUsageMenuVisible(false);
-                      void loadAppUsageForChild(child.id);
-                    }}
-                  />
-                ))}
-              </Menu>
+      ) : null}
 
-              <Button
-                mode="outlined"
-                loading={usageRefreshing}
-                disabled={usageRefreshing || !selectedUsageChildId}
-                onPress={() => void refreshAppUsage()}
-                icon="refresh"
-                style={styles.usageRefreshBtn}
-                contentStyle={styles.usageRefreshBtnContent}
-              >
-                Refresh app list
-              </Button>
+      {analytics && insights.length > 0 ? (
+        <ParentInsightsSummaryCard
+          week={analytics.week}
+          insight={selectedInsight}
+          expanded={insightExpanded}
+          onTogglePlan={() => setInsightExpanded((v) => !v)}
+        />
+      ) : null}
 
-              <Text variant="labelSmall" style={styles.usageMeta}>
-                {usageLastRefreshedAt
-                  ? `You refreshed this list ${formatUsageRelativeTime(usageLastRefreshedAt.toISOString())}. Child phone uploads about every 30 seconds.`
-                  : "Tap Refresh after the child uses other apps. Their phone uploads about every 30 seconds."}
-              </Text>
-
-              {appUsage.length === 0 && !usageRefreshing ? (
-                <Text style={styles.emptyText}>
-                  No user apps logged yet for {selectedUsageChild?.name ?? "this child"}. On their phone: Child
-                  Settings → App activity reporting → turn Usage access on, open apps like YouTube or Chrome, wait a
-                  minute, then tap Refresh app list.
-                </Text>
-              ) : (
-                appUsage.map((item) => (
-                  <View key={item.id} style={styles.activityRow}>
-                    <View style={styles.appUsageIconWrap}>
-                      <MaterialCommunityIcons
-                        name={iconForPackage(item.package_name)}
-                        size={26}
-                        color={colors.primaryDark}
-                      />
-                    </View>
-                    <View style={styles.activityText}>
-                      <Text variant="bodyMedium" style={styles.activityMain} numberOfLines={1}>
-                        {item.app_label ?? item.package_name}
-                      </Text>
-                      <Text variant="labelSmall" style={styles.activityTime}>
-                        {formatAppUsageDetail(item.event_at, item.duration_seconds)}
-                      </Text>
-                    </View>
-                  </View>
-                ))
-              )}
-            </>
-          )}
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.sectionCard}>
-        <Card.Title title="Recent activity" titleStyle={styles.cardTitle} />
-        <Card.Content style={styles.activityList}>
-          {activity.length === 0 ? (
-            <Text style={styles.emptyText}>
-              No recent activity yet. Complete tasks or review chores to see updates here.
+      <View style={styles.recentSection}>
+        <View style={styles.recentHeader}>
+          <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Recent Activity</Text>
+          <Pressable
+            onPress={() => void refreshAppUsage()}
+            disabled={usageRefreshing || !selectedChildId}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh recent activity"
+          >
+            <Text
+              style={[
+                styles.refreshLink,
+                { color: c.primary },
+                (usageRefreshing || !selectedChildId) && styles.refreshDisabled,
+              ]}
+            >
+              {usageRefreshing ? "Refreshing…" : "Refresh"}
             </Text>
-          ) : (
-            activity.map((item) => (
-              <View key={item.id} style={styles.activityRow}>
-                <MaterialCommunityIcons
-                  name={ACTIVITY_ICONS[item.type] ?? "history"}
-                  size={22}
-                  color={colors.primary}
-                />
-                <View style={styles.activityText}>
-                  <Text variant="bodyMedium" style={styles.activityMain}>
-                    {item.type.replace(/_/g, " ")}
-                    {item.points ? `  +${item.points}` : ""}
-                  </Text>
-                  <Text variant="labelSmall" style={styles.activityTime}>
-                    {formatActivityTime(item.created_at)}
-                  </Text>
-                </View>
-                {item.points > 0 ? (
-                  <MaterialCommunityIcons name="star" size={18} color={colors.warning} />
-                ) : null}
-              </View>
-            ))
-          )}
-        </Card.Content>
-      </Card>
+          </Pressable>
+        </View>
 
-      <Card style={styles.sectionCard}>
-        <Card.Title title="AI-assisted insights" titleStyle={styles.cardTitle} />
-        <Card.Content style={styles.activityList}>
-          {insights.length === 0 ? (
-            <Text style={styles.emptyText}>Complete a few child tasks to unlock recommendations.</Text>
+        <View style={[styles.recentCard, { borderColor: c.border, backgroundColor: c.card }]}>
+          {managedChildren.length === 0 ? (
+            <Text style={styles.emptyText}>Add a child profile to see activity here.</Text>
           ) : (
             <>
-              <Menu
-                visible={insightsMenuVisible}
-                onDismiss={() => setInsightsMenuVisible(false)}
-                anchor={
-                  <Pressable
-                    onPress={() => setInsightsMenuVisible(true)}
-                    style={styles.pickerRow}
-                    accessibilityRole="button"
-                    accessibilityLabel="Select child for insights"
-                  >
-                    <View style={styles.pickerLeft}>
-                      <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
-                      <View style={styles.pickerTextWrap}>
-                        <Text variant="labelMedium" style={styles.pickerLabel}>
-                          Child
-                        </Text>
-                        <Text variant="titleSmall" style={styles.pickerValue}>
-                          {selectedInsight?.childName ?? "Select child"}
-                        </Text>
-                      </View>
-                    </View>
-                    <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
-                  </Pressable>
-                }
-              >
-                {insights.map((insight) => (
-                  <Menu.Item
-                    key={insight.childId}
-                    title={insight.childName}
-                    onPress={() => {
-                      setSelectedInsightChildId(insight.childId);
-                      setInsightsMenuVisible(false);
-                    }}
-                  />
-                ))}
-              </Menu>
+              {usageLastRefreshedAt ? (
+                <Text variant="labelSmall" style={[styles.usageMeta, { color: c.subtext }]}>
+                  Last refreshed {formatUsageRelativeTime(usageLastRefreshedAt.toISOString())}. Child phone uploads
+                  about every 30 seconds.
+                </Text>
+              ) : null}
 
-              {selectedInsight ? (
-                <View style={styles.insightRow}>
-                  <Text variant="bodySmall" style={styles.insightSummary}>
-                    {selectedInsight.summary}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.insightSummary}>
-                    {selectedInsight.latestTaskLine}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.insightFocus}>
-                    {selectedInsight.focusAreas}
-                  </Text>
-                  <Text variant="bodyMedium" style={styles.insightRecommendation}>
-                    {selectedInsight.recommendation}
-                  </Text>
-                  <Text variant="bodyMedium" style={styles.insightStep}>
-                    {selectedInsight.nextBestStep}
-                  </Text>
+              {visibleAppUsage.length === 0 && visibleActivity.length === 0 && !usageRefreshing ? (
+                <Text style={[styles.emptyText, { color: c.subtext }]}>
+                  No recent activity yet for{" "}
+                  {managedChildren.find((c) => c.id === selectedChildId)?.name ?? "this child"}. On their phone: Child
+                  Settings → App activity reporting → turn Usage access on, then tap Refresh.
+                </Text>
+              ) : null}
+
+              {visibleAppUsage.map((item) => (
+                <View key={item.id} style={[styles.activityRow, { borderBottomColor: c.border }]}>
+                  <View style={[styles.appUsageIconWrap, { backgroundColor: c.surfaceTint }]}>
+                    <MaterialCommunityIcons
+                      name={iconForPackage(item.package_name)}
+                      size={24}
+                      color={c.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.activityText}>
+                    <Text style={[styles.activityMain, { color: c.text }]} numberOfLines={1}>
+                      {item.app_label ?? item.package_name} opened
+                    </Text>
+                    <Text style={[styles.activityTime, { color: c.subtext }]}>
+                      {formatAppUsageDetail(item.event_at, item.duration_seconds)}
+                    </Text>
+                  </View>
                 </View>
+              ))}
+
+              {visibleActivity.map((item) => (
+                <View key={item.id} style={[styles.activityRow, { borderBottomColor: c.border }]}>
+                  <View style={[styles.appUsageIconWrap, { backgroundColor: c.surfaceTint }]}>
+                    <MaterialCommunityIcons
+                      name={ACTIVITY_ICONS[item.type] ?? "history"}
+                      size={24}
+                      color={c.primaryDark}
+                    />
+                  </View>
+                  <View style={styles.activityText}>
+                    <Text style={[styles.activityMain, { color: c.text }]}>{item.type.replace(/_/g, " ")}</Text>
+                    <Text style={[styles.activityTime, { color: c.subtext }]}>
+                      {formatActivityTime(item.created_at)}
+                    </Text>
+                  </View>
+                  {item.points > 0 ? (
+                    <Text style={[styles.pointsBadge, { color: c.warning }]}>+{item.points}</Text>
+                  ) : null}
+                </View>
+              ))}
+
+              {hasMoreActivity ? (
+                <Pressable
+                  onPress={() => setActivityExpanded((v) => !v)}
+                  style={[styles.viewMoreBtn, { backgroundColor: c.surfaceTint }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={[styles.viewMoreText, { color: c.primaryDark }]}>
+                    {activityExpanded ? "Show fewer activities" : "View more activities"}
+                  </Text>
+                </Pressable>
               ) : null}
             </>
           )}
-          <Text style={styles.aiNote}>Recommendations are generated from recent in-app behavior patterns.</Text>
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
+
+      <ParentManageToast
+        visible={toast != null}
+        message={toast?.message ?? ""}
+        variant={toast?.variant ?? "success"}
+        onHide={() => setToast(null)}
+        durationMs={toast?.variant === "error" ? 4500 : 3200}
+      />
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  kicker: {
-    color: colors.subtext,
-    marginBottom: 2,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
   },
-  subKicker: {
-    color: colors.subtext,
-    marginBottom: 12,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  recentSection: {
+    marginTop: 16,
     gap: 10,
-    marginBottom: 4,
   },
-  gridItem: {
-    width: "48%",
+  recentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  sectionCard: {
+  refreshLink: {
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  refreshDisabled: {
+    opacity: 0.5,
+  },
+  recentCard: {
     borderRadius: radii.md,
-    marginTop: 12,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
     ...shadows.card,
   },
-  cardTitle: {
-    fontWeight: "700",
-    color: colors.text,
-  },
-  monitorScroll: {
-    gap: 10,
-    paddingVertical: 4,
-  },
-  weekContent: {
-    gap: 16,
-  },
-  weekHighlightRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  weekHighlight: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-    borderRadius: radii.md,
-    padding: 14,
-    alignItems: "center",
-  },
-  weekNumber: {
-    fontWeight: "800",
-    color: colors.primaryDark,
-  },
-  weekLabel: {
-    color: colors.subtext,
-    marginTop: 4,
-  },
-  chartHeading: {
-    color: colors.text,
-    fontWeight: "700",
-  },
-  activityList: {
-    gap: 12,
-  },
-  usageRefreshBtn: {
-    marginTop: 0,
-  },
-  usageRefreshBtnContent: {
-    paddingVertical: 4,
-  },
   usageMeta: {
-    color: colors.subtext,
     lineHeight: 18,
   },
   activityRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#F3F4F6",
-    borderRadius: radii.sm,
-    padding: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
   },
   appUsageIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 10,
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-  },
-  insightRow: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: radii.sm,
-    padding: 12,
-    gap: 4,
-  },
-  pickerRow: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "#FFFFFF",
-    borderRadius: radii.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  pickerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  pickerTextWrap: {
-    flex: 1,
-  },
-  pickerLabel: {
-    color: colors.subtext,
-  },
-  pickerValue: {
-    color: colors.text,
-    fontWeight: "700",
-  },
-  insightSummary: {
-    color: colors.subtext,
-  },
-  insightRecommendation: {
-    color: colors.text,
-  },
-  insightFocus: {
-    color: "#7C3AED",
-    fontWeight: "600",
-  },
-  insightStep: {
-    color: colors.primaryDark,
-    fontWeight: "700",
-  },
-  aiNote: {
-    color: colors.subtext,
-    fontStyle: "italic",
   },
   activityText: {
     flex: 1,
   },
   activityMain: {
-    color: colors.text,
+    fontWeight: "700",
+    fontSize: 14,
   },
   activityTime: {
-    color: colors.subtext,
     marginTop: 2,
+    fontSize: 12,
+  },
+  pointsBadge: {
+    fontWeight: "800",
+    fontSize: 15,
+  },
+  viewMoreBtn: {
+    marginTop: 4,
+    borderRadius: radii.pill,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  viewMoreText: {
+    fontWeight: "700",
   },
   emptyText: {
-    color: colors.subtext,
     lineHeight: 20,
   },
-  errorText: {
-    color: "#B91C1C",
-  },
   pushBanner: {
-    marginBottom: 12,
-    borderColor: colors.warning,
+    marginTop: 14,
+    marginBottom: 4,
     backgroundColor: "#FFFBEB",
   },
   pushBannerHint: {
-    color: colors.subtext,
     marginVertical: 8,
   },
   pushBannerBtn: {

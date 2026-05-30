@@ -2,7 +2,8 @@ import { StyleSheet, View } from "react-native";
 import { Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { colors, radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
+import { radii, shadows } from "@/theme/theme";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -13,19 +14,22 @@ type StatCardProps = {
   iconColor?: string;
 };
 
-export function StatCard({ label, value, iconName, iconColor = colors.primary }: StatCardProps) {
+export function StatCard({ label, value, iconName, iconColor }: StatCardProps) {
+  const c = useAppColors();
+  const resolvedIconColor = iconColor ?? c.primary;
+
   return (
-    <Card style={styles.card}>
+    <Card style={[styles.card, { backgroundColor: c.mutedSurface }]}>
       <Card.Content style={styles.inner}>
         {iconName ? (
-          <View style={[styles.iconCircle, { backgroundColor: `${iconColor}18` }]}>
-            <MaterialCommunityIcons name={iconName} size={20} color={iconColor} />
+          <View style={[styles.iconCircle, { backgroundColor: `${resolvedIconColor}18` }]}>
+            <MaterialCommunityIcons name={iconName} size={20} color={resolvedIconColor} />
           </View>
         ) : null}
-        <Text variant="headlineSmall" style={styles.value}>
+        <Text variant="headlineSmall" style={[styles.value, { color: c.text }]}>
           {value}
         </Text>
-        <Text variant="bodyMedium" style={styles.label}>
+        <Text variant="bodyMedium" style={[styles.label, { color: c.subtext }]}>
           {label}
         </Text>
       </Card.Content>
@@ -36,7 +40,6 @@ export function StatCard({ label, value, iconName, iconColor = colors.primary }:
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: colors.card,
     borderRadius: radii.md,
     ...shadows.card,
   },
@@ -52,10 +55,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   value: {
-    color: colors.text,
     fontWeight: "700",
   },
-  label: {
-    color: colors.subtext,
-  },
+  label: {},
 });

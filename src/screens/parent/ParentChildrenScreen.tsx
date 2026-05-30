@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ActivityIndicator, Card, Chip, Dialog, Divider, List, Portal, Snackbar, Text, TextInput } from "react-native-paper";
+import { Card, Chip, Dialog, Divider, IconButton, List, Portal, Text, TextInput, useTheme } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { colors } from "@/theme/theme";
+import { StepperControl } from "@/components/parent/StepperControl";
+import { ParentSectionHeader } from "@/components/parent/ParentSectionHeader";
+import { ParentManageToast } from "@/components/parent/ParentManageToast";
+import { ParentChildLocationPreview } from "@/components/parent/ParentChildLocationPreview";
+import { getEvidenceSignedUrl } from "@/services/taskEvidence";
+import { useAppColors } from "@/theme/useAppColors";
+import type { AppColors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { formatAppError } from "@/utils/errors";
@@ -16,6 +22,12 @@ import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { GameId } from "@/data/childGames";
 import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
 import {
+  BLOCKABLE_APP_GROUPS,
+  isGroupFullySelected,
+  toggleBlockedGroup as applyBlockedGroupToggle,
+  type BlockableAppGroup,
+} from "@/constants/blockedAppPackages";
+import {
   DAILY_LIMIT_MAX_MINUTES,
   DAILY_LIMIT_MIN_MINUTES,
   formatBedtimeForInput,
@@ -23,8 +35,14 @@ import {
   parseDailyLimitMinutes,
   validateBedtimeForDb,
 } from "@/utils/childLimits";
+import {
+  formatBedtime12h,
+  formatDailyLimitDisplay,
+  stepBedtime,
+  stepDailyLimit,
+} from "@/utils/screenControlSteppers";
 
-type AppSnackbar = { message: string; variant: "success" | "error" };
+type ManageToast = { message: string; variant: "success" | "error" };
 
 type ChildRow = {
   id: string;
@@ -39,9 +57,58 @@ type ChildRow = {
   difficulty_level: number;
   bedtime_start: string;
   bedtime_end: string;
+  audio_guide_rate: number;
+  avatar_url: string | null;
+  is_online: boolean;
+  last_seen_at: string | null;
 };
 
-type SortMode = "recent" | "name" | "age" | "stars";
+type ScreenRule = {
+  child_id: string;
+  blocked_apps_json: string[];
+  unlock_after_task_count: number;
+  reward_multiplier: number;
+  daily_report_enabled: boolean;
+  task_reminders_enabled: boolean;
+};
+
+type SubmissionPreviewRow = {
+  id: string;
+  created_at: string;
+  image_url: string | null;
+  task_id: string;
+  child_id: string;
+  tasks: { title: string; xp_reward: number } | null;
+};
+
+function normalizeJoined<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) {
+    return null;
+  }
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function formatDailyLimitSummary(minutes: number): string {
+  if (minutes >= 60 && minutes % 60 === 0) {
+    return `${minutes / 60} hr`;
+  }
+  if (minutes >= 60) {
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+  }
+  return `${minutes} min`;
+}
+
+function audioRateLabel(rate: number): string {
+  if (rate <= 0.86) {
+    return "Slow";
+  }
+  if (rate >= 0.98) {
+    return "Fast";
+  }
+  return "Medium";
+}
 
 type ChildDraft = {
   daily_limit_minutes: string;
@@ -52,6 +119,9 @@ type ChildDraft = {
 
 export function ParentChildrenScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const theme = useTheme();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const [children, setChildren] = useState<ChildRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ChildDraft>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -62,21 +132,22 @@ export function ParentChildrenScreen() {
   const [saveBusyChildId, setSaveBusyChildId] = useState<string | null>(null);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childPickerVisible, setChildPickerVisible] = useState(false);
-  const [snackbar, setSnackbar] = useState<AppSnackbar | null>(null);
+  const [toast, setToast] = useState<ManageToast | null>(null);
+
+  const hideToast = useCallback(() => {
+    setToast(null);
+  }, []);
 
   const showError = useCallback((message: string) => {
-    setSnackbar({ message, variant: "error" });
+    setToast({ message, variant: "error" });
   }, []);
 
   const showSuccess = useCallback((message: string) => {
-    setSnackbar({ message, variant: "success" });
+    setToast({ message, variant: "success" });
   }, []);
   const [newChildName, setNewChildName] = useState("");
   const [newChildAge, setNewChildAge] = useState("");
   const [newChildEmail, setNewChildEmail] = useState("");
-  const [searchText, setSearchText] = useState("");
-  const [sortMode, setSortMode] = useState<SortMode>("recent");
-  const [sortAscending, setSortAscending] = useState(true);
   const [exerciseTarget, setExerciseTarget] = useState<ChildRow | null>(null);
   const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping");
   const [exerciseReps, setExerciseReps] = useState("10");
@@ -90,8 +161,14 @@ export function ParentChildrenScreen() {
   const [chorePoints, setChorePoints] = useState("30");
   const [assigningLearning, setAssigningLearning] = useState(false);
   const [assigningChore, setAssigningChore] = useState(false);
+  const [screenRule, setScreenRule] = useState<ScreenRule | null>(null);
+  const [submissionRows, setSubmissionRows] = useState<SubmissionPreviewRow[]>([]);
+  const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<SubmissionPreviewRow | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+  const [submissionImageUrls, setSubmissionImageUrls] = useState<Record<string, string>>({});
 
-  const loadChildren = useCallback(async (fromPull = false) => {
+  const loadChildren = useCallback(async (fromPull = false, silent = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setChildren([]);
       setDrafts({});
@@ -102,7 +179,7 @@ export function ParentChildrenScreen() {
 
     if (fromPull) {
       setRefreshing(true);
-    } else {
+    } else if (!silent) {
       setIsLoading(true);
     }
     const {
@@ -119,7 +196,9 @@ export function ParentChildrenScreen() {
 
     const { data, error: childrenError } = await supabase
       .from("children")
-      .select("id, child_user_id, login_email, login_secret, auth_pin, name, age, stars, daily_limit_minutes, difficulty_level, bedtime_start, bedtime_end")
+      .select(
+        "id, child_user_id, login_email, login_secret, auth_pin, name, age, stars, daily_limit_minutes, difficulty_level, bedtime_start, bedtime_end, audio_guide_rate, avatar_url, is_online, last_seen_at"
+      )
       .eq("parent_id", user.id)
       .order("created_at", { ascending: true });
 
@@ -151,60 +230,107 @@ export function ParentChildrenScreen() {
     void loadChildren(false);
   }, [loadChildren]);
 
-  const isEmpty = useMemo(() => !isLoading && children.length === 0, [children.length, isLoading]);
-  const filteredChildren = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
-    const base = query
-      ? children.filter((child) => child.name.toLowerCase().includes(query))
-      : [...children];
-
-    const sorted = [...base].sort((a, b) => {
-      if (sortMode === "name") {
-        return a.name.localeCompare(b.name);
-      }
-      if (sortMode === "age") {
-        return a.age - b.age;
-      }
-      if (sortMode === "stars") {
-        return a.stars - b.stars;
-      }
-      return a.name.localeCompare(b.name);
-    });
-
-    if (sortMode === "recent") {
-      return sortAscending ? base : base.reverse();
-    }
-
-    return sortAscending ? sorted : sorted.reverse();
-  }, [children, searchText, sortMode, sortAscending]);
-
-  const saveChild = async (childId: string) => {
-    if (!supabase || !drafts[childId]) {
+  const loadScreenRules = useCallback(async (childId: string) => {
+    if (!supabase) {
+      setScreenRule(null);
       return;
+    }
+    const { data, error: rulesError } = await supabase
+      .from("screen_rules")
+      .select("child_id, blocked_apps_json, unlock_after_task_count, reward_multiplier, daily_report_enabled, task_reminders_enabled")
+      .eq("child_id", childId)
+      .maybeSingle();
+    if (rulesError) {
+      showError(formatAppError(rulesError));
+      return;
+    }
+    const fallbackRule: ScreenRule = {
+      child_id: childId,
+      blocked_apps_json: [],
+      unlock_after_task_count: 3,
+      reward_multiplier: 1,
+      daily_report_enabled: true,
+      task_reminders_enabled: true,
+    };
+    setScreenRule((data as ScreenRule | null) ?? fallbackRule);
+  }, [showError]);
+
+  const loadSubmissionsPreview = useCallback(async (childId: string) => {
+    if (!supabase) {
+      setSubmissionRows([]);
+      return;
+    }
+    const { data, error: qError } = await supabase
+      .from("task_submissions")
+      .select("id, created_at, image_url, task_id, child_id, tasks(title, xp_reward)")
+      .eq("status", "submitted")
+      .eq("child_id", childId)
+      .order("created_at", { ascending: false });
+    if (qError) {
+      showError(formatAppError(qError));
+      return;
+    }
+    const list = ((data ?? []) as Array<Omit<SubmissionPreviewRow, "tasks"> & { tasks: SubmissionPreviewRow["tasks"] | SubmissionPreviewRow["tasks"][] }>).map(
+      (row) => ({
+        ...row,
+        tasks: normalizeJoined(row.tasks),
+      })
+    );
+    setSubmissionRows(list);
+    const urlMap: Record<string, string> = {};
+    await Promise.all(
+      list.map(async (row) => {
+        if (!row.image_url) {
+          return;
+        }
+        try {
+          urlMap[row.id] = await getEvidenceSignedUrl(row.image_url);
+        } catch {
+          urlMap[row.id] = "";
+        }
+      })
+    );
+    setSubmissionImageUrls(urlMap);
+  }, [showError]);
+
+  useEffect(() => {
+    if (!selectedChildId) {
+      setScreenRule(null);
+      setSubmissionRows([]);
+      return;
+    }
+    void loadScreenRules(selectedChildId);
+    void loadSubmissionsPreview(selectedChildId);
+  }, [selectedChildId, loadScreenRules, loadSubmissionsPreview]);
+
+  const isEmpty = useMemo(() => !isLoading && children.length === 0, [children.length, isLoading]);
+
+  const saveChild = async (childId: string): Promise<boolean> => {
+    if (!supabase || !drafts[childId]) {
+      return false;
     }
     const draft = drafts[childId];
     const { value: dailyLimit, error: limitError } = parseDailyLimitMinutes(draft.daily_limit_minutes);
     if (limitError || dailyLimit == null) {
       showError(limitError ?? "Invalid daily limit.");
-      return;
+      return false;
     }
 
     const startResult = validateBedtimeForDb(draft.bedtime_start);
     if (startResult.error || !startResult.value) {
       showError(startResult.error ?? "Invalid bedtime start.");
-      return;
+      return false;
     }
     const endResult = validateBedtimeForDb(draft.bedtime_end);
     if (endResult.error || !endResult.value) {
       showError(endResult.error ?? "Invalid bedtime end.");
-      return;
+      return false;
     }
     const bedtimeStart = startResult.value;
     const bedtimeEnd = endResult.value;
 
     const difficulty = difficultyTierToLevel(draft.difficulty_level);
 
-    setSaveBusyChildId(childId);
     const { error: updateError } = await supabase
       .from("children")
       .update({
@@ -214,15 +340,165 @@ export function ParentChildrenScreen() {
         bedtime_end: bedtimeEnd,
       })
       .eq("id", childId);
-    setSaveBusyChildId((prev) => (prev === childId ? null : prev));
 
     if (updateError) {
       const raw = updateError.message ?? "";
       showError(formatDailyLimitDbError(raw) ?? formatAppError(updateError));
+      return false;
+    }
+    await loadChildren(false, true);
+    return true;
+  };
+
+  const saveScreenRules = async (childId: string): Promise<boolean> => {
+    if (!supabase || !screenRule) {
+      return false;
+    }
+    const { error: upsertError } = await supabase.from("screen_rules").upsert(
+      { ...screenRule, child_id: childId },
+      { onConflict: "child_id" }
+    );
+    if (upsertError) {
+      showError(formatAppError(upsertError));
+      return false;
+    }
+    return true;
+  };
+
+  const saveAllForChild = async (childId: string) => {
+    setSaveBusyChildId(childId);
+    try {
+      const childOk = await saveChild(childId);
+      const rulesOk = childOk ? await saveScreenRules(childId) : false;
+      if (childOk && rulesOk) {
+        showSuccess("All changes saved.");
+        await loadScreenRules(childId);
+      } else if (childOk) {
+        showSuccess("Screen limits saved. App blocking could not be saved.");
+      }
+    } finally {
+      setSaveBusyChildId(null);
+    }
+  };
+
+  const updateAudioRate = async (childId: string, rate: number) => {
+    if (!supabase) {
       return;
     }
-    showSuccess("Child settings saved successfully.");
-    await loadChildren(false);
+    const { error: updateError } = await supabase.from("children").update({ audio_guide_rate: rate }).eq("id", childId);
+    if (updateError) {
+      showError(formatAppError(updateError));
+      return;
+    }
+    setChildren((prev) => prev.map((child) => (child.id === childId ? { ...child, audio_guide_rate: rate } : child)));
+    showSuccess("Audio guide pace saved.");
+  };
+
+  const toggleBlockedGroup = (group: BlockableAppGroup) => {
+    setScreenRule((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        blocked_apps_json: applyBlockedGroupToggle(prev.blocked_apps_json, group),
+      };
+    });
+  };
+
+  const approveSubmission = async (row: SubmissionPreviewRow) => {
+    if (!supabase) {
+      return;
+    }
+    setReviewBusyId(row.id);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      setReviewBusyId(null);
+      return;
+    }
+    const xp = row.tasks?.xp_reward ?? 0;
+    const { error: subErr } = await supabase
+      .from("task_submissions")
+      .update({ status: "approved", reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (subErr) {
+      showError(formatAppError(subErr));
+      setReviewBusyId(null);
+      return;
+    }
+    const { error: taskErr } = await supabase
+      .from("tasks")
+      .update({ status: "completed", completed_at: new Date().toISOString() })
+      .eq("id", row.task_id);
+    if (taskErr) {
+      showError(formatAppError(taskErr));
+      setReviewBusyId(null);
+      return;
+    }
+    const { error: awardError } = await supabase.rpc("award_child_points", {
+      p_child_id: row.child_id,
+      p_points: xp,
+      p_event_type: "task_completed",
+      p_metadata: { task_id: row.task_id, submission_id: row.id, source: "chore_approved" },
+    });
+    if (awardError) {
+      showError(formatAppError(awardError));
+      setReviewBusyId(null);
+      return;
+    }
+    showSuccess("Submission approved.");
+    setReviewBusyId(null);
+    if (selectedChildId) {
+      await loadSubmissionsPreview(selectedChildId);
+    }
+  };
+
+  const confirmRejectSubmission = async () => {
+    if (!supabase || !rejectTarget) {
+      return;
+    }
+    setReviewBusyId(rejectTarget.id);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+    if (userError || !user) {
+      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      setReviewBusyId(null);
+      return;
+    }
+    const target = rejectTarget;
+    const { error: subErr } = await supabase
+      .from("task_submissions")
+      .update({
+        status: "rejected",
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        notes: rejectNote.trim() || null,
+      })
+      .eq("id", target.id);
+    if (subErr) {
+      showError(formatAppError(subErr));
+      setReviewBusyId(null);
+      return;
+    }
+    const { error: taskErr } = await supabase.from("tasks").update({ status: "pending" }).eq("id", target.task_id);
+    if (taskErr) {
+      showError(formatAppError(taskErr));
+      setReviewBusyId(null);
+      return;
+    }
+    setRejectTarget(null);
+    setRejectNote("");
+    showSuccess("Submission rejected. Child can try again.");
+    setReviewBusyId(null);
+    if (selectedChildId) {
+      await loadSubmissionsPreview(selectedChildId);
+    }
   };
 
   const generatePin = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -305,8 +581,8 @@ export function ParentChildrenScreen() {
     setNewChildAge("");
     setNewChildEmail("");
     setShowCreateDialog(false);
-    showSuccess(`Child account created. PIN: ${pin}`);
-    await loadChildren(false);
+    showSuccess(`Child registered! PIN: ${pin}`);
+    await loadChildren(false, true);
   };
 
   const regeneratePin = async (childId: string) => {
@@ -321,8 +597,8 @@ export function ParentChildrenScreen() {
       showError(formatAppError(pinError));
       return;
     }
-    showSuccess(`PIN regenerated: ${pin}`);
-    await loadChildren(false);
+    showSuccess(`PIN updated · ${pin}`);
+    await loadChildren(false, true);
   };
 
   const openAssignExercise = (child: ChildRow) => {
@@ -478,7 +754,11 @@ export function ParentChildrenScreen() {
 
   const onRefresh = useCallback(() => {
     void loadChildren(true);
-  }, [loadChildren]);
+    if (selectedChildId) {
+      void loadScreenRules(selectedChildId);
+      void loadSubmissionsPreview(selectedChildId);
+    }
+  }, [loadChildren, loadScreenRules, loadSubmissionsPreview, selectedChildId]);
 
   const selectedChild = useMemo(() => children.find((c) => c.id === selectedChildId) ?? null, [children, selectedChildId]);
   const selectedDraft = useMemo(() => {
@@ -491,239 +771,390 @@ export function ParentChildrenScreen() {
       : {
           daily_limit_minutes: String(selectedChild.daily_limit_minutes),
           difficulty_level: levelToDifficultyTier(selectedChild.difficulty_level),
-          bedtime_start: selectedChild.bedtime_start,
-          bedtime_end: selectedChild.bedtime_end,
+          bedtime_start: formatBedtimeForInput(selectedChild.bedtime_start),
+          bedtime_end: formatBedtimeForInput(selectedChild.bedtime_end),
         };
   }, [drafts, selectedChild]);
+
+  const selectedAudioRate = selectedChild?.audio_guide_rate ?? 0.92;
+  const ruleSummary = useMemo(() => {
+    if (!selectedChild || !selectedDraft) {
+      return "";
+    }
+    const dailyMinutes = Number.parseInt(selectedDraft.daily_limit_minutes, 10);
+    const dailyLabel = Number.isFinite(dailyMinutes)
+      ? formatDailyLimitSummary(dailyMinutes)
+      : `${selectedChild.daily_limit_minutes} min`;
+    return `Current rule: ${dailyLabel} daily limit • Bedtime ${formatBedtime12h(selectedDraft.bedtime_start)} to ${formatBedtime12h(selectedDraft.bedtime_end)} • Sound: ${audioRateLabel(selectedAudioRate)}`;
+  }, [selectedChild, selectedDraft, selectedAudioRate]);
+
+  const formatSubmissionTime = (iso: string) => {
+    const date = new Date(iso);
+    const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return `Photo submitted at ${time}`;
+  };
 
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
-        Create child login accounts, share their PIN, and edit limits.
+        Child location, tasks, screen time, and app controls.
       </Text>
 
-      <Card style={styles.controlsCard}>
-        <Card.Content style={styles.controlsContent}>
-          <TextInput
-            label="Search child by name"
-            mode="outlined"
-            value={searchText}
-            onChangeText={setSearchText}
-            autoCapitalize="words"
-            left={<TextInput.Icon icon="magnify" />}
-          />
-          <View style={styles.sortHeader}>
-            <Text variant="labelLarge" style={styles.sectionLabel}>
-              Sort children
-            </Text>
-            <Chip icon={sortAscending ? "sort-ascending" : "sort-descending"} onPress={() => setSortAscending((prev) => !prev)}>
-              {sortAscending ? "Ascending" : "Descending"}
-            </Chip>
-          </View>
-          <View style={styles.chipRow}>
-            <Chip selected={sortMode === "recent"} onPress={() => setSortMode("recent")}>
-              Recent
-            </Chip>
-            <Chip selected={sortMode === "name"} onPress={() => setSortMode("name")}>
-              Name
-            </Chip>
-            <Chip selected={sortMode === "age"} onPress={() => setSortMode("age")}>
-              Age
-            </Chip>
-            <Chip selected={sortMode === "stars"} onPress={() => setSortMode("stars")}>
-              Stars
-            </Chip>
-          </View>
-        </Card.Content>
-      </Card>
-
-      {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {isEmpty ? <Text>No children found for this parent account yet.</Text> : null}
-      {!isEmpty && filteredChildren.length === 0 ? (
-        <Text style={styles.emptyFiltered}>No child matched "{searchText}".</Text>
-      ) : null}
+
       {children.length > 0 ? (
         <Card style={styles.childCard}>
-          <Card.Title title="Selected Child" subtitle="Select one child to view PIN and controls." />
           <Card.Content style={styles.cardContent}>
+            <ParentSectionHeader
+              icon="account-child"
+              title="Selected Child"
+              subtitle="Pick a child to view their PIN and controls."
+              style={styles.sectionHeaderInCard}
+            />
             <Pressable
               onPress={() => setChildPickerVisible(true)}
-              style={styles.pickerRow}
+              style={styles.childSelectorRow}
               accessibilityRole="button"
               accessibilityLabel="Select child"
             >
-              <View style={styles.pickerLeft}>
-                <MaterialCommunityIcons name="account-child-outline" size={20} color={colors.primaryDark} />
-                <View style={styles.pickerTextWrap}>
-                  <Text variant="labelMedium" style={styles.pickerLabel}>
-                    Child
-                  </Text>
-                  <Text variant="titleSmall" style={styles.pickerValue}>
-                    {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
+              {selectedChild?.avatar_url ? (
+                <Image source={{ uri: selectedChild.avatar_url }} style={styles.childSelectorAvatar} />
+              ) : (
+                <View style={styles.childSelectorAvatarFallback}>
+                  <Text style={styles.childSelectorAvatarLetter}>
+                    {(selectedChild?.name ?? "?").slice(0, 1).toUpperCase()}
                   </Text>
                 </View>
-              </View>
-              <MaterialCommunityIcons name="chevron-down" size={22} color={colors.subtext} />
+              )}
+              <Text variant="titleMedium" style={styles.childSelectorName}>
+                {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
+              </Text>
+              <MaterialCommunityIcons name="chevron-down" size={24} color={c.subtext} />
             </Pressable>
 
-            {selectedChild && selectedDraft ? (
+            {selectedChild ? (
               <>
-                <Divider />
                 <View style={styles.pinRow}>
                   <View style={styles.pinLeft}>
-                    <MaterialCommunityIcons name="numeric-6-box-multiple-outline" size={18} color={colors.primaryDark} />
+                    <MaterialCommunityIcons name="lock" size={18} color={c.pinIcon} />
                     <Text variant="titleSmall" style={styles.pinLabel}>
                       PIN: {selectedChild.auth_pin}
                     </Text>
                   </View>
-                  <View style={styles.inlineBusyWrap}>
-                    {pinBusyChildId === selectedChild.id ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-                    <PrimaryButton
-                      label={pinBusyChildId === selectedChild.id ? "Updating..." : "Regenerate PIN"}
-                      mode="text"
-                      onPress={() => void regeneratePin(selectedChild.id)}
-                      disabled={pinBusyChildId === selectedChild.id}
-                    />
-                  </View>
-                </View>
-                <Text variant="bodySmall" style={styles.pinHint}>
-                  Child signs in using name + this PIN in Child Access.
-                </Text>
-                <Divider />
-                <View style={styles.sectionCard}>
-                  <View style={styles.sectionHeaderRow}>
-                    <MaterialCommunityIcons name="tune-variant" size={18} color={colors.primaryDark} />
-                    <Text variant="labelLarge" style={styles.sectionLabel}>
-                      Learning & Screen Controls
-                    </Text>
-                  </View>
-                  <Text variant="bodySmall" style={styles.helper}>
-                    Assign activities and adjust limits for this child.
-                  </Text>
-
-                  <View style={styles.subSection}>
-                    <Text variant="labelLarge" style={styles.subSectionTitle}>
-                      Assign tasks
-                    </Text>
-                    <View style={styles.assignRow}>
-                      <PrimaryButton label="Learning Game" mode="outlined" onPress={() => openAssignLearning(selectedChild)} />
-                      <PrimaryButton label="Household Chore" mode="outlined" onPress={() => openAssignChore(selectedChild)} />
-                      <PrimaryButton label="Exercise" mode="outlined" onPress={() => openAssignExercise(selectedChild)} />
-                    </View>
-                  </View>
-
-                  <Divider />
-                  <View style={styles.subSection}>
-                    <Text variant="labelLarge" style={styles.subSectionTitle}>
-                      Limits
-                    </Text>
-                    <View style={styles.twoColRow}>
-                      <View style={styles.twoColItem}>
-                        <TextInput
-                          label="Daily limit (min)"
-                          mode="outlined"
-                          value={selectedDraft.daily_limit_minutes}
-                          keyboardType="number-pad"
-                          placeholder={`${DAILY_LIMIT_MIN_MINUTES}-${DAILY_LIMIT_MAX_MINUTES}`}
-                          onChangeText={(value) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [selectedChild.id]: { ...selectedDraft, daily_limit_minutes: value.replace(/[^0-9]/g, "") },
-                            }))
-                          }
-                        />
-                        <Text variant="bodySmall" style={styles.helper}>
-                          Allowed: {DAILY_LIMIT_MIN_MINUTES}–{DAILY_LIMIT_MAX_MINUTES} minutes per day.
-                        </Text>
-                      </View>
-                      <View style={styles.twoColItem}>
-                        <Text variant="labelLarge" style={styles.sectionLabel}>
-                          Difficulty
-                        </Text>
-                        <View style={styles.chipRow}>
-                          {(["easy", "medium", "hard"] as const).map((tier) => (
-                            <Chip
-                              key={tier}
-                              selected={selectedDraft.difficulty_level === tier}
-                              onPress={() =>
-                                setDrafts((prev) => ({
-                                  ...prev,
-                                  [selectedChild.id]: { ...selectedDraft, difficulty_level: tier },
-                                }))
-                              }
-                              compact
-                            >
-                              {difficultyTierLabel(tier)}
-                            </Chip>
-                          ))}
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-
-                  <Divider />
-                  <View style={styles.subSection}>
-                    <Text variant="labelLarge" style={styles.subSectionTitle}>
-                      Bedtime
-                    </Text>
-                    <View style={styles.twoColRow}>
-                      <View style={styles.twoColItem}>
-                        <TextInput
-                          label="Start (00:00–23:59)"
-                          mode="outlined"
-                          placeholder="20:00"
-                          value={selectedDraft.bedtime_start}
-                          onChangeText={(value) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [selectedChild.id]: { ...selectedDraft, bedtime_start: value },
-                            }))
-                          }
-                        />
-                      </View>
-                      <View style={styles.twoColItem}>
-                        <TextInput
-                          label="End (00:00–23:59)"
-                          mode="outlined"
-                          placeholder="07:00"
-                          value={selectedDraft.bedtime_end}
-                          onChangeText={(value) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [selectedChild.id]: { ...selectedDraft, bedtime_end: value },
-                            }))
-                          }
-                        />
-                      </View>
-                    </View>
-                    <Text variant="bodySmall" style={styles.helper}>
-                      Use 24-hour time from 00:00 to 23:59.
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.saveRow}>
-                  {saveBusyChildId === selectedChild.id ? <ActivityIndicator size="small" color={colors.primary} /> : null}
                   <PrimaryButton
-                    label={saveBusyChildId === selectedChild.id ? "Saving..." : "Save Changes"}
-                    onPress={() => void saveChild(selectedChild.id)}
-                    disabled={saveBusyChildId === selectedChild.id}
+                    label="Regenerate"
+                    mode="text"
+                    onPress={() => void regeneratePin(selectedChild.id)}
+                    loading={pinBusyChildId === selectedChild.id}
                   />
                 </View>
+                <Text variant="bodySmall" style={styles.pinHint}>
+                  Child signs in using name + this PIN.
+                </Text>
+                <PrimaryButton label="+ Register Child" mode="outlined" onPress={() => setShowCreateDialog(true)} />
               </>
             ) : null}
           </Card.Content>
         </Card>
       ) : null}
-      <Snackbar
-        visible={snackbar != null}
-        onDismiss={() => setSnackbar(null)}
-        duration={snackbar?.variant === "error" ? 4500 : 2200}
-        style={snackbar?.variant === "error" ? styles.errorSnackbar : styles.successSnackbar}
-      >
-        {snackbar?.message ?? ""}
-      </Snackbar>
 
-      <PrimaryButton label="Create Child Account" onPress={() => setShowCreateDialog(true)} />
+      {selectedChild && selectedDraft ? (
+        <>
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="map-marker-radius"
+                title="Live Location"
+                subtitle="See where your child is right now on the map."
+                style={styles.sectionHeaderInCard}
+              />
+              <ParentChildLocationPreview
+                children={children.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  avatar_url: c.avatar_url,
+                  is_online: c.is_online,
+                  last_seen_at: c.last_seen_at,
+                }))}
+                selectedChildId={selectedChildId}
+              />
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="target"
+                title="Assign Tasks & Activities"
+                subtitle="Games, chores, and exercise for this child."
+                style={styles.sectionHeaderInCard}
+              />
+              <View style={styles.assignRow}>
+                <PrimaryButton label="Learning Game" mode="outlined" onPress={() => openAssignLearning(selectedChild)} />
+                <PrimaryButton label="Household Chore" mode="outlined" onPress={() => openAssignChore(selectedChild)} />
+                <PrimaryButton label="Exercise" mode="outlined" onPress={() => openAssignExercise(selectedChild)} />
+              </View>
+              <Divider />
+              <Text variant="labelLarge" style={styles.subSectionTitle}>
+                Difficulty
+              </Text>
+              <View style={styles.chipRow}>
+                {(["easy", "medium", "hard"] as const).map((tier) => (
+                  <Chip
+                    key={tier}
+                    selected={selectedDraft.difficulty_level === tier}
+                    onPress={() =>
+                      setDrafts((prev) => ({
+                        ...prev,
+                        [selectedChild.id]: { ...selectedDraft, difficulty_level: tier },
+                      }))
+                    }
+                    compact
+                  >
+                    {difficultyTierLabel(tier)}
+                  </Chip>
+                ))}
+              </View>
+              <Divider />
+              <Text variant="labelLarge" style={styles.subSectionTitle}>
+                Sound / Audio Guidance Speed
+              </Text>
+              <View style={styles.chipRow}>
+                <Chip selected={selectedAudioRate <= 0.86} onPress={() => void updateAudioRate(selectedChild.id, 0.84)} compact>
+                  Slow
+                </Chip>
+                <Chip
+                  selected={selectedAudioRate > 0.86 && selectedAudioRate < 0.98}
+                  onPress={() => void updateAudioRate(selectedChild.id, 0.92)}
+                  compact
+                >
+                  Medium
+                </Chip>
+                <Chip selected={selectedAudioRate >= 0.98} onPress={() => void updateAudioRate(selectedChild.id, 1.05)} compact>
+                  Fast
+                </Chip>
+              </View>
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="clipboard-check-outline"
+                title="Review Submitted Tasks"
+                subtitle="Approve photos or send chores back for retry."
+                style={styles.sectionHeaderInCard}
+              />
+              {submissionRows.length === 0 ? (
+                <Text variant="bodySmall" style={styles.helper}>
+                  No submissions waiting for review.
+                </Text>
+              ) : null}
+              {submissionRows.map((row) => (
+                <View key={row.id} style={styles.reviewRow}>
+                  <View style={styles.reviewRowMain}>
+                    <View style={styles.reviewRowText}>
+                      <Text variant="titleSmall" style={styles.reviewTitle}>
+                        {row.tasks?.title ?? "Task"}
+                      </Text>
+                      <Text variant="bodySmall" style={styles.helper}>
+                        {row.image_url ? formatSubmissionTime(row.created_at) : "Waiting for parent review"}
+                      </Text>
+                    </View>
+                    <View style={styles.reviewIconActions}>
+                      <IconButton
+                        icon="check"
+                        mode="contained"
+                        containerColor={c.primary}
+                        iconColor="#FFFFFF"
+                        size={20}
+                        onPress={() => void approveSubmission(row)}
+                        disabled={reviewBusyId === row.id}
+                        accessibilityLabel="Approve submission"
+                      />
+                      <IconButton
+                        icon="close"
+                        mode="contained"
+                        containerColor="#FEE2E2"
+                        iconColor="#B91C1C"
+                        size={20}
+                        onPress={() => {
+                          setRejectTarget(row);
+                          setRejectNote("");
+                        }}
+                        disabled={reviewBusyId === row.id}
+                        accessibilityLabel="Reject submission"
+                      />
+                    </View>
+                  </View>
+                  {row.image_url && submissionImageUrls[row.id] ? (
+                    <Image source={{ uri: submissionImageUrls[row.id] }} style={styles.reviewImage} resizeMode="cover" />
+                  ) : null}
+                </View>
+              ))}
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="timer-outline"
+                title="Screen Time & Bedtime"
+                subtitle="Adjust daily limits and quiet hours with the arrows."
+                style={styles.sectionHeaderInCard}
+              />
+              <StepperControl
+                label="Daily Screen Limit"
+                value={formatDailyLimitDisplay(selectedDraft.daily_limit_minutes, selectedChild.daily_limit_minutes)}
+                onDecrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      daily_limit_minutes: stepDailyLimit(
+                        selectedDraft.daily_limit_minutes,
+                        selectedChild.daily_limit_minutes,
+                        -1
+                      ),
+                    },
+                  }))
+                }
+                onIncrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      daily_limit_minutes: stepDailyLimit(
+                        selectedDraft.daily_limit_minutes,
+                        selectedChild.daily_limit_minutes,
+                        1
+                      ),
+                    },
+                  }))
+                }
+                decrementAccessibilityLabel="Decrease daily screen limit"
+                incrementAccessibilityLabel="Increase daily screen limit"
+              />
+              <StepperControl
+                label="Bedtime Start"
+                value={formatBedtime12h(selectedDraft.bedtime_start)}
+                onDecrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      bedtime_start: stepBedtime(selectedDraft.bedtime_start, -1),
+                    },
+                  }))
+                }
+                onIncrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      bedtime_start: stepBedtime(selectedDraft.bedtime_start, 1),
+                    },
+                  }))
+                }
+                decrementAccessibilityLabel="Earlier bedtime start"
+                incrementAccessibilityLabel="Later bedtime start"
+              />
+              <StepperControl
+                label="Bedtime End"
+                value={formatBedtime12h(selectedDraft.bedtime_end)}
+                onDecrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      bedtime_end: stepBedtime(selectedDraft.bedtime_end, -1),
+                    },
+                  }))
+                }
+                onIncrement={() =>
+                  setDrafts((prev) => ({
+                    ...prev,
+                    [selectedChild.id]: {
+                      ...selectedDraft,
+                      bedtime_end: stepBedtime(selectedDraft.bedtime_end, 1),
+                    },
+                  }))
+                }
+                decrementAccessibilityLabel="Earlier bedtime end"
+                incrementAccessibilityLabel="Later bedtime end"
+              />
+              {ruleSummary ? (
+                <View style={styles.ruleSummaryBox}>
+                  <Text variant="bodySmall" style={styles.ruleSummaryText}>
+                    {ruleSummary}
+                  </Text>
+                </View>
+              ) : null}
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="cancel"
+                title="Block Distracting Apps"
+                subtitle="Tap an app to block or unblock it on the child's phone."
+                style={styles.sectionHeaderInCard}
+              />
+              <Text variant="bodySmall" style={styles.helper}>
+                One tap blocks every common install variant (e.g. TikTok and TikTok Lite).
+              </Text>
+              <View style={styles.appGrid}>
+                {BLOCKABLE_APP_GROUPS.map((app) => {
+                  const selected = screenRule ? isGroupFullySelected(screenRule.blocked_apps_json, app) : false;
+                  return (
+                    <Pressable
+                      key={app.slug}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Toggle ${app.label}`}
+                      style={[
+                        styles.appTile,
+                        {
+                          backgroundColor: selected ? theme.colors.primary : theme.colors.surfaceVariant,
+                          borderColor: selected ? theme.colors.primary : theme.colors.outline,
+                        },
+                      ]}
+                      onPress={() => toggleBlockedGroup(app)}
+                      disabled={!screenRule}
+                    >
+                      <MaterialCommunityIcons
+                        name={app.icon}
+                        size={22}
+                        color={selected ? theme.colors.onPrimary : theme.colors.primary}
+                      />
+                      <Text
+                        variant="bodySmall"
+                        style={[styles.appTileLabel, { color: selected ? theme.colors.onPrimary : theme.colors.onSurface }]}
+                      >
+                        {app.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Card.Content>
+          </Card>
+
+          <PrimaryButton
+            label="Save Changes"
+            onPress={() => void saveAllForChild(selectedChild.id)}
+            loading={saveBusyChildId === selectedChild.id}
+          />
+        </>
+      ) : null}
+
+      <ParentManageToast
+        visible={toast != null}
+        message={toast?.message ?? ""}
+        variant={toast?.variant ?? "success"}
+        onHide={hideToast}
+        durationMs={toast?.variant === "error" ? 4500 : 3200}
+      />
 
       <Portal>
         <Dialog visible={childPickerVisible} onDismiss={() => setChildPickerVisible(false)}>
@@ -734,7 +1165,15 @@ export function ParentChildrenScreen() {
                 key={child.id}
                 title={child.name}
                 description={`Age ${child.age}`}
-                left={(props) => <List.Icon {...props} icon="account-child" />}
+                left={() =>
+                  child.avatar_url ? (
+                    <Image source={{ uri: child.avatar_url }} style={styles.pickerListAvatar} />
+                  ) : (
+                    <View style={styles.pickerListAvatarFallback}>
+                      <Text style={styles.pickerListAvatarLetter}>{child.name.slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                  )
+                }
                 onPress={() => {
                   setSelectedChildId(child.id);
                   setChildPickerVisible(false);
@@ -867,32 +1306,36 @@ export function ParentChildrenScreen() {
             <PrimaryButton label={assigningChore ? "Assigning..." : "Assign"} onPress={() => void assignChore()} disabled={assigningChore} />
           </Dialog.Actions>
         </Dialog>
+
+        <Dialog visible={Boolean(rejectTarget)} onDismiss={() => setRejectTarget(null)}>
+          <Dialog.Title>Reject submission</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">Optional note for your child:</Text>
+            <TextInput mode="outlined" value={rejectNote} onChangeText={setRejectNote} multiline />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" onPress={() => setRejectTarget(null)} mode="text" />
+            <PrimaryButton label="Confirm reject" onPress={() => void confirmRejectSubmission()} />
+          </Dialog.Actions>
+        </Dialog>
       </Portal>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(c: AppColors) {
+  return StyleSheet.create({
   kicker: {
-    color: colors.subtext,
+    color: c.subtext,
     marginBottom: 8,
   },
   childCard: {
     borderRadius: radii.md,
+    backgroundColor: c.card,
     ...shadows.card,
   },
-  controlsCard: {
-    borderRadius: radii.md,
-    ...shadows.card,
-  },
-  controlsContent: {
-    gap: 10,
-  },
-  sortHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
+  sectionHeaderInCard: {
+    marginBottom: 4,
   },
   chipRow: {
     flexDirection: "row",
@@ -911,10 +1354,31 @@ const styles = StyleSheet.create({
     maxHeight: 320,
     paddingHorizontal: 8,
   },
+  pickerListAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    marginLeft: 8,
+    backgroundColor: c.sectionIconBg,
+  },
+  pickerListAvatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.sm,
+    marginLeft: 8,
+    backgroundColor: c.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerListAvatarLetter: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    fontSize: 16,
+  },
   pickerRow: {
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.card,
     borderRadius: radii.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -932,28 +1396,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pickerLabel: {
-    color: colors.subtext,
+    color: c.subtext,
   },
   pickerValue: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
   },
-  inlineBusyWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  saveRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    gap: 6,
-  },
   sectionCard: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.mutedSurface,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     padding: 12,
     gap: 10,
   },
@@ -966,7 +1419,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   subSectionTitle: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
   },
   twoColRow: {
@@ -979,7 +1432,7 @@ const styles = StyleSheet.create({
     minWidth: 160,
   },
   helper: {
-    color: colors.subtext,
+    color: c.subtext,
     lineHeight: 18,
   },
   pinRow: {
@@ -995,23 +1448,112 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pinLabel: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
     fontWeight: "700",
   },
   pinHint: {
-    color: colors.subtext,
+    color: c.subtext,
+  },
+  childSelectorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: c.card,
+  },
+  childSelectorAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.sm,
+    backgroundColor: c.sectionIconBg,
+  },
+  childSelectorAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: radii.sm,
+    backgroundColor: c.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childSelectorAvatarLetter: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  childSelectorName: {
+    flex: 1,
+    fontWeight: "700",
+    color: c.text,
   },
   sectionLabel: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
   },
-  emptyFiltered: {
-    color: colors.subtext,
+  reviewRow: {
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radii.md,
+    padding: 10,
+    gap: 8,
+    backgroundColor: c.card,
   },
-  errorSnackbar: {
-    backgroundColor: "#B91C1C",
+  reviewRowMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  successSnackbar: {
-    backgroundColor: "#2E7D32",
+  reviewRowText: {
+    flex: 1,
+    gap: 2,
   },
-});
+  reviewTitle: {
+    fontWeight: "700",
+    color: c.text,
+  },
+  reviewIconActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  reviewImage: {
+    width: "100%",
+    height: 140,
+    borderRadius: radii.sm,
+    backgroundColor: c.border,
+  },
+  ruleSummaryBox: {
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: radii.md,
+    padding: 10,
+    backgroundColor: c.mutedSurface,
+  },
+  ruleSummaryText: {
+    color: c.subtext,
+    lineHeight: 18,
+  },
+  appGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  appTile: {
+    width: "31%",
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  appTileLabel: {
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  });
+}
