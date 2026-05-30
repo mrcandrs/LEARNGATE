@@ -7,7 +7,8 @@ import { AchievementBadgeCard } from "@/components/AchievementBadgeCard";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { useChildAchievements } from "@/hooks/useChildAchievements";
@@ -27,6 +28,8 @@ type PointsFilter = "all" | "games" | "tasks" | "chores" | "exercise";
 
 export function ChildProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ChildProfileStackParamList, "MyStuffMain">>();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [loading, setLoading] = useState(true);
@@ -146,14 +149,14 @@ export function ChildProfileScreen() {
       ) : null}
 
       <View style={styles.pad}>
-        {profileLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+        {profileLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
         {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
 
         <View style={styles.identity}>
           {child?.avatar_url ? (
             <Image source={{ uri: child.avatar_url }} style={styles.bigAvatar} />
           ) : (
-            <Avatar.Icon size={120} icon="account" style={styles.bigAvatarPlaceholder} color={colors.primary} />
+            <Avatar.Icon size={120} icon="account" style={[styles.bigAvatarPlaceholder, { backgroundColor: c.mutedSurface }]} color={c.primary} />
           )}
           <PrimaryButton
             label={uploadingAvatar ? "Uploading..." : "Upload Profile Photo"}
@@ -170,10 +173,10 @@ export function ChildProfileScreen() {
         </View>
         <PrimaryButton label="Settings" mode="outlined" onPress={() => navigation.navigate("ChildSettings")} />
 
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: c.card }]}>
           <Card.Title title="Learning Stats" titleStyle={styles.cardTitle} />
           <Card.Content style={styles.statsList}>
-            {loading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+            {loading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
             <StatRow label="Active days (14d)" value={String(achievementStats?.activeDaysLast14 ?? 0)} />
             <StatRow label="Tasks Completed" value={String(achievementStats?.completedTasks ?? 0)} />
             <StatRow label="Games Finished" value={String(achievementStats?.gamesCompleted ?? 0)} />
@@ -182,7 +185,7 @@ export function ChildProfileScreen() {
           </Card.Content>
         </Card>
 
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: c.card }]}>
           <Card.Title
             title="Achievements"
             subtitle={`${unlockedCount} of ${totalCount} unlocked`}
@@ -190,7 +193,7 @@ export function ChildProfileScreen() {
           />
           <Card.Content style={styles.badgeGrid}>
             {achievementsLoading && !refreshing ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color={c.primary} />
             ) : null}
             {nextUp && !nextUp.unlocked ? (
               <Text style={styles.nextUp}>
@@ -204,11 +207,15 @@ export function ChildProfileScreen() {
           </Card.Content>
         </Card>
 
-        <Card style={styles.card}>
+        <Card style={[styles.card, { backgroundColor: c.card }]}>
           <Card.Title title="Points History" titleStyle={styles.cardTitle} />
           <Card.Content style={styles.statsList}>
             <View style={styles.filterRow}>
-              <Chip selected={pointsFilter === "all"} onPress={() => setPointsFilter("all")}>
+              <Chip
+                selected={pointsFilter === "all"}
+                onPress={() => setPointsFilter("all")}
+                style={pointsFilter === "all" ? undefined : styles.filterChip}
+              >
                 All
               </Chip>
               <Chip selected={pointsFilter === "games"} onPress={() => setPointsFilter("games")}>
@@ -255,15 +262,31 @@ export function ChildProfileScreen() {
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
+  const c = useAppColors();
   return (
-    <View style={styles.statRow}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={statRowStyles.row}>
+      <Text style={[statRowStyles.label, { color: c.subtext }]}>{label}</Text>
+      <Text style={[statRowStyles.value, { color: c.text }]}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const statRowStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  label: {
+    flex: 1,
+  },
+  value: {
+    fontWeight: "700",
+  },
+});
+
+function createStyles(c: ReturnType<typeof useAppColors>) {
+  return StyleSheet.create({
   pad: {
     paddingHorizontal: 16,
     paddingBottom: 32,
@@ -277,18 +300,16 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: colors.border,
+    backgroundColor: c.border,
   },
-  bigAvatarPlaceholder: {
-    backgroundColor: colors.background,
-  },
+  bigAvatarPlaceholder: {},
   name: {
     fontWeight: "700",
-    color: colors.text,
+    color: c.text,
     marginTop: 12,
   },
   subtitle: {
-    color: colors.subtext,
+    color: c.subtext,
     marginTop: 4,
   },
   card: {
@@ -297,26 +318,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontWeight: "700",
-    color: colors.text,
+    color: c.text,
   },
   filterChip: {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: c.mutedSurface,
   },
   statsList: {
     gap: 12,
-  },
-  statRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statLabel: {
-    color: colors.subtext,
-    flex: 1,
-  },
-  statValue: {
-    color: colors.text,
-    fontWeight: "700",
   },
   badgeGrid: {
     flexDirection: "row",
@@ -325,18 +333,18 @@ const styles = StyleSheet.create({
   },
   nextUp: {
     width: "100%",
-    color: colors.primaryDark,
+    color: c.primaryDark,
     fontWeight: "600",
     marginBottom: 4,
   },
   emptyAch: {
-    color: colors.subtext,
+    color: c.subtext,
   },
   pointsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: c.mutedSurface,
     borderRadius: radii.sm,
     padding: 10,
     gap: 10,
@@ -345,22 +353,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pointsType: {
-    color: colors.text,
+    color: c.text,
     textTransform: "capitalize",
   },
   pointsTime: {
-    color: colors.subtext,
+    color: c.subtext,
   },
   pointsValue: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
     fontWeight: "800",
   },
   filterRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    marginBottom: 8,
   },
   errorText: {
     color: "#B91C1C",
   },
-});
+  });
+}

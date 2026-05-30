@@ -4,9 +4,11 @@ import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotific
 
 /**
  * Keeps push_tokens in sync for the signed-in role (parent or child).
- * Re-registers when the app returns to foreground if no token is saved.
+ * When refreshOnForeground is true (parent), re-saves the device token on every resume so
+ * the parent account keeps the token after a child session on the same phone.
  */
-export function useEnsurePushToken(enabled: boolean) {
+export function useEnsurePushToken(enabled: boolean, options?: { refreshOnForeground?: boolean }) {
+  const refreshOnForeground = options?.refreshOnForeground ?? false;
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const syncingRef = useRef(false);
 
@@ -17,7 +19,7 @@ export function useEnsurePushToken(enabled: boolean) {
     syncingRef.current = true;
     try {
       const saved = await hasMyPushToken();
-      if (!saved) {
+      if (!saved || refreshOnForeground) {
         const result = await registerAndSavePushToken();
         if (!result.ok && __DEV__) {
           console.warn("[push] ensure token:", result.message);
@@ -26,7 +28,7 @@ export function useEnsurePushToken(enabled: boolean) {
     } finally {
       syncingRef.current = false;
     }
-  }, [enabled]);
+  }, [enabled, refreshOnForeground]);
 
   useEffect(() => {
     if (!enabled) {

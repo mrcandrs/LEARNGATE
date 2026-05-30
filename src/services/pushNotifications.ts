@@ -1,6 +1,7 @@
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { navigateFromNotification } from "@/navigation/navigationRef";
 import { supabase } from "@/services/supabase";
 
 Notifications.setNotificationHandler({
@@ -35,8 +36,13 @@ export function initPushNotificationListeners() {
   });
 
   Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+    const kind = typeof data?.kind === "string" ? data.kind : "";
+    if (kind && kind !== "token_health_ping") {
+      navigateFromNotification(kind, data ?? {});
+    }
     if (__DEV__) {
-      console.log("[push] opened", response.notification.request.content.data);
+      console.log("[push] opened", data);
     }
   });
 }
@@ -57,8 +63,10 @@ function resolveExpoProjectId(): string | null {
 async function ensureAndroidNotificationChannels() {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync("default", {
-    name: "General",
-    importance: Notifications.AndroidImportance.DEFAULT,
+    name: "Family updates",
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
   await Notifications.setNotificationChannelAsync("tasks", {
     name: "Tasks & family updates",

@@ -14,7 +14,7 @@ export function PushNotificationBridge() {
     initPushNotificationListeners();
   }, []);
 
-  useEnsurePushToken(signedIn);
+  useEnsurePushToken(signedIn, { refreshOnForeground: appMode === "parent" });
   useChildTaskAlerts(appMode === "child");
   useParentChildPushHealthCheck(appMode === "parent");
 

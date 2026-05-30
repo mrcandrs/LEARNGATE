@@ -158,7 +158,7 @@ async function deliverUninstallAlertToParent(
     body: `LEARNGATE on ${childName}'s device may have been uninstalled or had its data cleared. Open the child app again to restore monitoring.`,
     data: { kind: "child_app_uninstalled", child_id: child.id },
     sound: "default",
-    channelId: "default",
+    channelId: "tasks",
     priority: "high",
   }));
 
@@ -437,7 +437,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           data: { kind: "task_submitted", task_id: p.task_id, child_id: childId },
           sound: "default",
           priority: "high",
-          channelId: "default",
+          channelId: "tasks",
         });
         pushedForRow++;
       }
@@ -451,7 +451,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           data: { kind: "task_completed", task_id: p.task_id, child_id: childId },
           sound: "default",
           priority: "high",
-          channelId: "default",
+          channelId: "tasks",
         });
         pushedForRow++;
       }
@@ -480,7 +480,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           data: { kind: "child_game_milestone", child_id: childId },
           sound: "default",
           priority: "high",
-          channelId: "default",
+          channelId: "tasks",
         });
         pushedForRow++;
       }
@@ -493,7 +493,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           body: `LEARNGATE on ${childName}'s device may have been uninstalled or had its data cleared. Open the child app again to restore monitoring.`,
           data: { kind: "child_app_uninstalled", child_id: childId },
           sound: "default",
-          channelId: "default",
+          channelId: "tasks",
           priority: "high",
         });
         pushedForRow++;
@@ -523,7 +523,7 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
           data: { kind: "parent_insight", child_id: childId },
           sound: "default",
           priority: "high",
-          channelId: "default",
+          channelId: "tasks",
         });
         pushedForRow++;
       }

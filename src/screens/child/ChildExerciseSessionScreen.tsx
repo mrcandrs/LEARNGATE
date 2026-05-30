@@ -7,7 +7,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { ChildTasksStackParamList } from "@/types/navigation";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { getExerciseById } from "@/data/exercises";
 import { supabase } from "@/services/supabase";
 import { useChildProfile } from "@/hooks/useChildProfile";
@@ -16,6 +17,8 @@ import { formatAppError } from "@/utils/errors";
 type Props = NativeStackScreenProps<ChildTasksStackParamList, "ExerciseSession">;
 
 export function ChildExerciseSessionScreen({ route, navigation }: Props) {
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const { taskId, exerciseId } = route.params;
   const exercise = useMemo(() => getExerciseById(exerciseId), [exerciseId]);
   const { child, refresh: refreshProfile } = useChildProfile();
@@ -113,7 +116,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       <ScreenContainer>
         <Card style={[styles.permissionCard, shadows.card]}>
           <Card.Content style={styles.permissionInner}>
-            <MaterialCommunityIcons name="camera-outline" size={40} color={colors.primaryDark} />
+            <MaterialCommunityIcons name="camera-outline" size={40} color={c.primaryDark} />
             <Text variant="titleLarge" style={styles.permissionTitle}>
               Allow access to the camera and let&apos;s go!
             </Text>
@@ -221,7 +224,8 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useAppColors>) =>
+  StyleSheet.create({
   full: { flex: 1, backgroundColor: "#000000" },
   camera: { flex: 1 },
   topBar: {
@@ -265,7 +269,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 14,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.card,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     gap: 10,
@@ -281,30 +285,30 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 10,
     borderRadius: 14,
-    backgroundColor: "#E5F9F2",
-    color: "#0F766E",
+    backgroundColor: c.surfaceTint,
+    color: c.primaryDark,
     fontWeight: "900",
   },
   repText: { flex: 1 },
-  repTitle: { fontWeight: "800", color: colors.text },
-  repSub: { color: colors.subtext },
+  repTitle: { fontWeight: "800", color: c.text },
+  repSub: { color: c.subtext },
   actions: { gap: 8 },
-  smallNote: { color: colors.subtext, textAlign: "center" },
+  smallNote: { color: c.subtext, textAlign: "center" },
   errorText: { color: "#B91C1C", textAlign: "center" },
-  permissionCard: { borderRadius: radii.lg },
+  permissionCard: { borderRadius: radii.lg, backgroundColor: c.card },
   permissionInner: { gap: 10, alignItems: "center" },
-  permissionTitle: { fontWeight: "800", textAlign: "center", color: colors.text },
-  permissionSub: { color: colors.subtext, textAlign: "center", marginBottom: 6 },
-  introCard: { borderRadius: radii.lg },
+  permissionTitle: { fontWeight: "800", textAlign: "center", color: c.text },
+  permissionSub: { color: c.subtext, textAlign: "center", marginBottom: 6 },
+  introCard: { borderRadius: radii.lg, backgroundColor: c.card },
   introInner: { gap: 10, alignItems: "center" },
-  introTitle: { fontWeight: "800", color: colors.text },
-  introHint: { color: colors.subtext, textAlign: "center" },
-  introSub: { fontWeight: "800", color: colors.text, textAlign: "center" },
-  introNote: { color: colors.subtext, textAlign: "center" },
+  introTitle: { fontWeight: "800", color: c.text },
+  introHint: { color: c.subtext, textAlign: "center" },
+  introSub: { fontWeight: "800", color: c.text, textAlign: "center" },
+  introNote: { color: c.subtext, textAlign: "center" },
   counterDemo: {
     width: "100%",
     borderRadius: radii.md,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: c.mutedSurface,
     padding: 16,
     flexDirection: "row",
     alignItems: "center",
@@ -313,12 +317,12 @@ const styles = StyleSheet.create({
   counterNum: {
     width: 56,
     textAlign: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.card,
     borderRadius: 12,
     paddingVertical: 10,
     fontWeight: "900",
-    color: "#0F766E",
+    color: c.primaryDark,
   },
-  counterBar: { flex: 1, height: 10, borderRadius: 6, backgroundColor: "#E5E7EB" },
+  counterBar: { flex: 1, height: 10, borderRadius: 6, backgroundColor: c.progressTrack },
 });
 

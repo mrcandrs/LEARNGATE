@@ -4,7 +4,7 @@ import { ParentOverviewScreen } from "@/screens/parent/ParentOverviewScreen";
 import { ParentChildrenScreen } from "@/screens/parent/ParentChildrenScreen";
 import { ParentSettingsScreen } from "@/screens/parent/ParentSettingsScreen";
 import { ParentTabParamList } from "@/types/navigation";
-import { colors } from "@/theme/theme";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useParentChildPushHealthCheck } from "@/hooks/useParentChildPushHealthCheck";
 import { useAuth } from "@/store/AuthContext";
 import { useTheme } from "react-native-paper";
@@ -30,6 +30,7 @@ export function ParentTabsNavigator() {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
+        headerRight: () => <NotificationBell enabled={appMode === "parent"} variant="header" />,
         title: PARENT_TITLES[route.name as keyof ParentTabParamList],
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,

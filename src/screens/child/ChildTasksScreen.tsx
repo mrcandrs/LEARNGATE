@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
@@ -9,6 +9,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { TaskListItem } from "@/components/TaskListItem";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
 import { colors, radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { useChildProfile } from "@/hooks/useChildProfile";
@@ -66,6 +67,8 @@ function isActionDisabled(task: ChildTaskRow) {
 export function ChildTasksScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<ChildTasksStackParamList, "TasksList">>();
   const tabNav = useNavigation<NavigationProp<ChildTabParamList>>();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<ChildTaskRow[]>([]);
@@ -376,7 +379,8 @@ export function ChildTasksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useAppColors>) =>
+  StyleSheet.create({
   pad: {
     paddingHorizontal: 16,
     paddingBottom: 24,
@@ -397,7 +401,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -423,13 +427,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   sectionTitle: {
-    color: colors.text,
+    color: c.text,
     marginTop: 12,
     marginBottom: 6,
     fontWeight: "700",
   },
   empty: {
-    color: colors.subtext,
+    color: c.subtext,
     marginBottom: 8,
   },
   doneWrap: {

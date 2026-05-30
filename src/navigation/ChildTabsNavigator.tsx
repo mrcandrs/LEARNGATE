@@ -6,7 +6,6 @@ import { ChildGamesStackNavigator } from "@/navigation/ChildGamesStackNavigator"
 import { ChildTasksStackNavigator } from "@/navigation/ChildTasksStackNavigator";
 import { ChildProfileStackNavigator } from "@/navigation/ChildProfileStackNavigator";
 import { ChildTabParamList } from "@/types/navigation";
-import { colors } from "@/theme/theme";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { useAuth } from "@/store/AuthContext";
 import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
@@ -34,7 +33,7 @@ export function ChildTabsNavigator() {
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: colors.subtext,
+        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: lock.isLocked
           ? { display: "none", height: 0 }
           : {

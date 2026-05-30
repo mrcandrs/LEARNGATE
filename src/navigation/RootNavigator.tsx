@@ -1,5 +1,6 @@
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef } from "@/navigation/navigationRef";
 import { BlockedReturnDialog } from "@/components/BlockedReturnDialog";
 import { ChildAppUsageBridge } from "@/components/ChildAppUsageBridge";
 import { ChildScreenLockProvider } from "@/store/ChildScreenLockContext";
@@ -23,7 +24,7 @@ export function RootNavigator() {
 
   return (
     <>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {appMode === "auth" ? (
           <AuthStackNavigator />
         ) : appMode === "parent" ? (

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -5,7 +6,8 @@ import { Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { ChildGamesStackParamList } from "@/types/navigation";
@@ -15,6 +17,8 @@ type GamesNav = NativeStackNavigationProp<ChildGamesStackParamList, "GamesList">
 export function ChildGamesScreen() {
   const navigation = useNavigation<GamesNav>();
   const { child } = useChildProfile();
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
 
   return (
     <ScreenContainer scroll contentPadding={0} includeTopInset={false}>
@@ -28,7 +32,7 @@ export function ChildGamesScreen() {
       ) : null}
       <View style={styles.pad}>
         <View style={styles.sectionHead}>
-          <MaterialCommunityIcons name="gamepad-variant" size={28} color={colors.primaryDark} />
+          <MaterialCommunityIcons name="gamepad-variant" size={28} color={c.primaryDark} />
           <Text variant="titleLarge" style={styles.sectionTitle}>
             Learning games
           </Text>
@@ -76,7 +80,8 @@ export function ChildGamesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useAppColors>) =>
+  StyleSheet.create({
   pad: {
     paddingHorizontal: 16,
     paddingBottom: 24,
@@ -88,11 +93,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   sectionTitle: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
   },
   hint: {
-    color: colors.subtext,
+    color: c.subtext,
     marginBottom: 12,
   },
   grid: {

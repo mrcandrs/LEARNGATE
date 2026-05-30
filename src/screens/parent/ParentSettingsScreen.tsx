@@ -275,7 +275,9 @@ export function ParentSettingsScreen() {
           />
           <Divider />
           <Text variant="bodySmall" style={styles.pushHint}>
-            Device alerts (new tasks, submissions) need notification permission and a development build — not Expo Go.
+            Device alerts need notification permission and a development build (not Expo Go). On a phone used for
+            both parent and child sign-in, open the parent app once so this device is registered for parent alerts.
+            Rebuild after changing notification channels.
           </Text>
           <Button
             mode="outlined"

@@ -6,7 +6,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import type { ChildGamesStackParamList } from "@/types/navigation";
-import { colors, radii, shadows } from "@/theme/theme";
+import { radii, shadows } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
@@ -343,6 +344,8 @@ function createScienceRound(settings: ReturnType<typeof getGameSettings>, slot: 
 
 export function ChildMiniGameScreen({ route, navigation }: Props) {
   const { gameId, taskId } = route.params;
+  const c = useAppColors();
+  const styles = useMemo(() => createStyles(c), [c]);
   const { child, loading: profileLoading, error: profileError, refresh } = useChildProfile();
   const audio = useAudioGuidance();
   const difficultyLevel = child?.difficulty_level ?? 5;
@@ -583,9 +586,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   if (done) {
     return (
       <ScreenContainer scroll>
-        <Card style={[styles.summaryCard, shadows.card]}>
+        <Card style={[styles.summaryCard, { backgroundColor: c.card }, shadows.card]}>
           <Card.Content style={styles.summaryInner}>
-            <MaterialCommunityIcons name="trophy" size={56} color={colors.warning} />
+            <MaterialCommunityIcons name="trophy" size={56} color={c.warning} />
             <Text variant="headlineSmall" style={styles.summaryTitle}>
               Game complete
             </Text>
@@ -619,9 +622,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   if (profileLoading) {
     return (
       <ScreenContainer scroll>
-        <Card style={[styles.summaryCard, shadows.card]}>
+        <Card style={[{ backgroundColor: c.card, borderRadius: radii.lg }, shadows.card]}>
           <Card.Content style={styles.summaryInner}>
-            <MaterialCommunityIcons name="gamepad-variant-outline" size={42} color={colors.primary} />
+            <MaterialCommunityIcons name="gamepad-variant-outline" size={42} color={c.primary} />
             <Text variant="titleMedium" style={styles.summaryTitle}>
               Preparing your difficulty...
             </Text>
@@ -634,7 +637,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   if (!child) {
     return (
       <ScreenContainer scroll>
-        <Card style={[styles.summaryCard, shadows.card]}>
+        <Card style={[{ backgroundColor: c.card, borderRadius: radii.lg }, shadows.card]}>
           <Card.Content style={styles.summaryInner}>
             <Text variant="bodyMedium" style={styles.errorText}>
               {profileError ?? "Could not load child profile. Please go back and try again."}
@@ -653,7 +656,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
           Round {round + 1} / {settings.rounds}
         </Text>
         <View style={styles.hudStars}>
-          <MaterialCommunityIcons name="star" size={18} color={colors.warning} />
+          <MaterialCommunityIcons name="star" size={18} color={c.warning} />
           <Text variant="labelLarge" style={styles.hudText}>
             {score}
           </Text>
@@ -727,13 +730,13 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
           </Text>
           {colorRound.mode === "blob" ? (
             <View style={styles.colorRow}>
-              {colorRound.choices.map((c) => (
+              {colorRound.choices.map((colorOpt) => (
                 <Pressable
-                  key={c.id}
+                  key={colorOpt.id}
                   accessibilityRole="button"
-                  accessibilityLabel={c.label}
-                  style={({ pressed }) => [styles.colorBlob, { backgroundColor: c.bg }, pressed && styles.choicePressed]}
-                  onPress={() => advance(c.id === colorRound.answer)}
+                  accessibilityLabel={colorOpt.label}
+                  style={({ pressed }) => [styles.colorBlob, { backgroundColor: colorOpt.bg }, pressed && styles.choicePressed]}
+                  onPress={() => advance(colorOpt.id === colorRound.answer)}
                   disabled={locked}
                 />
               ))}
@@ -771,7 +774,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
                 disabled={locked}
               >
                 <Text style={styles.shapeGlyph}>{s.glyph}</Text>
-                <Text variant="labelMedium">{s.label}</Text>
+                <Text variant="labelMedium" style={styles.shapeLabel}>
+                  {s.label}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -780,9 +785,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
       {gameId === "science" && scienceRound ? (
         <View style={styles.block}>
-          <Card style={[styles.scienceCard, shadows.card]}>
+          <Card style={[styles.scienceCard, { backgroundColor: c.mutedSurface }, shadows.card]}>
             <Card.Content>
-              <MaterialCommunityIcons name="flask" size={36} color={colors.info} />
+              <MaterialCommunityIcons name="flask" size={36} color={c.info} />
               <Text variant="titleMedium" style={styles.scienceQ}>
                 {scienceRound.q}
               </Text>
@@ -815,21 +820,22 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useAppColors>) =>
+  StyleSheet.create({
   hud: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: colors.card,
+    backgroundColor: c.card,
     borderRadius: radii.md,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     ...shadows.card,
   },
   hudText: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
   },
   hudStars: {
@@ -838,7 +844,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   feedback: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
     textAlign: "center",
   },
   feedbackBanner: {
@@ -863,8 +869,8 @@ const styles = StyleSheet.create({
   },
   difficultyPill: {
     alignSelf: "center",
-    color: colors.primaryDark,
-    backgroundColor: "#E8F5E9",
+    color: c.primaryDark,
+    backgroundColor: c.surfaceTint,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: radii.pill,
@@ -875,12 +881,12 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   prompt: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "700",
     textAlign: "center",
   },
   highlight: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
   },
   choiceGrid: {
     flexDirection: "row",
@@ -892,9 +898,9 @@ const styles = StyleSheet.create({
     minWidth: "44%",
     minHeight: 72,
     borderRadius: radii.md,
-    backgroundColor: colors.card,
+    backgroundColor: c.card,
     borderWidth: 2,
-    borderColor: colors.border,
+    borderColor: c.border,
     alignItems: "center",
     justifyContent: "center",
     padding: 12,
@@ -905,11 +911,11 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   choiceGlyph: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "800",
   },
   choiceNum: {
-    color: colors.text,
+    color: c.text,
     fontWeight: "800",
   },
   colorRow: {
@@ -923,20 +929,22 @@ const styles = StyleSheet.create({
     height: 88,
     borderRadius: 44,
     borderWidth: 3,
-    borderColor: "#FFFFFF",
+    borderColor: c.border,
     ...shadows.card,
   },
   shapeGlyph: {
     fontSize: 36,
-    color: colors.text,
+    color: c.text,
+  },
+  shapeLabel: {
+    color: c.subtext,
   },
   scienceCard: {
     borderRadius: radii.md,
-    backgroundColor: "#EEF6FF",
   },
   scienceQ: {
     marginTop: 8,
-    color: colors.text,
+    color: c.text,
     fontWeight: "600",
   },
   tfRow: {
@@ -955,16 +963,16 @@ const styles = StyleSheet.create({
   },
   summaryTitle: {
     fontWeight: "800",
-    color: colors.text,
+    color: c.text,
   },
   summaryScore: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
   },
   summaryXp: {
-    color: colors.subtext,
+    color: c.subtext,
   },
   summaryMeta: {
-    color: colors.primaryDark,
+    color: c.primaryDark,
     fontWeight: "600",
     marginBottom: 8,
   },

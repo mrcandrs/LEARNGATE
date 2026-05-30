@@ -1,7 +1,8 @@
 import { Image, StyleSheet, View } from "react-native";
 import { Text, useTheme } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { colors, radii, shadows } from "@/theme/theme";
+import { NotificationBell } from "@/components/NotificationBell";
+import { radii, shadows } from "@/theme/theme";
 import { levelToDifficultyLabel } from "@/utils/difficulty";
 
 type Props = {
@@ -9,9 +10,10 @@ type Props = {
   level: number;
   stars: number;
   avatarUrl?: string | null;
+  showNotifications?: boolean;
 };
 
-export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
+export function ChildDashboardHeader({ name, level, stars, avatarUrl, showNotifications = true }: Props) {
   const theme = useTheme();
   const difficultyLabel = levelToDifficultyLabel(level);
 
@@ -43,6 +45,7 @@ export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
             </View>
           </View>
         </View>
+        {showNotifications ? <NotificationBell enabled variant="dashboard" /> : null}
       </View>
     </View>
   );
@@ -50,7 +53,6 @@ export function ChildDashboardHeader({ name, level, stars, avatarUrl }: Props) {
 
 const styles = StyleSheet.create({
   outer: {
-    backgroundColor: colors.primary,
     borderBottomLeftRadius: radii.lg,
     borderBottomRightRadius: radii.lg,
     paddingTop: 12,
