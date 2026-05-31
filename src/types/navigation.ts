@@ -15,30 +15,21 @@ export type ParentTabParamList = {
   Settings: undefined;
 };
 
-export type ChildGamesStackParamList = {
-  GamesList: undefined;
-  GamePlay: { gameId: GameId; title: string; taskId?: string };
-};
-
-export type ChildTasksStackParamList = {
-  TasksList: undefined;
-  ExerciseSession: { taskId: string; exerciseId: ExerciseId; title: string };
-};
-
 export type ChildHomeStackParamList = {
   HomeMain: undefined;
+  TasksList: undefined;
+  ProfileSettings: undefined;
 };
 
-export type ChildProfileStackParamList = {
-  MyStuffMain: undefined;
-  ChildSettings: undefined;
+export type ChildActivitiesStackParamList = {
+  ActivitiesMain: { segment?: "games" | "movement" } | undefined;
+  GamePlay: { gameId: GameId; title: string; taskId?: string };
+  ExerciseSession: { taskId?: string; exerciseId: ExerciseId; title: string };
 };
 
 export type ChildTabParamList = {
   Home: NavigatorScreenParams<ChildHomeStackParamList> | undefined;
-  Games: NavigatorScreenParams<ChildGamesStackParamList> | undefined;
-  Tasks: NavigatorScreenParams<ChildTasksStackParamList> | undefined;
-  MyStuff: NavigatorScreenParams<ChildProfileStackParamList> | undefined;
+  Activities: NavigatorScreenParams<ChildActivitiesStackParamList> | undefined;
 };
 
 export type { GameId };

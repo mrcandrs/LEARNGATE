@@ -5,9 +5,7 @@ export type RootNavParams = {
   Children?: undefined;
   Settings?: undefined;
   Home?: undefined;
-  Games?: undefined;
-  Tasks?: undefined;
-  MyStuff?: undefined;
+  Activities?: undefined;
 };
 
 export const navigationRef = createNavigationContainerRef<RootNavParams>();
@@ -37,6 +35,6 @@ export function navigateFromNotification(kind: string, _data: Record<string, unk
   }
 
   if (childKinds.has(kind)) {
-    navigationRef.navigate("Tasks");
+    navigationRef.navigate("Home");
   }
 }

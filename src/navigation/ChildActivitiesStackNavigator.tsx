@@ -1,12 +1,13 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { ChildGamesScreen } from "@/screens/child/ChildGamesScreen";
+import { ChildActivitiesScreen } from "@/screens/child/ChildActivitiesScreen";
 import { ChildMiniGameScreen } from "@/screens/child/ChildMiniGameScreen";
-import type { ChildGamesStackParamList } from "@/types/navigation";
+import { ChildExerciseSessionScreen } from "@/screens/child/ChildExerciseSessionScreen";
 import { useTheme } from "react-native-paper";
+import type { ChildActivitiesStackParamList } from "@/types/navigation";
 
-const Stack = createNativeStackNavigator<ChildGamesStackParamList>();
+const Stack = createNativeStackNavigator<ChildActivitiesStackParamList>();
 
-export function ChildGamesStackNavigator() {
+export function ChildActivitiesStackNavigator() {
   const theme = useTheme();
   return (
     <Stack.Navigator
@@ -18,11 +19,16 @@ export function ChildGamesStackNavigator() {
       }}
     >
       <Stack.Screen
-        name="GamesList"
-        component={ChildGamesScreen}
-        options={{ title: "Games", headerBackVisible: false, headerLeft: () => null }}
+        name="ActivitiesMain"
+        component={ChildActivitiesScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="GamePlay" component={ChildMiniGameScreen} options={({ route }) => ({ title: route.params.title })} />
+      <Stack.Screen
+        name="ExerciseSession"
+        component={ChildExerciseSessionScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

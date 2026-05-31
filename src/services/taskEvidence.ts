@@ -1,7 +1,7 @@
-import * as ImagePicker from "expo-image-picker";
 import { File as ExpoFile } from "expo-file-system";
 import { Platform } from "react-native";
 import { supabase } from "@/services/supabase";
+import { requestCameraPhoto } from "@/services/photoCapture";
 
 export const TASK_EVIDENCE_BUCKET = "task-evidence";
 
@@ -25,29 +25,13 @@ async function readLocalImageAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
   }
 }
 
+/** Uses in-app camera (expo-camera) so chore photos work without expo-image-picker native module. */
 export async function pickTaskPhotoFromCamera(): Promise<string | null> {
-  const permission = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permission.granted) {
-    throw new Error("Camera permission is required to verify this chore.");
-  }
-
-  const result = await ImagePicker.launchCameraAsync({
-    mediaTypes: ["images"],
-    quality: 0.82,
-    allowsEditing: true,
+  return requestCameraPhoto({
+    facing: "back",
+    title: "Take chore photo",
+    hint: "Show your completed chore clearly in the frame.",
   });
-
-  const legacyCancelled = "cancelled" in result && (result as { cancelled?: boolean }).cancelled === true;
-  if (legacyCancelled || result.canceled) {
-    return null;
-  }
-
-  const asset = result.assets?.[0];
-  if (!asset?.uri) {
-    return null;
-  }
-
-  return asset.uri;
 }
 
 /** Uploads to path `{childId}/{taskId}/{timestamp}.jpg` — matches storage RLS policies. */

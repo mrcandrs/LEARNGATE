@@ -156,7 +156,7 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
         </View>
 
         <View style={[styles.slide, { width: slideWidth }]}>
-          <View style={[styles.panelCard, { borderColor: c.border }]}>
+          <View style={[styles.panelCard, { borderColor: c.border, backgroundColor: c.card }]}>
             <View style={styles.panelHeader}>
               <Text style={[styles.panelTitle, { color: c.primaryDark }]}>Weekly Analytics</Text>
               <View style={[styles.pill, { backgroundColor: c.surfaceTint }]}>

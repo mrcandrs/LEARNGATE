@@ -1,18 +1,41 @@
-import { Pressable } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Text } from "react-native-paper";
 import { ChildHomeStackNavigator } from "@/navigation/ChildHomeStackNavigator";
-import { ChildGamesStackNavigator } from "@/navigation/ChildGamesStackNavigator";
-import { ChildTasksStackNavigator } from "@/navigation/ChildTasksStackNavigator";
-import { ChildProfileStackNavigator } from "@/navigation/ChildProfileStackNavigator";
+import { ChildActivitiesStackNavigator } from "@/navigation/ChildActivitiesStackNavigator";
 import { ChildTabParamList } from "@/types/navigation";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { useAuth } from "@/store/AuthContext";
 import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
 import { useChildScreenLockContext } from "@/store/ChildScreenLockContext";
 import { useTheme } from "react-native-paper";
+import { useAppColors } from "@/theme/useAppColors";
+import { radii } from "@/theme/theme";
 
 const Tab = createBottomTabNavigator<ChildTabParamList>();
+
+function TabIcon({
+  focused,
+  icon,
+  label,
+  activeColor,
+}: {
+  focused: boolean;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  activeColor: string;
+}) {
+  const c = useAppColors();
+  return (
+    <View style={[tabStyles.wrap, focused && { backgroundColor: c.surfaceTint }]}>
+      <MaterialCommunityIcons name={icon} size={22} color={focused ? activeColor : c.subtext} />
+      <Text variant="labelSmall" style={{ color: focused ? c.primary : c.subtext, fontWeight: focused ? "700" : "500" }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export function ChildTabsNavigator() {
   useChildLocationTracking();
@@ -30,15 +53,18 @@ export function ChildTabsNavigator() {
           }
         },
       }}
-      screenOptions={({ route }) => ({
+      screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
+        tabBarShowLabel: false,
         tabBarStyle: lock.isLocked
           ? { display: "none", height: 0 }
           : {
               backgroundColor: theme.colors.surface,
-              borderTopColor: theme.colors.outlineVariant,
+              borderTopWidth: 0,
+              height: 72,
+              paddingTop: 8,
+              paddingBottom: 10,
+              elevation: 12,
             },
         tabBarButton: lock.isLocked
           ? (props) => (
@@ -50,23 +76,43 @@ export function ChildTabsNavigator() {
               />
             )
           : undefined,
-        tabBarIcon: ({ color, size }) => {
-          const iconName =
-            route.name === "Home"
-              ? "home-outline"
-              : route.name === "Games"
-                ? "gamepad-variant-outline"
-                : route.name === "Tasks"
-                  ? "clipboard-text-outline"
-                  : "account-outline";
-          return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
-        },
-      })}
+      }}
     >
-      <Tab.Screen name="Home" component={ChildHomeStackNavigator} />
-      <Tab.Screen name="Games" component={ChildGamesStackNavigator} />
-      <Tab.Screen name="Tasks" component={ChildTasksStackNavigator} />
-      <Tab.Screen name="MyStuff" component={ChildProfileStackNavigator} />
+      <Tab.Screen
+        name="Home"
+        component={ChildHomeStackNavigator}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon focused={focused} icon="home-outline" label="Home" activeColor={theme.colors.primary} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Activities"
+        component={ChildActivitiesStackNavigator}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              focused={focused}
+              icon="gamepad-variant-outline"
+              label="Activities"
+              activeColor={theme.colors.secondary}
+            />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
+
+const tabStyles = StyleSheet.create({
+  wrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    gap: 2,
+    minWidth: 100,
+  },
+});

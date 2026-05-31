@@ -1,7 +1,11 @@
-import * as ImagePicker from "expo-image-picker";
 import { File as ExpoFile } from "expo-file-system";
 import { Platform } from "react-native";
 import { supabase } from "@/services/supabase";
+import {
+  IMAGE_PICKER_REBUILD_HINT,
+  isImagePickerNativeLinked,
+  requestCameraPhoto,
+} from "@/services/photoCapture";
 
 export const CHILD_AVATAR_BUCKET = "child-avatars";
 
@@ -20,6 +24,15 @@ async function readLocalImageAsArrayBuffer(uri: string): Promise<ArrayBuffer> {
 }
 
 export async function pickChildAvatarFromLibrary(): Promise<string | null> {
+  if (!isImagePickerNativeLinked()) {
+    return requestCameraPhoto({
+      facing: "front",
+      title: "Profile photo",
+      hint: IMAGE_PICKER_REBUILD_HINT,
+    });
+  }
+
+  const ImagePicker = await import("expo-image-picker");
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error("Gallery permission is required to upload profile photo.");
@@ -27,7 +40,7 @@ export async function pickChildAvatarFromLibrary(): Promise<string | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     quality: 0.85,
-    allowsEditing: true,
+    allowsEditing: Platform.OS === "ios",
     aspect: [1, 1],
   });
   if (result.canceled) {

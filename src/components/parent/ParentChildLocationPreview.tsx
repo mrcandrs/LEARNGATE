@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
-import { Text } from "react-native-paper";
+import { IconButton, Text } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "@/store/AuthContext";
 import { supabase } from "@/services/supabase";
@@ -46,8 +47,12 @@ const DEFAULT_REGION: Region = {
 
 export function ParentChildLocationPreview({ children, selectedChildId }: ParentChildLocationPreviewProps) {
   const c = useAppColors();
+  const insets = useSafeAreaInsets();
   const { isSupabaseConfigured } = useAuth();
   const mapRef = useRef<MapView | null>(null);
+  const expandedMapRef = useRef<MapView | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [expandedMapLaidOut, setExpandedMapLaidOut] = useState(false);
   const markerAnimationRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const silenceRef = useRef<Record<string, boolean>>({});
   const loadedChildIdsKeyRef = useRef<string | null>(null);
@@ -334,43 +339,71 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedChildId]);
 
+  useEffect(() => {
+    if (!mapExpanded) {
+      setExpandedMapLaidOut(false);
+    }
+  }, [mapExpanded]);
+
   const selectedName = selectedState?.child.name;
+
+  const markerCoordinate = useMemo(() => {
+    if (!selectedMarker?.location) {
+      return null;
+    }
+    const point = displayedByChild[selectedMarker.child.id] ?? {
+      lat: selectedMarker.location.lat,
+      lng: selectedMarker.location.lng,
+    };
+    return { latitude: point.lat, longitude: point.lng };
+  }, [selectedMarker, displayedByChild]);
+
+  const renderSelectedMarker = useCallback(() => {
+    if (!selectedMarker?.location || !markerCoordinate) {
+      return null;
+    }
+    return (
+      <Marker
+        coordinate={markerCoordinate}
+        title={selectedMarker.child.name}
+        description={`Updated ${new Date(selectedMarker.location.captured_at).toLocaleTimeString()}`}
+        anchor={{ x: 0.5, y: 1 }}
+      >
+        <View style={[styles.markerWrap, styles.markerSelected]}>
+          {selectedMarker.child.avatar_url ? (
+            <Image
+              source={{ uri: selectedMarker.child.avatar_url }}
+              style={[styles.markerAvatar, { borderColor: pinColorForChild(selectedMarker.child.id) }]}
+            />
+          ) : (
+            <View style={[styles.markerAvatarFallback, { borderColor: pinColorForChild(selectedMarker.child.id) }]}>
+              <Text style={styles.markerLetter}>{selectedMarker.child.name.slice(0, 1).toUpperCase()}</Text>
+            </View>
+          )}
+          <View style={[styles.markerStem, { backgroundColor: pinColorForChild(selectedMarker.child.id) }]} />
+        </View>
+      </Marker>
+    );
+  }, [selectedMarker, markerCoordinate, pinColorForChild]);
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.mapShell, { borderColor: c.border, backgroundColor: c.surfaceTint }]}>
-        <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion}>
-          {selectedMarker ? (
-            <Marker
-              coordinate={{
-                latitude: (displayedByChild[selectedMarker.child.id] ?? {
-                  lat: selectedMarker.location!.lat,
-                  lng: selectedMarker.location!.lng,
-                }).lat,
-                longitude: (displayedByChild[selectedMarker.child.id] ?? {
-                  lat: selectedMarker.location!.lat,
-                  lng: selectedMarker.location!.lng,
-                }).lng,
-              }}
-              title={selectedMarker.child.name}
-              description={`Updated ${new Date(selectedMarker.location!.captured_at).toLocaleTimeString()}`}
-              anchor={{ x: 0.5, y: 1 }}
-            >
-              <View style={[styles.markerWrap, styles.markerSelected]}>
-                {selectedMarker.child.avatar_url ? (
-                  <Image
-                    source={{ uri: selectedMarker.child.avatar_url }}
-                    style={[styles.markerAvatar, { borderColor: pinColorForChild(selectedMarker.child.id) }]}
-                  />
-                ) : (
-                  <View style={[styles.markerAvatarFallback, { borderColor: pinColorForChild(selectedMarker.child.id) }]}>
-                    <Text style={styles.markerLetter}>{selectedMarker.child.name.slice(0, 1).toUpperCase()}</Text>
-                  </View>
-                )}
-                <View style={[styles.markerStem, { backgroundColor: pinColorForChild(selectedMarker.child.id) }]} />
-              </View>
-            </Marker>
-          ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open full screen map"
+        onPress={() => setMapExpanded(true)}
+        style={[styles.mapShell, { borderColor: c.border, backgroundColor: c.surfaceTint }]}
+      >
+        <MapView
+          ref={mapRef}
+          style={styles.map}
+          initialRegion={initialRegion}
+          scrollEnabled={false}
+          zoomEnabled={false}
+          rotateEnabled={false}
+          pitchEnabled={false}
+        >
+          {renderSelectedMarker()}
         </MapView>
         {selectedName ? (
           <View style={[styles.mapBadge, { backgroundColor: c.primaryDark }]}>
@@ -378,12 +411,60 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
             <Text style={styles.mapBadgeText}>{selectedName} selected</Text>
           </View>
         ) : null}
+        <View style={[styles.expandHint, { backgroundColor: c.card, borderColor: c.border }]}>
+          <MaterialCommunityIcons name="arrow-expand" size={16} color={c.primaryDark} />
+          <Text style={[styles.expandHintText, { color: c.text }]}>Tap to expand map</Text>
+        </View>
         {loading ? (
           <View style={styles.mapLoadingOverlay} pointerEvents="none">
             <ActivityIndicator size="small" color={c.primary} />
           </View>
         ) : null}
-      </View>
+      </Pressable>
+
+      <Modal visible={mapExpanded} animationType="slide" onRequestClose={() => setMapExpanded(false)}>
+        <View style={[styles.expandedRoot, { backgroundColor: c.background, paddingTop: insets.top }]}>
+          <View style={[styles.expandedHeader, { borderBottomColor: c.border }]}>
+            <Text variant="titleMedium" style={{ color: c.text, fontWeight: "700", flex: 1 }}>
+              {selectedName ? `${selectedName}'s location` : "Live location"}
+            </Text>
+            <IconButton icon="close" accessibilityLabel="Close map" onPress={() => setMapExpanded(false)} />
+          </View>
+          <View
+            style={styles.expandedMap}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              if (width > 0 && height > 0) {
+                setExpandedMapLaidOut(true);
+              }
+            }}
+          >
+            {expandedMapLaidOut ? (
+              <MapView ref={expandedMapRef} style={StyleSheet.absoluteFill} initialRegion={initialRegion}>
+                {renderSelectedMarker()}
+              </MapView>
+            ) : (
+              <View style={styles.expandedMapLoading}>
+                <ActivityIndicator size="large" color={c.primary} />
+              </View>
+            )}
+          </View>
+          {selectedState?.location ? (
+            <View style={[styles.expandedFooter, { backgroundColor: c.card, borderTopColor: c.border }]}>
+              <Text style={{ color: c.subtext, fontSize: 13 }}>
+                {(placeByChild[selectedState.child.id]?.place ?? "Resolving location…").split(",").slice(0, 3).join(",")}
+              </Text>
+              <Text style={{ color: c.subtext, fontSize: 12, marginTop: 4 }}>
+                Updated {new Date(selectedState.location.captured_at).toLocaleString()}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.expandedFooter, { backgroundColor: c.card, borderTopColor: c.border }]}>
+              <Text style={{ color: c.subtext }}>No location available for this child yet.</Text>
+            </View>
+          )}
+        </View>
+      </Modal>
 
       <View style={styles.hintArea}>
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -510,6 +591,46 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 12,
+  },
+  expandHint: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+  expandHintText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  expandedRoot: {
+    flex: 1,
+  },
+  expandedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  expandedMap: {
+    flex: 1,
+    minHeight: 200,
+  },
+  expandedMapLoading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  expandedFooter: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   errorText: {
     color: "#B91C1C",

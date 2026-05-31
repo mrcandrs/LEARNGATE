@@ -9,6 +9,7 @@ type StepperControlProps = {
   value: string;
   onDecrement: () => void;
   onIncrement: () => void;
+  onValuePress?: () => void;
   decrementAccessibilityLabel?: string;
   incrementAccessibilityLabel?: string;
 };
@@ -18,6 +19,7 @@ export function StepperControl({
   value,
   onDecrement,
   onIncrement,
+  onValuePress,
   decrementAccessibilityLabel = "Decrease",
   incrementAccessibilityLabel = "Increase",
 }: StepperControlProps) {
@@ -37,11 +39,17 @@ export function StepperControl({
         >
           <MaterialCommunityIcons name="chevron-left" size={22} color={c.text} />
         </Pressable>
-        <View style={[styles.valuePill, { backgroundColor: c.stepperValueBg }]}>
+        <Pressable
+          onPress={onValuePress}
+          disabled={!onValuePress}
+          style={[styles.valuePill, { backgroundColor: c.stepperValueBg }]}
+          accessibilityRole="button"
+          accessibilityLabel={onValuePress ? `${label}, ${value}. Tap to set.` : undefined}
+        >
           <Text variant="titleSmall" style={[styles.valueText, { color: c.primaryDark }]}>
             {value}
           </Text>
-        </View>
+        </Pressable>
         <Pressable
           onPress={onIncrement}
           style={[styles.stepButton, { borderColor: c.border, backgroundColor: c.stepperButtonBg }]}

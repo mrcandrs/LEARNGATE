@@ -6,6 +6,8 @@ import { Card, Chip, Dialog, Divider, IconButton, List, Portal, Text, TextInput,
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepperControl } from "@/components/parent/StepperControl";
+import { DurationPickerModal } from "@/components/parent/DurationPickerModal";
+import { BedtimePickerModal } from "@/components/parent/BedtimePickerModal";
 import { ParentSectionHeader } from "@/components/parent/ParentSectionHeader";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { ParentChildLocationPreview } from "@/components/parent/ParentChildLocationPreview";
@@ -38,6 +40,7 @@ import {
 import {
   formatBedtime12h,
   formatDailyLimitDisplay,
+  parseDailyLimitValue,
   stepBedtime,
   stepDailyLimit,
 } from "@/utils/screenControlSteppers";
@@ -133,6 +136,8 @@ export function ParentChildrenScreen() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childPickerVisible, setChildPickerVisible] = useState(false);
   const [toast, setToast] = useState<ManageToast | null>(null);
+  const [durationPickerOpen, setDurationPickerOpen] = useState(false);
+  const [bedtimePickerField, setBedtimePickerField] = useState<"start" | "end" | null>(null);
 
   const hideToast = useCallback(() => {
     setToast(null);
@@ -149,7 +154,7 @@ export function ParentChildrenScreen() {
   const [newChildAge, setNewChildAge] = useState("");
   const [newChildEmail, setNewChildEmail] = useState("");
   const [exerciseTarget, setExerciseTarget] = useState<ChildRow | null>(null);
-  const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping");
+  const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping_jacks");
   const [exerciseReps, setExerciseReps] = useState("10");
   const [exercisePoints, setExercisePoints] = useState("20");
   const [assigning, setAssigning] = useState(false);
@@ -1009,6 +1014,7 @@ export function ParentChildrenScreen() {
               <StepperControl
                 label="Daily Screen Limit"
                 value={formatDailyLimitDisplay(selectedDraft.daily_limit_minutes, selectedChild.daily_limit_minutes)}
+                onValuePress={() => setDurationPickerOpen(true)}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1041,6 +1047,7 @@ export function ParentChildrenScreen() {
               <StepperControl
                 label="Bedtime Start"
                 value={formatBedtime12h(selectedDraft.bedtime_start)}
+                onValuePress={() => setBedtimePickerField("start")}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1065,6 +1072,7 @@ export function ParentChildrenScreen() {
               <StepperControl
                 label="Bedtime End"
                 value={formatBedtime12h(selectedDraft.bedtime_end)}
+                onValuePress={() => setBedtimePickerField("end")}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1147,6 +1155,46 @@ export function ParentChildrenScreen() {
             label="Save Changes"
             onPress={() => void saveAllForChild(selectedChild.id)}
             loading={saveBusyChildId === selectedChild.id}
+          />
+        </>
+      ) : null}
+
+      {selectedChild && selectedDraft ? (
+        <>
+          <DurationPickerModal
+            visible={durationPickerOpen}
+            totalMinutes={parseDailyLimitValue(selectedDraft.daily_limit_minutes, selectedChild.daily_limit_minutes)}
+            onDismiss={() => setDurationPickerOpen(false)}
+            onConfirm={(minutes) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [selectedChild.id]: { ...selectedDraft, daily_limit_minutes: String(minutes) },
+              }))
+            }
+          />
+          <BedtimePickerModal
+            visible={bedtimePickerField === "start"}
+            value24h={selectedDraft.bedtime_start}
+            title="Bedtime start"
+            onDismiss={() => setBedtimePickerField(null)}
+            onConfirm={(hhmm) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [selectedChild.id]: { ...selectedDraft, bedtime_start: hhmm },
+              }))
+            }
+          />
+          <BedtimePickerModal
+            visible={bedtimePickerField === "end"}
+            value24h={selectedDraft.bedtime_end}
+            title="Bedtime end"
+            onDismiss={() => setBedtimePickerField(null)}
+            onConfirm={(hhmm) =>
+              setDrafts((prev) => ({
+                ...prev,
+                [selectedChild.id]: { ...selectedDraft, bedtime_end: hhmm },
+              }))
+            }
           />
         </>
       ) : null}

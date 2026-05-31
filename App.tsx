@@ -16,6 +16,7 @@ import { AudioGuidanceProvider } from "./src/store/AudioGuidanceContext";
 import { ThemeModeProvider, useThemeMode } from "./src/store/ThemeModeContext";
 
 WebBrowser.maybeCompleteAuthSession();
+import { CameraPhotoCaptureHost } from "./src/components/CameraPhotoCaptureHost";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 function AppShell() {
@@ -25,6 +26,7 @@ function AppShell() {
       <AudioGuidanceProvider>
         <AuthProvider>
           <RootNavigator />
+          <CameraPhotoCaptureHost />
         </AuthProvider>
       </AudioGuidanceProvider>
     </PaperProvider>

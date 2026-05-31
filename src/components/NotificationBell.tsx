@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, View } from "react-native";
+import { Dimensions, FlatList, Modal, Pressable, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useInAppNotifications } from "@/hooks/useInAppNotifications";
@@ -89,8 +89,9 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
       </Pressable>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={[styles.sheet, { backgroundColor: c.card }]} onPress={() => {}}>
+        <View style={styles.backdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel="Close notifications" />
+          <View style={[styles.sheet, { backgroundColor: c.card, height: Math.round(Dimensions.get("window").height * 0.78) }]}>
             <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
               <Text variant="titleLarge" style={{ color: c.text, fontWeight: "700" }}>
                 Notifications
@@ -118,11 +119,13 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
               </View>
             ) : (
               <FlatList
+                style={styles.list}
                 data={items}
                 keyExtractor={(item) => String(item.id)}
                 refreshing={loading}
                 onRefresh={() => void refresh()}
                 contentContainerStyle={styles.listContent}
+                nestedScrollEnabled
                 renderItem={({ item }) => {
                   const unread = !item.read_at;
                   return (
@@ -164,8 +167,8 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
                 }}
               />
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </>
   );
@@ -202,10 +205,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   sheet: {
-    maxHeight: "78%",
     borderTopLeftRadius: radii.lg,
     borderTopRightRadius: radii.lg,
     overflow: "hidden",
+  },
+  list: {
+    flex: 1,
   },
   sheetHeader: {
     flexDirection: "row",

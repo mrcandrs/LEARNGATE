@@ -5,7 +5,7 @@ import { Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import type { ChildGamesStackParamList } from "@/types/navigation";
+import type { ChildActivitiesStackParamList } from "@/types/navigation";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import { useChildProfile } from "@/hooks/useChildProfile";
@@ -23,7 +23,7 @@ import {
   WORDS_BY_FIRST_LETTER,
 } from "@/data/gameRoundBanks";
 
-type Props = NativeStackScreenProps<ChildGamesStackParamList, "GamePlay">;
+type Props = NativeStackScreenProps<ChildActivitiesStackParamList, "GamePlay">;
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const SHAPES = [
@@ -612,7 +612,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
               {difficultyText}
             </Text>
             <PrimaryButton label="Play again" onPress={restart} />
-            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("GamesList")} />
+            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("ActivitiesMain")} />
           </Card.Content>
         </Card>
       </ScreenContainer>
@@ -642,7 +642,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
             <Text variant="bodyMedium" style={styles.errorText}>
               {profileError ?? "Could not load child profile. Please go back and try again."}
             </Text>
-            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("GamesList")} />
+            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("ActivitiesMain")} />
           </Card.Content>
         </Card>
       </ScreenContainer>

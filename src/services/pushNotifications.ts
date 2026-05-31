@@ -129,6 +129,13 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
           "Firebase is not set up on Android. Add google-services.json from Firebase (package com.pipsjacob.learngate), place it in the project root, copy to android/app/, rebuild with expo run:android, then upload FCM credentials with eas credentials. See https://docs.expo.dev/push-notifications/fcm-credentials/",
       };
     }
+    if (/SERVICE_NOT_AVAILABLE|SERVICE_UNAVAILABLE|ExecutionException/i.test(detail)) {
+      return {
+        ok: false,
+        message:
+          "Google Play Services could not provide a push token on this device. Use a phone or emulator with Google Play, sign in to a Google account, and ensure google-services.json plus FCM credentials are configured—then rebuild the app. The in-app notification bell still works without device push.",
+      };
+    }
     return {
       ok: false,
       message: `Could not get Expo push token: ${detail}`,

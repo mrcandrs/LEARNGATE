@@ -1,43 +1,65 @@
-export type ExerciseId = "jumping" | "squats";
+export type ExerciseId = "jumping_jacks" | "squats" | "lunges";
 
 export type ExerciseDefinition = {
   id: ExerciseId;
   title: string;
-  /** default reps for a session */
+  emoji: string;
   defaultReps: number;
-  /** default minutes shown on card */
   defaultMinutes: number;
-  /** suggested reward points */
   defaultPoints: number;
-  /** UI accent */
   color: string;
-  /** short instruction */
   instruction: string;
+  cardDescription: string;
 };
 
 export const EXERCISES: ExerciseDefinition[] = [
   {
-    id: "jumping",
-    title: "Jumping",
+    id: "jumping_jacks",
+    title: "Jumping Jack",
+    emoji: "⭐",
     defaultReps: 10,
     defaultMinutes: 5,
     defaultPoints: 20,
     color: "#8B5CF6",
-    instruction: "Jump inside the frame. Tap +1 after each jump.",
+    instruction: "Jump inside the frame. The camera counts each jumping jack automatically.",
+    cardDescription: "Jumping jacks inside the camera frame.",
   },
   {
     id: "squats",
-    title: "Squats",
+    title: "Squat",
+    emoji: "🦵",
     defaultReps: 10,
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#F59E0B",
-    instruction: "Do a squat inside the frame. Tap +1 after each squat.",
+    instruction: "Do a squat inside the frame. The camera counts each squat automatically.",
+    cardDescription: "Squats with your whole body visible.",
+  },
+  {
+    id: "lunges",
+    title: "Lunge",
+    emoji: "🏃",
+    defaultReps: 10,
+    defaultMinutes: 5,
+    defaultPoints: 25,
+    color: "#14B8A6",
+    instruction: "Do a lunge inside the frame. The camera counts each lunge automatically.",
+    cardDescription: "Alternating lunges in the camera frame.",
   },
 ];
 
-export function getExerciseById(id: ExerciseId): ExerciseDefinition {
-  const found = EXERCISES.find((e) => e.id === id);
-  return found ?? EXERCISES[0];
+/** Maps legacy task payloads (e.g. `jumping`) to current exercise ids. */
+export function normalizeExerciseId(raw: string | undefined): ExerciseId {
+  if (raw === "squats" || raw === "lunges" || raw === "jumping_jacks") {
+    return raw;
+  }
+  if (raw === "jumping") {
+    return "jumping_jacks";
+  }
+  return "jumping_jacks";
 }
 
+export function getExerciseById(id: ExerciseId | string): ExerciseDefinition {
+  const normalized = normalizeExerciseId(typeof id === "string" ? id : undefined);
+  return EXERCISES.find((e) => e.id === normalized) ?? EXERCISES[0];
+}
