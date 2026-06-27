@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { labelForPackage } from "@/constants/blockedAppPackages";
 import {
+  getLaunchablePackagesOnDevice,
   getUsageAccessGranted,
   isUsageStatsAvailable,
   isBackgroundUsageEvent,
@@ -47,15 +48,19 @@ export async function resetChildAppUsageSyncCursor(childId: string): Promise<voi
   await AsyncStorage.removeItem(syncKey(childId));
 }
 
-function shouldIgnorePackage(packageName: string): boolean {
+function shouldIgnorePackage(packageName: string, launchable: Set<string> | null): boolean {
   if (IGNORED_PACKAGES.has(packageName)) return true;
-  return !isReportableUserApp(packageName);
+  if (!isReportableUserApp(packageName)) return true;
+  // When we know the device's launchable apps, only keep real user-facing apps.
+  if (launchable && !launchable.has(packageName)) return true;
+  return false;
 }
 
 /** Turns Usage Stats events into rows for Supabase (foreground opens + optional duration). */
 export function buildUsageRowsForUpload(
   childId: string,
-  events: { packageName: string; timestampMs: number; eventType: number }[]
+  events: { packageName: string; timestampMs: number; eventType: number }[],
+  launchable: Set<string> | null = null
 ): ChildAppUsageRow[] {
   const sorted = [...events].sort((a, b) => a.timestampMs - b.timestampMs);
   const rows: ChildAppUsageRow[] = [];
@@ -63,7 +68,7 @@ export function buildUsageRowsForUpload(
   let openAt = 0;
 
   for (const e of sorted) {
-    if (shouldIgnorePackage(e.packageName)) continue;
+    if (shouldIgnorePackage(e.packageName, launchable)) continue;
 
     if (isForegroundUsageEvent(e.eventType)) {
       const last = rows[rows.length - 1];
@@ -133,7 +138,8 @@ export async function syncChildAppUsageEvents(childId: string): Promise<void> {
     if (e.timestampMs > cursor) cursor = e.timestampMs;
   }
 
-  const built = buildUsageRowsForUpload(childId, events);
+  const launchable = await getLaunchablePackagesOnDevice();
+  const built = buildUsageRowsForUpload(childId, events, launchable);
   const rows = await enrichRowsWithDeviceLabels(built);
 
   if (rows.length > 0) {

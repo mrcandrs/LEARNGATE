@@ -33,6 +33,32 @@ const IGNORED_EXACT = new Set([
   "com.google.android.gms.persistent",
   "com.google.android.gms.unstable",
   "com.android.vending",
+  // System dialogs / utilities that surface as "apps" in Usage Stats but have no real UI to block.
+  "com.android.captiveportallogin",
+  "com.android.vpndialogs",
+  "com.android.traceur",
+  "com.android.dynsystem",
+  "com.android.documentsui",
+  "com.android.printspooler",
+  "com.android.keychain",
+  "com.android.certinstaller",
+  "com.android.carrierconfig",
+  "com.android.emergency",
+  "com.android.cellbroadcastreceiver",
+  "com.android.storagemanager",
+  "com.android.wallpapercropper",
+  "com.android.wallpaper.livepicker",
+  "com.android.companiondevicemanager",
+  "com.android.settings.intelligence",
+  "com.google.android.gms.location.history",
+  "com.google.android.gsf",
+  "com.google.android.ext.services",
+  "com.google.android.as",
+  "com.google.android.overlay.modules",
+  "com.transsion.resolver",
+  "com.transsion.tranresolver",
+  "com.transsion.systemui",
+  "com.android.intent.resolver",
 ]);
 
 const IGNORED_PREFIXES = [
@@ -41,6 +67,18 @@ const IGNORED_PREFIXES = [
   "com.android.inputmethod",
   "com.google.android.inputmethod",
   "com.samsung.android.app.telephonyui",
+  "com.android.server",
+  "com.android.internal",
+  "com.android.providers",
+  "com.android.bluetooth",
+  "com.android.nfc",
+  "com.android.phone",
+  "com.android.mtp",
+  "com.android.wallpaper",
+  "com.android.settings.",
+  "com.samsung.android.settings",
+  "com.coloros.settings",
+  "com.miui.settings",
 ];
 
 const IGNORED_SUBSTRINGS = [
@@ -52,6 +90,16 @@ const IGNORED_SUBSTRINGS = [
   "googlequicksearchbox",
   "xoslauncher",
   "hilauncher",
+  "captiveportal",
+  "vpndialog",
+  ".resolver",
+  "resolveractivity",
+  "tranresolver",
+  ".screenshot",
+  "screenshotservice",
+  "wallpaperpicker",
+  "setupwizard",
+  ".overlay",
 ];
 
 /**

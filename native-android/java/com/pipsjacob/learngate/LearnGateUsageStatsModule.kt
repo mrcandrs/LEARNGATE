@@ -63,6 +63,37 @@ class LearnGateUsageStatsModule(reactContext: ReactApplicationContext) :
     reactApplicationContext.startActivity(intent)
   }
 
+  /**
+   * Package names that have a home-screen launcher icon — i.e. real, user-facing apps.
+   * Lets the child sync skip system dialogs/services (captive portal, VPN, resolvers, etc.).
+   */
+  @ReactMethod
+  fun getLaunchablePackages(promise: Promise) {
+    try {
+      val pm = reactApplicationContext.packageManager
+      val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+      val resolveInfos =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          pm.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0L))
+        } else {
+          @Suppress("DEPRECATION")
+          pm.queryIntentActivities(intent, 0)
+        }
+
+      val out = Arguments.createArray()
+      val seen = HashSet<String>()
+      for (info in resolveInfos) {
+        val pkg = info.activityInfo?.packageName?.trim().orEmpty()
+        if (pkg.isNotEmpty() && seen.add(pkg)) {
+          out.pushString(pkg)
+        }
+      }
+      promise.resolve(out)
+    } catch (e: Exception) {
+      promise.reject("USAGE_LAUNCHABLE", e.message, e)
+    }
+  }
+
   @ReactMethod
   fun queryUsageEvents(sinceMs: Double, promise: Promise) {
     try {

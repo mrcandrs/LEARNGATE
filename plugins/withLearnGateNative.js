@@ -80,6 +80,38 @@ function ensureMainApplicationPackages(mainApplication) {
   return mainApplication;
 }
 
+/**
+ * Grants visibility to all launcher apps on Android 11+ so queryIntentActivities(MAIN/LAUNCHER)
+ * returns the full list (used to keep only real, user-facing apps in usage tracking).
+ */
+function ensureLauncherQueryVisibility(manifest) {
+  const root = manifest.manifest;
+  const existing = root.queries ?? [];
+  const list = Array.isArray(existing) ? existing : [existing];
+
+  const hasLauncherIntent = list.some((q) =>
+    (Array.isArray(q?.intent) ? q.intent : q?.intent ? [q.intent] : []).some((intent) =>
+      (Array.isArray(intent?.action) ? intent.action : intent?.action ? [intent.action] : []).some(
+        (a) => a?.$?.["android:name"] === "android.intent.action.MAIN",
+      ),
+    ),
+  );
+
+  if (!hasLauncherIntent) {
+    list.push({
+      intent: [
+        {
+          action: [{ $: { "android:name": "android.intent.action.MAIN" } }],
+          category: [{ $: { "android:name": "android.intent.category.LAUNCHER" } }],
+        },
+      ],
+    });
+    root.queries = list;
+  }
+
+  return manifest;
+}
+
 function ensureAccessibilityService(manifest) {
   const app = AndroidConfig.Manifest.getMainApplicationOrThrow(manifest);
   const services = app.service ?? [];
@@ -137,6 +169,8 @@ function withLearnGateNative(config) {
         },
       ];
     }
+
+    ensureLauncherQueryVisibility(manifest);
 
     mod.modResults = ensureAccessibilityService(manifest);
     return mod;

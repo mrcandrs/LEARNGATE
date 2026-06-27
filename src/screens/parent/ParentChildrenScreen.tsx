@@ -30,10 +30,17 @@ import { learningTaskXpReward } from "@/data/gameDifficulty";
 import type { ParentTabParamList } from "@/types/navigation";
 import {
   BLOCKABLE_APP_GROUPS,
+  displayAppUsageLabel,
+  iconForPackage,
+  isCuratedPackage,
   isGroupFullySelected,
+  isPackageBlocked,
+  labelForPackage,
   toggleBlockedGroup as applyBlockedGroupToggle,
+  toggleBlockedPackage as applyBlockedPackageToggle,
   type BlockableAppGroup,
 } from "@/constants/blockedAppPackages";
+import { isReportableUserApp } from "@/utils/appUsagePackages";
 import {
   DAILY_LIMIT_MAX_MINUTES,
   DAILY_LIMIT_MIN_MINUTES,
@@ -80,6 +87,11 @@ type ScreenRule = {
   reward_multiplier: number;
   daily_report_enabled: boolean;
   task_reminders_enabled: boolean;
+};
+
+type UsedAppRow = {
+  package_name: string;
+  app_label: string | null;
 };
 
 type SubmissionPreviewRow = {
@@ -151,6 +163,8 @@ export function ParentChildrenScreen() {
   const [bedtimePickerField, setBedtimePickerField] = useState<"start" | "end" | null>(null);
   const [childToDelete, setChildToDelete] = useState<ChildRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [clearUsageConfirm, setClearUsageConfirm] = useState(false);
+  const [clearingUsage, setClearingUsage] = useState(false);
   const [submissionsHighlight, setSubmissionsHighlight] = useState(false);
 
   const hideToast = useCallback(() => {
@@ -208,6 +222,7 @@ export function ParentChildrenScreen() {
   const [assigningLearning, setAssigningLearning] = useState(false);
   const [assigningChore, setAssigningChore] = useState(false);
   const [screenRule, setScreenRule] = useState<ScreenRule | null>(null);
+  const [usedApps, setUsedApps] = useState<UsedAppRow[]>([]);
   const [submissionRows, setSubmissionRows] = useState<SubmissionPreviewRow[]>([]);
   const [reviewBusyId, setReviewBusyId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<SubmissionPreviewRow | null>(null);
@@ -307,6 +322,56 @@ export function ParentChildrenScreen() {
     setScreenRule((data as ScreenRule | null) ?? fallbackRule);
   }, [showError]);
 
+  const loadUsedApps = useCallback(async (childId: string) => {
+    if (!supabase) {
+      setUsedApps([]);
+      return;
+    }
+    const { data, error: usageError } = await supabase
+      .from("child_app_usage_events")
+      .select("package_name, app_label, event_at")
+      .eq("child_id", childId)
+      .eq("event_type", "foreground")
+      .order("event_at", { ascending: false })
+      .limit(200);
+    if (usageError) {
+      if (__DEV__) {
+        console.warn("[LearnGate] used apps load failed:", usageError.message);
+      }
+      setUsedApps([]);
+      return;
+    }
+    const seen = new Set<string>();
+    const unique: UsedAppRow[] = [];
+    for (const row of (data as UsedAppRow[] | null) ?? []) {
+      const pkg = row.package_name?.trim();
+      if (!pkg || seen.has(pkg)) continue;
+      if (!isReportableUserApp(pkg)) continue;
+      seen.add(pkg);
+      unique.push({ package_name: pkg, app_label: row.app_label ?? null });
+    }
+    setUsedApps(unique);
+  }, []);
+
+  const clearUsedAppHistory = useCallback(async () => {
+    if (!supabase || !selectedChildId) {
+      return;
+    }
+    setClearingUsage(true);
+    const { error: deleteError } = await supabase
+      .from("child_app_usage_events")
+      .delete()
+      .eq("child_id", selectedChildId);
+    setClearingUsage(false);
+    setClearUsageConfirm(false);
+    if (deleteError) {
+      showError(formatAppError(deleteError));
+      return;
+    }
+    setUsedApps([]);
+    showSuccess("Recorded app history cleared. New apps will reappear as they are opened.");
+  }, [selectedChildId, showError, showSuccess]);
+
   const loadSubmissionsPreview = useCallback(async (childId: string) => {
     if (!supabase) {
       setSubmissionRows([]);
@@ -349,11 +414,13 @@ export function ParentChildrenScreen() {
     if (!selectedChildId) {
       setScreenRule(null);
       setSubmissionRows([]);
+      setUsedApps([]);
       return;
     }
     void loadScreenRules(selectedChildId);
     void loadSubmissionsPreview(selectedChildId);
-  }, [selectedChildId, loadScreenRules, loadSubmissionsPreview]);
+    void loadUsedApps(selectedChildId);
+  }, [selectedChildId, loadScreenRules, loadSubmissionsPreview, loadUsedApps]);
 
   const isEmpty = useMemo(() => !isLoading && children.length === 0, [children.length, isLoading]);
 
@@ -453,6 +520,18 @@ export function ParentChildrenScreen() {
       return {
         ...prev,
         blocked_apps_json: applyBlockedGroupToggle(prev.blocked_apps_json, group),
+      };
+    });
+  };
+
+  const toggleBlockedPackage = (packageName: string) => {
+    setScreenRule((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        blocked_apps_json: applyBlockedPackageToggle(prev.blocked_apps_json, packageName),
       };
     });
   };
@@ -805,8 +884,9 @@ export function ParentChildrenScreen() {
     if (selectedChildId) {
       void loadScreenRules(selectedChildId);
       void loadSubmissionsPreview(selectedChildId);
+      void loadUsedApps(selectedChildId);
     }
-  }, [loadChildren, loadScreenRules, loadSubmissionsPreview, selectedChildId]);
+  }, [loadChildren, loadScreenRules, loadSubmissionsPreview, loadUsedApps, selectedChildId]);
 
   const selectedChild = useMemo(() => children.find((c) => c.id === selectedChildId) ?? null, [children, selectedChildId]);
   const selectedDraft = useMemo(() => {
@@ -827,6 +907,24 @@ export function ParentChildrenScreen() {
   }, [drafts, selectedChild]);
 
   const selectedAudioRate = selectedChild?.audio_guide_rate ?? 0.92;
+
+  /** Apps the child has actually used, plus any custom-blocked package, excluding curated tiles. */
+  const customBlockableApps = useMemo(() => {
+    const blocked = screenRule?.blocked_apps_json ?? [];
+    const map = new Map<string, string>();
+    for (const app of usedApps) {
+      if (isCuratedPackage(app.package_name)) continue;
+      map.set(app.package_name, displayAppUsageLabel(app.app_label, app.package_name));
+    }
+    for (const pkg of blocked) {
+      if (isCuratedPackage(pkg)) continue;
+      if (!map.has(pkg)) {
+        map.set(pkg, labelForPackage(pkg));
+      }
+    }
+    return Array.from(map, ([pkg, label]) => ({ pkg, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [usedApps, screenRule?.blocked_apps_json]);
+
   const ruleSummary = useMemo(() => {
     if (!selectedChild || !selectedDraft) {
       return "";
@@ -1230,6 +1328,73 @@ export function ParentChildrenScreen() {
                   );
                 })}
               </View>
+
+              <View style={styles.usedAppsHeader}>
+                <Text variant="titleSmall" style={styles.usedAppsTitle}>
+                  Apps {selectedChild.name} has used
+                </Text>
+              </View>
+              {customBlockableApps.length > 0 ? (
+                <>
+                  <Text variant="bodySmall" style={styles.helper}>
+                    Block any other app seen on {selectedChild.name}'s phone. New apps appear here after they are opened.
+                  </Text>
+                  <View style={styles.appGrid}>
+                    {customBlockableApps.map((app) => {
+                      const selected = screenRule ? isPackageBlocked(screenRule.blocked_apps_json, app.pkg) : false;
+                      return (
+                        <Pressable
+                          key={app.pkg}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Toggle ${app.label}`}
+                          style={[
+                            styles.appTile,
+                            {
+                              backgroundColor: selected ? theme.colors.primary : theme.colors.surfaceVariant,
+                              borderColor: selected ? theme.colors.primary : theme.colors.outline,
+                            },
+                          ]}
+                          onPress={() => toggleBlockedPackage(app.pkg)}
+                          disabled={!screenRule}
+                        >
+                          <MaterialCommunityIcons
+                            name={iconForPackage(app.pkg)}
+                            size={22}
+                            color={selected ? theme.colors.onPrimary : theme.colors.primary}
+                          />
+                          <Text
+                            variant="bodySmall"
+                            numberOfLines={1}
+                            style={[styles.appTileLabel, { color: selected ? theme.colors.onPrimary : theme.colors.onSurface }]}
+                          >
+                            {app.label}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : (
+                <Text variant="bodySmall" style={styles.helper}>
+                  No other apps recorded yet. Once {selectedChild.name} opens an app on their phone, it will show up here so
+                  you can block it.
+                </Text>
+              )}
+
+              {usedApps.length > 0 ? (
+                <Pressable
+                  onPress={() => setClearUsageConfirm(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear recorded app history"
+                  style={styles.clearHistoryRow}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons name="broom" size={16} color={theme.colors.error} />
+                  <Text variant="bodySmall" style={[styles.clearHistoryText, { color: theme.colors.error }]}>
+                    Clear recorded app history
+                  </Text>
+                </Pressable>
+              ) : null}
             </Card.Content>
           </Card>
 
@@ -1354,6 +1519,32 @@ export function ParentChildrenScreen() {
               label={deleteBusy ? "Removing…" : "Remove"}
               onPress={() => void removeChildAccount()}
               disabled={deleteBusy}
+            />
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={clearUsageConfirm}
+          onDismiss={() => !clearingUsage && setClearUsageConfirm(false)}
+        >
+          <Dialog.Title>Clear app history?</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              This clears the list of recorded apps for {selectedChild?.name ?? "this child"}. Apps you have already blocked
+              stay blocked, and apps will reappear here as they are opened again.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton
+              label="Cancel"
+              mode="text"
+              onPress={() => setClearUsageConfirm(false)}
+              disabled={clearingUsage}
+            />
+            <PrimaryButton
+              label={clearingUsage ? "Clearing…" : "Clear"}
+              onPress={() => void clearUsedAppHistory()}
+              disabled={clearingUsage}
             />
           </Dialog.Actions>
         </Dialog>
@@ -1552,12 +1743,6 @@ function createStyles(c: AppColors) {
   },
   pickerScrollContent: {
     paddingBottom: 8,
-  },
-  pickerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingRight: 4,
   },
   pickerRowMain: {
     flex: 1,
@@ -1764,6 +1949,24 @@ function createStyles(c: AppColors) {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  usedAppsHeader: {
+    marginTop: 16,
+    marginBottom: 2,
+  },
+  usedAppsTitle: {
+    fontWeight: "700",
+    color: c.text,
+  },
+  clearHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    alignSelf: "flex-start",
+  },
+  clearHistoryText: {
+    fontWeight: "600",
   },
   appTile: {
     width: "31%",

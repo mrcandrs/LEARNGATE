@@ -22,6 +22,20 @@ export const BLOCKABLE_APP_GROUPS: readonly BlockableAppGroup[] = [
   },
   { slug: "instagram", label: "Instagram", icon: "instagram", packages: ["com.instagram.android", "com.instagram.lite"] },
   { slug: "youtube", label: "YouTube", icon: "youtube", packages: ["com.google.android.youtube"] },
+  { slug: "snapchat", label: "Snapchat", icon: "ghost", packages: ["com.snapchat.android"] },
+  { slug: "whatsapp", label: "WhatsApp", icon: "whatsapp", packages: ["com.whatsapp", "com.whatsapp.w4b"] },
+  {
+    slug: "messenger",
+    label: "Messenger",
+    icon: "facebook-messenger",
+    packages: ["com.facebook.orca", "com.facebook.mlite"],
+  },
+  { slug: "twitter", label: "X (Twitter)", icon: "twitter", packages: ["com.twitter.android"] },
+  { slug: "discord", label: "Discord", icon: "message-text", packages: ["com.discord"] },
+  { slug: "roblox", label: "Roblox", icon: "gamepad-variant", packages: ["com.roblox.client"] },
+  { slug: "minecraft", label: "Minecraft", icon: "gamepad-square", packages: ["com.mojang.minecraftpe"] },
+  { slug: "spotify", label: "Spotify", icon: "spotify", packages: ["com.spotify.music"] },
+  { slug: "netflix", label: "Netflix", icon: "netflix", packages: ["com.netflix.mediaclient"] },
   { slug: "chrome", label: "Chrome", icon: "google-chrome", packages: ["com.android.chrome"] },
 ] as const;
 
@@ -75,7 +89,44 @@ const EXTRA_PACKAGE_LABELS: Record<string, string> = {
   "com.instagram.android": "Instagram",
   "com.facebook.katana": "Facebook",
   "com.facebook.lite": "Facebook Lite",
+  "com.reddit.frontpage": "Reddit",
+  "com.facebook.barcelona": "Facebook",
+  "com.gotyme.android": "GoTyme",
+  "com.gotyme.bank": "GoTyme",
+  "com.transsion.appmanager": "Phone Manager",
+  "com.transsion.phonemaster": "Phone Manager",
+  "com.android.camera": "Camera",
+  "com.android.camera2": "Camera",
+  "com.google.android.GoogleCamera": "Camera",
+  "com.mediatek.camera": "Camera",
+  "com.sec.android.app.camera": "Camera",
 };
+
+/** Substring / pattern hints when the exact package id is unknown or OEM-specific. */
+const PACKAGE_LABEL_PATTERNS: readonly { match: RegExp; label: string }[] = [
+  { match: /reddit|\.frontpage$/i, label: "Reddit" },
+  { match: /facebook\.barcelona|\.barcelona$/i, label: "Facebook" },
+  { match: /gotyme/i, label: "GoTyme" },
+  { match: /appmanager|phonemaster/i, label: "Phone Manager" },
+  { match: /\.orca$|messenger/i, label: "Messenger" },
+  { match: /instagram/i, label: "Instagram" },
+  { match: /whatsapp/i, label: "WhatsApp" },
+  { match: /youtube/i, label: "YouTube" },
+  { match: /tiktok|musically|\.trill$/i, label: "TikTok" },
+  { match: /snapchat/i, label: "Snapchat" },
+  { match: /spotify/i, label: "Spotify" },
+  { match: /netflix/i, label: "Netflix" },
+  { match: /roblox/i, label: "Roblox" },
+  { match: /minecraft/i, label: "Minecraft" },
+  { match: /discord/i, label: "Discord" },
+  { match: /chrome/i, label: "Chrome" },
+  { match: /\.camera2?$|googlecamera|mediatek\.camera/i, label: "Camera" },
+  { match: /google\.android\.apps\.messaging/i, label: "Messages" },
+  { match: /google\.android\.gm/i, label: "Gmail" },
+  { match: /google\.android\.apps\.photos/i, label: "Photos" },
+  { match: /google\.android\.apps\.maps/i, label: "Maps" },
+  { match: /vending$/i, label: "Play Store" },
+];
 
 const EXTRA_PACKAGE_ICONS: Record<string, BlockableIconName> = {
   "com.google.android.apps.messaging": "message-text-outline",
@@ -95,9 +146,30 @@ const EXTRA_PACKAGE_ICONS: Record<string, BlockableIconName> = {
   "com.google.android.apps.maps": "map-marker-outline",
   "com.google.android.calendar": "calendar-outline",
   "com.google.android.dialer": "phone-outline",
-  "com.discord": "discord",
+  "com.discord": "message-text",
   "com.twitter.android": "twitter",
+  "com.reddit.frontpage": "reddit",
 };
+
+function labelFromPackagePatterns(packageName: string): string | null {
+  const lower = packageName.toLowerCase();
+  for (const { match, label } of PACKAGE_LABEL_PATTERNS) {
+    if (match.test(lower)) return label;
+  }
+  return null;
+}
+
+function hasCatalogLabel(packageName: string): boolean {
+  const key = packageName.trim();
+  const lower = key.toLowerCase();
+  return Boolean(
+    LABEL_BY_PACKAGE[key] ??
+      LABEL_BY_PACKAGE[lower] ??
+      EXTRA_PACKAGE_LABELS[key] ??
+      EXTRA_PACKAGE_LABELS[lower] ??
+      labelFromPackagePatterns(key)
+  );
+}
 
 export function labelForPackage(packageName: string): string {
   const key = packageName.trim();
@@ -107,17 +179,46 @@ export function labelForPackage(packageName: string): string {
     LABEL_BY_PACKAGE[lower] ??
     EXTRA_PACKAGE_LABELS[key] ??
     EXTRA_PACKAGE_LABELS[lower] ??
+    labelFromPackagePatterns(key) ??
     humanizePackage(key)
   );
 }
 
 /** Prefer a friendly label on the parent dashboard (never show raw package ids when avoidable). */
 export function displayAppUsageLabel(appLabel: string | null | undefined, packageName: string): string {
+  const catalog = labelForPackage(packageName);
   const normalized = appLabel?.trim();
-  if (normalized && normalized !== packageName && !looksLikePackageId(normalized)) {
-    return normalized;
+
+  if (!normalized || looksLikePackageId(normalized) || normalized === packageName) {
+    return catalog;
   }
-  return labelForPackage(packageName);
+
+  // Stored labels are often auto-humanized package segments ("Frontpage", "Barcelona", "Android").
+  if (isAutoGeneratedLabel(normalized, packageName)) {
+    return catalog;
+  }
+
+  // When we know the package id, prefer the catalog over a stale or generic stored name.
+  if (hasCatalogLabel(packageName)) {
+    return catalog;
+  }
+
+  return normalized;
+}
+
+function isAutoGeneratedLabel(label: string, packageName: string): boolean {
+  const humanized = humanizePackage(packageName);
+  if (label.toLowerCase() === humanized.toLowerCase()) {
+    return true;
+  }
+  const segment = packageName.toLowerCase().split(".").pop() ?? "";
+  if (segment && label.toLowerCase() === segment) {
+    return true;
+  }
+  if (label.toLowerCase() === "android" && packageName.includes(".")) {
+    return true;
+  }
+  return false;
 }
 
 function looksLikePackageId(value: string): boolean {
@@ -135,6 +236,9 @@ export function labelForBlockedPackage(packageName: string): string {
 
 function humanizePackage(packageName: string): string {
   const lower = packageName.toLowerCase();
+  const parts = lower.split(".").filter(Boolean);
+  const segment = parts[parts.length - 1] ?? lower;
+
   const knownSuffixes: Record<string, string> = {
     orca: "Messenger",
     katana: "Facebook",
@@ -143,8 +247,23 @@ function humanizePackage(packageName: string): string {
     mediaclient: "Netflix",
     xoslauncher: "Home",
     hilauncher: "Home",
+    frontpage: "Reddit",
+    barcelona: "Facebook",
+    appmanager: "Phone Manager",
+    phonemaster: "Phone Manager",
   };
-  const segment = lower.split(".").pop() ?? lower;
+
+  if (segment === "android" && parts.length >= 2) {
+    const parent = parts[parts.length - 2];
+    const parentLabels: Record<string, string> = {
+      instagram: "Instagram",
+      chrome: "Chrome",
+    };
+    if (parentLabels[parent]) {
+      return parentLabels[parent];
+    }
+  }
+
   if (knownSuffixes[segment]) {
     return knownSuffixes[segment];
   }
@@ -206,6 +325,36 @@ export function toggleBlockedGroup(blockedPackages: string[], group: BlockableAp
     for (const p of group.packages) set.delete(p);
   } else {
     for (const p of group.packages) set.add(p);
+  }
+  return Array.from(set);
+}
+
+/** All packages that already have a curated group tile (so we don't list them twice). */
+const CURATED_PACKAGES = (() => {
+  const set = new Set<string>();
+  for (const g of BLOCKABLE_APP_GROUPS) {
+    for (const p of g.packages) set.add(p);
+  }
+  return set;
+})();
+
+/** True when a package is already covered by a curated group toggle. */
+export function isCuratedPackage(packageName: string): boolean {
+  return CURATED_PACKAGES.has(packageName);
+}
+
+/** True when an individual package is in the blocked list. */
+export function isPackageBlocked(blockedPackages: string[], packageName: string): boolean {
+  return blockedPackages.includes(packageName);
+}
+
+/** Add/remove a single raw package (used for apps outside the curated catalog). */
+export function toggleBlockedPackage(blockedPackages: string[], packageName: string): string[] {
+  const set = new Set(blockedPackages);
+  if (set.has(packageName)) {
+    set.delete(packageName);
+  } else {
+    set.add(packageName);
   }
   return Array.from(set);
 }

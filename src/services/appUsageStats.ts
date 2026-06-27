@@ -28,6 +28,7 @@ type NativeUsageStats = {
   openUsageAccessSettings: () => void;
   queryUsageEvents: (sinceMs: number) => Promise<RawUsageEvent[]>;
   resolveAppLabel: (packageName: string) => Promise<string>;
+  getLaunchablePackages?: () => Promise<string[]>;
 };
 
 const native: NativeUsageStats | undefined = NativeModules.LearnGateUsageStats;
@@ -51,6 +52,33 @@ export async function resolveAppLabelOnDevice(packageName: string): Promise<stri
   try {
     const label = await native.resolveAppLabel(packageName);
     return typeof label === "string" && label.trim().length > 0 ? label.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Minimum launcher apps before we trust the list enough to filter by it.
+ * On Android 11+ without launcher visibility, the query can return a tiny/partial list;
+ * in that case we skip filtering to avoid hiding real apps.
+ */
+const MIN_TRUSTED_LAUNCHABLE = 8;
+
+/**
+ * Package names with a home-screen launcher icon (real user apps).
+ * Returns null when the native method is unavailable (older build) or the result looks
+ * incomplete, so callers fall back to the package-pattern filter instead of over-filtering.
+ */
+export async function getLaunchablePackagesOnDevice(): Promise<Set<string> | null> {
+  if (!native || typeof native.getLaunchablePackages !== "function") return null;
+  try {
+    const list = await native.getLaunchablePackages();
+    if (!Array.isArray(list)) return null;
+    const set = new Set<string>();
+    for (const pkg of list) {
+      if (typeof pkg === "string" && pkg.trim().length > 0) set.add(pkg.trim());
+    }
+    return set.size >= MIN_TRUSTED_LAUNCHABLE ? set : null;
   } catch {
     return null;
   }
