@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -9,7 +9,7 @@ import type { ComponentProps } from "react";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ParentDashboardCarousel } from "@/components/parent/ParentDashboardCarousel";
 import { ParentHeroAffirmationCard } from "@/components/parent/ParentHeroAffirmationCard";
-import { ParentInsightsSummaryCard } from "@/components/parent/ParentInsightsSummaryCard";
+import { ParentInsightsSummaryCard, type ParentChildInsight } from "@/components/parent/ParentInsightsSummaryCard";
 import { ParentLiveMonitoringCard } from "@/components/parent/ParentLiveMonitoringCard";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { useAuth } from "@/store/AuthContext";
@@ -27,6 +27,12 @@ import { displayAppUsageLabel, iconForPackage } from "@/constants/blockedAppPack
 import { formatAppError } from "@/utils/errors";
 import { filterReportableUsageRows } from "@/utils/appUsagePackages";
 import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotifications";
+import {
+  fetchStoredParentInsights,
+  generateParentInsight,
+  storedInsightToCard,
+  type StoredParentInsight,
+} from "@/services/parentInsights";
 import type { ParentTabParamList } from "@/types/navigation";
 
 type OverviewToast = {
@@ -40,16 +46,6 @@ type ActivityItem = {
   points: number;
   metadata: Record<string, unknown>;
   created_at: string;
-};
-
-type ChildInsight = {
-  childId: string;
-  childName: string;
-  summary: string;
-  latestTaskLine: string;
-  focusAreas: string;
-  nextBestStep: string;
-  recommendation: string;
 };
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -109,87 +105,6 @@ function formatAppUsageDetail(eventAt: string, durationSeconds: number | null): 
 
 type ManagedChild = { id: string; name: string; avatar_url: string | null };
 
-function buildInsights(children: ChildRow[], rows: TaskRow[]): ChildInsight[] {
-  const now = Date.now();
-  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-
-  return children.map((c) => {
-    const childRows = rows.filter((r) => r.child_id === c.id);
-    const completedRows = childRows.filter((r) => r.status === "completed");
-    const completed7 = completedRows.filter(
-      (r) => r.completed_at && now - new Date(r.completed_at).getTime() <= sevenDaysMs
-    );
-    const activeCount = childRows.filter((r) => r.status !== "completed").length;
-
-    const learningDone = completed7.filter((r) => r.category === "learning").length;
-    const exerciseDone = completed7.filter((r) => r.category === "exercise").length;
-    const choreDone = completed7.filter((r) => r.category === "chore").length;
-    const learningTitles7 = completed7
-      .filter((r) => r.category === "learning")
-      .map((r) => r.title?.toLowerCase() ?? "");
-    const mathDone = learningTitles7.filter((t) => t.includes("math") || t.includes("number")).length;
-    const readingDone = learningTitles7.filter((t) => t.includes("alphabet") || t.includes("read")).length;
-    const scienceDone = learningTitles7.filter((t) => t.includes("science")).length;
-    const latestCompleted = [...completedRows].sort(
-      (a, b) =>
-        new Date(b.completed_at ?? b.created_at).getTime() -
-        new Date(a.completed_at ?? a.created_at).getTime()
-    )[0];
-
-    const screenLimitHours = Math.round((c.daily_limit_minutes ?? 0) / 60);
-    const summary = `${completed7.length} tasks completed this week · ${activeCount} active tasks · screen limit ${screenLimitHours}h/day`;
-    const latestTaskLine = latestCompleted
-      ? `Latest completion: ${latestCompleted.title} (${latestCompleted.category})`
-      : "Latest completion: none yet";
-
-    const weakCategories: string[] = [];
-    if (learningDone === 0) weakCategories.push("learning");
-    if (exerciseDone === 0) weakCategories.push("exercise");
-    if (choreDone === 0 && childRows.some((r) => r.category === "chore")) weakCategories.push("chores");
-
-    const subjectNeeds: string[] = [];
-    if (mathDone === 0) subjectNeeds.push("math");
-    if (readingDone === 0) subjectNeeds.push("reading");
-    if (scienceDone === 0) subjectNeeds.push("science");
-
-    const focusAreas =
-      weakCategories.length > 0 || subjectNeeds.length > 0
-        ? `Needs improvement: ${[...weakCategories, ...subjectNeeds].join(", ")}.`
-        : "Strengths: balanced completion across categories and subjects.";
-
-    let nextBestStep = "Next best step: keep one task per category active (learning, exercise, chore).";
-    let recommendation = `${c.name ?? "Child"} is showing steady progress.`;
-
-    if ((c.daily_limit_minutes ?? 0) >= 720) {
-      recommendation = `${c.name ?? "Child"} has a high daily screen limit (${screenLimitHours}h). Consider lowering it gradually.`;
-      nextBestStep = "Next best step: reduce daily screen limit by 30–60 minutes and monitor for 3 days.";
-    }
-    if (completed7.length === 0) {
-      nextBestStep = "Next best step: assign 1 easy learning game and 1 short exercise for tomorrow.";
-      recommendation = `${c.name ?? "Child"} has no recent completions. Start with low-friction wins.`;
-    } else if (mathDone === 0 && learningDone > 0) {
-      nextBestStep = "Next best step: assign 1–2 math-focused games in the next 24 hours.";
-      recommendation = "Learning activity is present, but math progress is low this week.";
-    } else if (exerciseDone === 0) {
-      nextBestStep = "Next best step: assign a 5-minute exercise session daily for 3 days.";
-      recommendation = "Physical activity is missing this week.";
-    } else if (activeCount >= 6) {
-      nextBestStep = "Next best step: reduce active tasks to 3–5 and prioritize today's top 2.";
-      recommendation = "The queue looks overloaded; fewer tasks may improve quality.";
-    }
-
-    return {
-      childId: c.id,
-      childName: c.name ?? "Child",
-      summary,
-      latestTaskLine,
-      focusAreas,
-      nextBestStep,
-      recommendation,
-    };
-  });
-}
-
 export function ParentOverviewScreen() {
   const { isSupabaseConfigured } = useAuth();
   const route = useRoute<RouteProp<ParentTabParamList, "Overview">>();
@@ -200,10 +115,12 @@ export function ParentOverviewScreen() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [appUsage, setAppUsage] = useState<AppUsageItem[]>([]);
   const [managedChildren, setManagedChildren] = useState<ManagedChild[]>([]);
-  const [insights, setInsights] = useState<ChildInsight[]>([]);
+  const [storedInsights, setStoredInsights] = useState<Record<string, StoredParentInsight>>({});
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [monitorMenuVisible, setMonitorMenuVisible] = useState(false);
   const [insightExpanded, setInsightExpanded] = useState(false);
+  const [insightGenerating, setInsightGenerating] = useState(false);
+  const insightBusyRef = useRef(false);
   const [activityExpanded, setActivityExpanded] = useState(false);
   const [usageRefreshing, setUsageRefreshing] = useState(false);
   const [usageLastRefreshedAt, setUsageLastRefreshedAt] = useState<Date | null>(null);
@@ -302,7 +219,7 @@ export function ParentOverviewScreen() {
       setActivity([]);
       setAppUsage([]);
       setManagedChildren([]);
-      setInsights([]);
+      setStoredInsights({});
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -422,7 +339,7 @@ export function ParentOverviewScreen() {
       appTimeSecondsByChild,
     });
 
-    const nextInsights = buildInsights(childRows, taskRows);
+    const stored = await fetchStoredParentInsights(childIds);
 
     setAnalytics(built);
     setStats([
@@ -436,7 +353,7 @@ export function ParentOverviewScreen() {
     ]);
     setActivity(recentActivity);
     setManagedChildren(managed);
-    setInsights(nextInsights);
+    setStoredInsights(Object.fromEntries(stored.map((row) => [row.child_id, row])));
     setSelectedChildId((prev) =>
       prev && managed.some((c) => c.id === prev) ? prev : managed[0]?.id ?? null
     );
@@ -461,10 +378,61 @@ export function ParentOverviewScreen() {
     void loadDashboard(true);
   }, [loadDashboard]);
 
-  const selectedInsight = useMemo(() => {
-    const childId = selectedChildId ?? insights[0]?.childId;
-    return insights.find((i) => i.childId === childId) ?? insights[0] ?? null;
-  }, [insights, selectedChildId]);
+  const generateInsightForChild = useCallback(
+    async (childId: string) => {
+      if (insightBusyRef.current) {
+        return;
+      }
+      insightBusyRef.current = true;
+      setInsightGenerating(true);
+      try {
+        const result = await generateParentInsight(childId, { force: true });
+        if (result.ok) {
+          setStoredInsights((prev) => ({ ...prev, [childId]: result.insight }));
+        } else {
+          showError(result.message);
+        }
+      } finally {
+        insightBusyRef.current = false;
+        setInsightGenerating(false);
+      }
+    },
+    [showError]
+  );
+
+  const selectedInsight = useMemo((): ParentChildInsight | null => {
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    if (!childId) {
+      return null;
+    }
+    const stored = storedInsights[childId];
+    const childName = managedChildren.find((c) => c.id === childId)?.name ?? "Child";
+    if (!stored) {
+      return null;
+    }
+    return storedInsightToCard(stored, childName);
+  }, [managedChildren, selectedChildId, storedInsights]);
+
+  const selectedInsightGeneratedAt = useMemo(() => {
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    if (!childId) {
+      return undefined;
+    }
+    return storedInsights[childId]?.generated_at;
+  }, [managedChildren, selectedChildId, storedInsights]);
+
+  const onToggleInsight = useCallback(() => {
+    setInsightExpanded((expanded) => {
+      const next = !expanded;
+      if (next) {
+        const childId = selectedChildId ?? managedChildren[0]?.id;
+        if (childId) {
+          void generateInsightForChild(childId);
+        }
+      }
+      return next;
+    });
+  }, [generateInsightForChild, managedChildren, selectedChildId]);
 
   const selectedMonitor = useMemo(() => {
     const childId = selectedChildId ?? analytics?.monitors[0]?.childId;
@@ -543,12 +511,14 @@ export function ParentOverviewScreen() {
         />
       ) : null}
 
-      {analytics && insights.length > 0 ? (
+      {analytics && managedChildren.length > 0 ? (
         <ParentInsightsSummaryCard
           week={analytics.week}
           insight={selectedInsight}
+          generatedAt={selectedInsightGeneratedAt}
           expanded={insightExpanded}
-          onTogglePlan={() => setInsightExpanded((v) => !v)}
+          loading={insightGenerating}
+          onTogglePlan={onToggleInsight}
         />
       ) : null}
 

@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import type { WeekAnalytics } from "@/services/parentDashboardAnalytics";
+import { formatGeneratedAgo } from "@/services/parentInsights";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
 
@@ -16,12 +17,22 @@ export type ParentChildInsight = {
 type ParentInsightsSummaryCardProps = {
   week: WeekAnalytics;
   insight: ParentChildInsight | null;
+  generatedAt?: string;
   expanded: boolean;
+  loading?: boolean;
   onTogglePlan: () => void;
 };
 
-export function ParentInsightsSummaryCard({ week, insight, expanded, onTogglePlan }: ParentInsightsSummaryCardProps) {
+export function ParentInsightsSummaryCard({
+  week,
+  insight,
+  generatedAt,
+  expanded,
+  loading = false,
+  onTogglePlan,
+}: ParentInsightsSummaryCardProps) {
   const c = useAppColors();
+  const generatedLabel = formatGeneratedAgo(generatedAt);
   const trendLine =
     week.totalCompleted > week.priorWeekCompleted
       ? "Completions improved from last week"
@@ -49,16 +60,31 @@ export function ParentInsightsSummaryCard({ week, insight, expanded, onTogglePla
           </Pressable>
         </View>
 
-        {expanded && insight ? (
+        {expanded ? (
           <View style={[styles.detail, { borderTopColor: c.insightCardBorder }]}>
-            <Text style={[styles.detailName, { color: c.primaryDark }]}>{insight.childName}</Text>
-            <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.summary}</Text>
-            <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.latestTaskLine}</Text>
-            <Text style={styles.detailFocus}>{insight.focusAreas}</Text>
-            <Text style={[styles.detailRec, { color: c.text }]}>{insight.recommendation}</Text>
-            <Text style={[styles.detailStep, { color: c.primaryDark }]}>{insight.nextBestStep}</Text>
+            {loading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={c.primary} />
+                <Text style={{ color: c.subtext }}>Generating personalized insight…</Text>
+              </View>
+            ) : insight ? (
+              <>
+                <Text style={[styles.detailName, { color: c.primaryDark }]}>{insight.childName}</Text>
+                <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.summary}</Text>
+                <Text style={[styles.detailLine, { color: c.subtext }]}>{insight.latestTaskLine}</Text>
+                <Text style={styles.detailFocus}>{insight.focusAreas}</Text>
+                <Text style={[styles.detailRec, { color: c.text }]}>{insight.recommendation}</Text>
+                <Text style={[styles.detailStep, { color: c.primaryDark }]}>{insight.nextBestStep}</Text>
+              </>
+            ) : (
+              <Text style={{ color: c.subtext }}>Could not load insight. Pull to refresh and try again.</Text>
+            )}
+            <Text style={[styles.poweredBy, { color: c.subtext }]}>Powered by Google Gemini</Text>
+            {generatedLabel && !loading ? (
+              <Text style={[styles.generatedAt, { color: c.subtext }]}>{generatedLabel}</Text>
+            ) : null}
             <Text style={[styles.aiNote, { color: c.subtext }]}>
-              Recommendations are generated from recent in-app behavior patterns.
+              Recommendations are AI-generated from recent in-app behavior. Tap View More to refresh.
             </Text>
           </View>
         ) : null}
@@ -121,6 +147,12 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     gap: 8,
   },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+  },
   detailName: {
     fontWeight: "800",
     fontSize: 18,
@@ -145,10 +177,21 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 25,
   },
+  poweredBy: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    marginTop: 8,
+  },
+  generatedAt: {
+    fontSize: 13,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   aiNote: {
     fontStyle: "italic",
     fontSize: 14,
     lineHeight: 20,
-    marginTop: 4,
+    marginTop: 2,
   },
 });
