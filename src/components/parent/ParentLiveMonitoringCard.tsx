@@ -1,7 +1,7 @@
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { Menu, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import type { ChildMonitor } from "@/services/parentDashboardAnalytics";
+import { formatAppTimeShort, type ChildMonitor } from "@/services/parentDashboardAnalytics";
 import { useAppColors } from "@/theme/useAppColors";
 import type { AppColors } from "@/theme/theme";
 import { radii, shadows } from "@/theme/theme";
@@ -90,13 +90,13 @@ export function ParentLiveMonitoringCard({
         </View>
 
         <View style={[styles.statsRow, { borderTopColor: c.border }]}>
-          <Stat value={String(monitor.activeTasks)} label="Active tasks" colors={c} />
+          <Stat value={String(monitor.taskCount)} label="Task" colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={String(monitor.completedThisWeek)} label="This week" colors={c} />
+          <Stat value={String(monitor.completedCount)} label="Completed" colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={String(monitor.pendingReview)} label="Reviews" colors={c} />
+          <Stat value={String(monitor.pendingCount)} label="Pending" colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={`${monitor.completionRatePct}%`} label="App time" colors={c} />
+          <Stat value={formatAppTimeShort(monitor.appTimeSeconds)} label="App time" colors={c} />
         </View>
       </View>
     </View>

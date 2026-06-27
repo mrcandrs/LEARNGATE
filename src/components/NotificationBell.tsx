@@ -6,7 +6,7 @@ import { useInAppNotifications } from "@/hooks/useInAppNotifications";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
 import { navigateFromNotification } from "@/navigation/navigationRef";
-import type { UserNotification } from "@/services/inAppNotifications";
+import { NOTIFICATION_RETENTION_HINT, type UserNotification } from "@/services/inAppNotifications";
 
 type Props = {
   enabled: boolean;
@@ -63,10 +63,12 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
   }, [refresh]);
 
   const onPressItem = useCallback(
-    async (item: UserNotification) => {
-      await markRead(item.id);
+    (item: UserNotification) => {
+      const kind = item.kind;
+      const data = item.data ?? {};
       setOpen(false);
-      navigateFromNotification(item.kind, item.data);
+      navigateFromNotification(kind, data);
+      void markRead(item.id);
     },
     [markRead]
   );
@@ -118,6 +120,7 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
                 <Text style={{ color: c.subtext, marginTop: 8 }}>No notifications yet.</Text>
               </View>
             ) : (
+              <>
               <FlatList
                 style={styles.list}
                 data={items}
@@ -130,7 +133,7 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
                   const unread = !item.read_at;
                   return (
                     <Pressable
-                      onPress={() => void onPressItem(item)}
+                      onPress={() => onPressItem(item)}
                       style={[
                         styles.row,
                         { borderBottomColor: c.border },
@@ -166,6 +169,10 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
                   );
                 }}
               />
+              <Text variant="labelSmall" style={[styles.retentionHint, { color: c.subtext }]}>
+                {NOTIFICATION_RETENTION_HINT}
+              </Text>
+              </>
             )}
           </View>
         </View>
@@ -231,7 +238,14 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 8,
+  },
+  retentionHint: {
+    textAlign: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 6,
+    lineHeight: 16,
   },
   row: {
     flexDirection: "row",

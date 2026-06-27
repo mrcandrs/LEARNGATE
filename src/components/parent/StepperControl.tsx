@@ -12,6 +12,7 @@ type StepperControlProps = {
   onValuePress?: () => void;
   decrementAccessibilityLabel?: string;
   incrementAccessibilityLabel?: string;
+  disabled?: boolean;
 };
 
 export function StepperControl({
@@ -22,17 +23,20 @@ export function StepperControl({
   onValuePress,
   decrementAccessibilityLabel = "Decrease",
   incrementAccessibilityLabel = "Increase",
+  disabled = false,
 }: StepperControlProps) {
   const c = useAppColors();
+  const muted = disabled ? 0.45 : 1;
 
   return (
-    <View style={styles.block}>
+    <View style={[styles.block, disabled && { opacity: muted }]}>
       <Text variant="labelLarge" style={[styles.label, { color: c.text }]}>
         {label}
       </Text>
       <View style={styles.row}>
         <Pressable
           onPress={onDecrement}
+          disabled={disabled}
           style={[styles.stepButton, { borderColor: c.border, backgroundColor: c.stepperButtonBg }]}
           accessibilityRole="button"
           accessibilityLabel={decrementAccessibilityLabel}
@@ -41,7 +45,7 @@ export function StepperControl({
         </Pressable>
         <Pressable
           onPress={onValuePress}
-          disabled={!onValuePress}
+          disabled={disabled || !onValuePress}
           style={[styles.valuePill, { backgroundColor: c.stepperValueBg }]}
           accessibilityRole="button"
           accessibilityLabel={onValuePress ? `${label}, ${value}. Tap to set.` : undefined}
@@ -52,6 +56,7 @@ export function StepperControl({
         </Pressable>
         <Pressable
           onPress={onIncrement}
+          disabled={disabled}
           style={[styles.stepButton, { borderColor: c.border, backgroundColor: c.stepperButtonBg }]}
           accessibilityRole="button"
           accessibilityLabel={incrementAccessibilityLabel}

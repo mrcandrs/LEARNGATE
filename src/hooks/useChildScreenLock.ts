@@ -28,10 +28,13 @@ function evaluateLock(params: {
   dailyLimitMinutes: number;
   bedtimeStart: string;
   bedtimeEnd: string;
+  screenLimitEnabled: boolean;
+  bedtimeEnabled: boolean;
 }): Pick<ChildLockState, "isLocked" | "reason" | "title" | "message"> {
-  const { now, minutesUsed, dailyLimitMinutes, bedtimeStart, bedtimeEnd } = params;
+  const { now, minutesUsed, dailyLimitMinutes, bedtimeStart, bedtimeEnd, screenLimitEnabled, bedtimeEnabled } =
+    params;
 
-  if (isInBedtimeWindow(now, bedtimeStart, bedtimeEnd)) {
+  if (bedtimeEnabled && isInBedtimeWindow(now, bedtimeStart, bedtimeEnd)) {
     return {
       isLocked: true,
       reason: "bedtime",
@@ -40,7 +43,7 @@ function evaluateLock(params: {
     };
   }
 
-  if (minutesUsed >= dailyLimitMinutes) {
+  if (screenLimitEnabled && minutesUsed >= dailyLimitMinutes) {
     const hours = Math.floor(dailyLimitMinutes / 60);
     const mins = dailyLimitMinutes % 60;
     const limitLabel =
@@ -76,6 +79,8 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
   const childIdRef = useRef<string | null>(null);
 
   const dailyLimitMinutes = child?.daily_limit_minutes ?? 120;
+  const screenLimitEnabled = child?.screen_limit_enabled !== false;
+  const bedtimeEnabled = child?.bedtime_enabled !== false;
   const bedtimeStart = child?.bedtime_start ?? "20:00";
   const bedtimeEnd = child?.bedtime_end ?? "07:00";
 
@@ -105,8 +110,21 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
         dailyLimitMinutes,
         bedtimeStart,
         bedtimeEnd,
+        screenLimitEnabled,
+        bedtimeEnabled,
       }).isLocked,
-    [enabled, usageReady, child?.id, clock, minutesUsedToday, dailyLimitMinutes, bedtimeStart, bedtimeEnd]
+    [
+      enabled,
+      usageReady,
+      child?.id,
+      clock,
+      minutesUsedToday,
+      dailyLimitMinutes,
+      bedtimeStart,
+      bedtimeEnd,
+      screenLimitEnabled,
+      bedtimeEnabled,
+    ]
   );
 
   const lockEval = useMemo(
@@ -117,8 +135,18 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
         dailyLimitMinutes,
         bedtimeStart,
         bedtimeEnd,
+        screenLimitEnabled,
+        bedtimeEnabled,
       }),
-    [clock, minutesUsedToday, dailyLimitMinutes, bedtimeStart, bedtimeEnd]
+    [
+      clock,
+      minutesUsedToday,
+      dailyLimitMinutes,
+      bedtimeStart,
+      bedtimeEnd,
+      screenLimitEnabled,
+      bedtimeEnabled,
+    ]
   );
 
   const flushSession = useCallback(async () => {
@@ -134,6 +162,8 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
         dailyLimitMinutes,
         bedtimeStart,
         bedtimeEnd,
+        screenLimitEnabled,
+        bedtimeEnabled,
       }).isLocked
     ) {
       sessionStartRef.current = null;

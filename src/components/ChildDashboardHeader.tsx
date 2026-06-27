@@ -6,11 +6,8 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
-import { levelToDifficultyLabel } from "@/utils/difficulty";
-
 type Props = {
   name: string;
-  level: number;
   stars: number;
   avatarUrl?: string | null;
   showNotifications?: boolean;
@@ -20,7 +17,6 @@ type Props = {
 
 export function ChildDashboardHeader({
   name,
-  level,
   stars,
   avatarUrl,
   showNotifications = true,
@@ -29,7 +25,6 @@ export function ChildDashboardHeader({
 }: Props) {
   const c = useAppColors();
   const insets = useSafeAreaInsets();
-  const difficultyLabel = levelToDifficultyLabel(level);
 
   return (
     <LinearGradient
@@ -63,14 +58,9 @@ export function ChildDashboardHeader({
           </Text>
           <View style={styles.metaRow}>
             <View style={styles.pill}>
-              <Text variant="labelMedium" style={styles.pillText}>
-                {difficultyLabel}
-              </Text>
-            </View>
-            <View style={styles.pill}>
               <MaterialCommunityIcons name="star" size={14} color="#FBBF24" />
               <Text variant="labelMedium" style={styles.pillText}>
-                {stars}
+                {stars} stars
               </Text>
             </View>
           </View>

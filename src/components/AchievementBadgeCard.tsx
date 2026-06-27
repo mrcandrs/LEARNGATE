@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
+import { Button, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { AchievementProgress } from "@/services/childAchievements";
 import { useAppColors } from "@/theme/useAppColors";
@@ -8,9 +8,12 @@ import { radii } from "@/theme/theme";
 
 type Props = {
   item: AchievementProgress;
+  claimed?: boolean;
+  claiming?: boolean;
+  onClaim?: () => void;
 };
 
-export function AchievementBadgeCard({ item }: Props) {
+export function AchievementBadgeCard({ item, claimed = false, claiming = false, onClaim }: Props) {
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const { definition, unlocked, progress } = item;
@@ -20,6 +23,8 @@ export function AchievementBadgeCard({ item }: Props) {
       : unlocked
         ? 100
         : 0;
+
+  const canClaim = unlocked && !claimed && definition.bonusStars > 0;
 
   return (
     <View style={[styles.card, unlocked ? styles.cardUnlocked : styles.cardLocked]}>
@@ -36,18 +41,41 @@ export function AchievementBadgeCard({ item }: Props) {
       <Text variant="labelSmall" style={styles.description} numberOfLines={2}>
         {definition.description}
       </Text>
+      {definition.bonusStars > 0 ? (
+        <Text variant="labelSmall" style={styles.rewardHint}>
+          Reward: +{definition.bonusStars} stars
+        </Text>
+      ) : null}
       {!unlocked && progress ? (
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.min(pct, 100)}%` }]} />
         </View>
       ) : null}
-      <Text variant="labelSmall" style={styles.progressLabel}>
-        {unlocked
-          ? "Unlocked"
-          : progress
-            ? `${progress.current}/${progress.target}`
-            : "Locked"}
-      </Text>
+      {canClaim && onClaim ? (
+        <Button
+          mode="contained"
+          compact
+          loading={claiming}
+          disabled={claiming}
+          onPress={onClaim}
+          style={styles.claimBtn}
+          labelStyle={styles.claimLabel}
+        >
+          Claim
+        </Button>
+      ) : (
+        <Text variant="labelSmall" style={styles.progressLabel}>
+          {unlocked
+            ? claimed
+              ? "Claimed"
+              : definition.bonusStars > 0
+                ? "Unlocked"
+                : "Unlocked"
+            : progress
+              ? `${progress.current}/${progress.target}`
+              : "Locked"}
+        </Text>
+      )}
     </View>
   );
 }
@@ -96,6 +124,11 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
       textAlign: "center",
       lineHeight: 16,
     },
+    rewardHint: {
+      color: c.warning,
+      fontWeight: "700",
+      textAlign: "center",
+    },
     progressTrack: {
       width: "100%",
       height: 6,
@@ -112,6 +145,14 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     progressLabel: {
       color: c.subtext,
       fontWeight: "600",
+    },
+    claimBtn: {
+      marginTop: 2,
+      alignSelf: "stretch",
+    },
+    claimLabel: {
+      fontSize: 12,
+      marginVertical: 2,
     },
   });
 }

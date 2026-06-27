@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Card, Chip, Dialog, Divider, IconButton, List, Portal, Text, TextInput, useTheme } from "react-native-paper";
+import { Card, Chip, Dialog, Divider, IconButton, List, Portal, Switch, Text, TextInput, useTheme } from "react-native-paper";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepperControl } from "@/components/parent/StepperControl";
@@ -22,7 +25,9 @@ import { env } from "@/config/env";
 import { EXERCISES, type ExerciseId } from "@/data/exercises";
 import { CHILD_GAME_CATALOG } from "@/data/childGames";
 import type { GameId } from "@/data/childGames";
-import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, rewardMultiplierForDifficultyLevel, type DifficultyTier } from "@/utils/difficulty";
+import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
+import { learningTaskXpReward } from "@/data/gameDifficulty";
+import type { ParentTabParamList } from "@/types/navigation";
 import {
   BLOCKABLE_APP_GROUPS,
   isGroupFullySelected,
@@ -60,6 +65,8 @@ type ChildRow = {
   difficulty_level: number;
   bedtime_start: string;
   bedtime_end: string;
+  screen_limit_enabled: boolean;
+  bedtime_enabled: boolean;
   audio_guide_rate: number;
   avatar_url: string | null;
   is_online: boolean;
@@ -118,10 +125,14 @@ type ChildDraft = {
   difficulty_level: DifficultyTier;
   bedtime_start: string;
   bedtime_end: string;
+  screen_limit_enabled: boolean;
+  bedtime_enabled: boolean;
 };
 
 export function ParentChildrenScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const route = useRoute<RouteProp<ParentTabParamList, "Children">>();
+  const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const theme = useTheme();
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
@@ -138,10 +149,40 @@ export function ParentChildrenScreen() {
   const [toast, setToast] = useState<ManageToast | null>(null);
   const [durationPickerOpen, setDurationPickerOpen] = useState(false);
   const [bedtimePickerField, setBedtimePickerField] = useState<"start" | "end" | null>(null);
+  const [childToDelete, setChildToDelete] = useState<ChildRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [submissionsHighlight, setSubmissionsHighlight] = useState(false);
 
   const hideToast = useCallback(() => {
     setToast(null);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const key = route.params?.navKey;
+      if (!key) {
+        return;
+      }
+      if (route.params?.childId) {
+        setSelectedChildId(route.params.childId);
+      }
+      let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+      if (route.params?.focusSubmissions) {
+        setSubmissionsHighlight(true);
+        highlightTimer = setTimeout(() => setSubmissionsHighlight(false), 3200);
+      }
+      navigation.setParams({
+        childId: undefined,
+        focusSubmissions: undefined,
+        navKey: undefined,
+      });
+      return () => {
+        if (highlightTimer) {
+          clearTimeout(highlightTimer);
+        }
+      };
+    }, [navigation, route.params?.childId, route.params?.focusSubmissions, route.params?.navKey])
+  );
 
   const showError = useCallback((message: string) => {
     setToast({ message, variant: "error" });
@@ -160,7 +201,7 @@ export function ParentChildrenScreen() {
   const [assigning, setAssigning] = useState(false);
   const [learningTarget, setLearningTarget] = useState<ChildRow | null>(null);
   const [learningGameId, setLearningGameId] = useState<GameId>("alphabet");
-  const [learningPoints, setLearningPoints] = useState("30");
+  const [learningDifficulty, setLearningDifficulty] = useState<DifficultyTier>("medium");
   const [choreTarget, setChoreTarget] = useState<ChildRow | null>(null);
   const [choreTitle, setChoreTitle] = useState("");
   const [chorePoints, setChorePoints] = useState("30");
@@ -202,7 +243,7 @@ export function ParentChildrenScreen() {
     const { data, error: childrenError } = await supabase
       .from("children")
       .select(
-        "id, child_user_id, login_email, login_secret, auth_pin, name, age, stars, daily_limit_minutes, difficulty_level, bedtime_start, bedtime_end, audio_guide_rate, avatar_url, is_online, last_seen_at"
+        "id, child_user_id, login_email, login_secret, auth_pin, name, age, stars, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, difficulty_level, bedtime_start, bedtime_end, audio_guide_rate, avatar_url, is_online, last_seen_at"
       )
       .eq("parent_id", user.id)
       .order("created_at", { ascending: true });
@@ -214,13 +255,19 @@ export function ParentChildrenScreen() {
       return;
     }
 
-    const rows = (data as ChildRow[]) ?? [];
+    const rows = ((data ?? []) as ChildRow[]).map((row) => ({
+      ...row,
+      screen_limit_enabled: row.screen_limit_enabled !== false,
+      bedtime_enabled: row.bedtime_enabled !== false,
+    }));
     const nextDrafts = rows.reduce<Record<string, ChildDraft>>((acc, row) => {
       acc[row.id] = {
         daily_limit_minutes: String(row.daily_limit_minutes),
         difficulty_level: levelToDifficultyTier(row.difficulty_level),
         bedtime_start: formatBedtimeForInput(row.bedtime_start),
         bedtime_end: formatBedtimeForInput(row.bedtime_end),
+        screen_limit_enabled: row.screen_limit_enabled !== false,
+        bedtime_enabled: row.bedtime_enabled !== false,
       };
       return acc;
     }, {});
@@ -334,15 +381,14 @@ export function ParentChildrenScreen() {
     const bedtimeStart = startResult.value;
     const bedtimeEnd = endResult.value;
 
-    const difficulty = difficultyTierToLevel(draft.difficulty_level);
-
     const { error: updateError } = await supabase
       .from("children")
       .update({
         daily_limit_minutes: dailyLimit,
-        difficulty_level: difficulty,
         bedtime_start: bedtimeStart,
         bedtime_end: bedtimeEnd,
+        screen_limit_enabled: draft.screen_limit_enabled,
+        bedtime_enabled: draft.bedtime_enabled,
       })
       .eq("id", childId);
 
@@ -355,14 +401,12 @@ export function ParentChildrenScreen() {
     return true;
   };
 
-  const saveScreenRules = async (childId: string, difficultyLevel?: number): Promise<boolean> => {
+  const saveScreenRules = async (childId: string): Promise<boolean> => {
     if (!supabase || !screenRule) {
       return false;
     }
-    const rewardMultiplier =
-      difficultyLevel != null ? rewardMultiplierForDifficultyLevel(difficultyLevel) : screenRule.reward_multiplier;
     const { error: upsertError } = await supabase.from("screen_rules").upsert(
-      { ...screenRule, child_id: childId, reward_multiplier: rewardMultiplier },
+      { ...screenRule, child_id: childId },
       { onConflict: "child_id" }
     );
     if (upsertError) {
@@ -376,8 +420,7 @@ export function ParentChildrenScreen() {
     setSaveBusyChildId(childId);
     try {
       const childOk = await saveChild(childId);
-      const difficultyLevel = selectedDraft ? difficultyTierToLevel(selectedDraft.difficulty_level) : undefined;
-      const rulesOk = childOk ? await saveScreenRules(childId, difficultyLevel) : false;
+      const rulesOk = childOk ? await saveScreenRules(childId) : false;
       if (childOk && rulesOk) {
         showSuccess("All changes saved.");
         await loadScreenRules(childId);
@@ -668,16 +711,11 @@ export function ParentChildrenScreen() {
   const openAssignLearning = (child: ChildRow) => {
     setLearningTarget(child);
     setLearningGameId("alphabet");
-    setLearningPoints("30");
+    setLearningDifficulty("medium");
   };
 
   const assignLearning = async () => {
     if (!supabase || !learningTarget) {
-      return;
-    }
-    const pts = Number(learningPoints);
-    if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      showError("Learning points must be a valid number.");
       return;
     }
     const {
@@ -690,13 +728,15 @@ export function ParentChildrenScreen() {
     }
 
     const game = CHILD_GAME_CATALOG.find((g) => g.id === learningGameId) ?? CHILD_GAME_CATALOG[0];
+    const difficultyLevel = difficultyTierToLevel(learningDifficulty);
+    const xpReward = learningTaskXpReward(learningDifficulty, game.id);
     setAssigningLearning(true);
     const payload = {
       child_id: learningTarget.id,
       category: "learning",
       title: game.title,
-      description: JSON.stringify({ gameId: game.id }),
-      xp_reward: pts,
+      description: JSON.stringify({ gameId: game.id, difficultyLevel, difficultyTier: learningDifficulty }),
+      xp_reward: xpReward,
       requires_camera: false,
       status: "pending",
       created_by: user.id,
@@ -708,7 +748,7 @@ export function ParentChildrenScreen() {
       return;
     }
     setLearningTarget(null);
-    showSuccess(`Learning task assigned: ${game.title}`);
+    showSuccess(`Learning task assigned: ${game.title} (${difficultyTierLabel(learningDifficulty)}, +${xpReward} stars)`);
   };
 
   const openAssignChore = (child: ChildRow) => {
@@ -781,6 +821,8 @@ export function ParentChildrenScreen() {
           difficulty_level: levelToDifficultyTier(selectedChild.difficulty_level),
           bedtime_start: formatBedtimeForInput(selectedChild.bedtime_start),
           bedtime_end: formatBedtimeForInput(selectedChild.bedtime_end),
+          screen_limit_enabled: selectedChild.screen_limit_enabled !== false,
+          bedtime_enabled: selectedChild.bedtime_enabled !== false,
         };
   }, [drafts, selectedChild]);
 
@@ -793,8 +835,33 @@ export function ParentChildrenScreen() {
     const dailyLabel = Number.isFinite(dailyMinutes)
       ? formatDailyLimitSummary(dailyMinutes)
       : `${selectedChild.daily_limit_minutes} min`;
-    return `Current rule: ${dailyLabel} daily limit • Bedtime ${formatBedtime12h(selectedDraft.bedtime_start)} to ${formatBedtime12h(selectedDraft.bedtime_end)} • Sound: ${audioRateLabel(selectedAudioRate)}`;
+    const limitPart = selectedDraft.screen_limit_enabled ? `${dailyLabel} daily limit` : "Screen limit off";
+    const bedPart = selectedDraft.bedtime_enabled
+      ? `Bedtime ${formatBedtime12h(selectedDraft.bedtime_start)} to ${formatBedtime12h(selectedDraft.bedtime_end)}`
+      : "Bedtime off";
+    return `Current rule: ${limitPart} • ${bedPart} • Sound: ${audioRateLabel(selectedAudioRate)}`;
   }, [selectedChild, selectedDraft, selectedAudioRate]);
+
+  const removeChildAccount = async () => {
+    if (!supabase || !childToDelete) {
+      return;
+    }
+    setDeleteBusy(true);
+    const removedId = childToDelete.id;
+    const { error } = await supabase.from("children").delete().eq("id", removedId);
+    setDeleteBusy(false);
+    if (error) {
+      showError(formatAppError(error));
+      return;
+    }
+    setChildToDelete(null);
+    setChildPickerVisible(false);
+    if (selectedChildId === removedId) {
+      setSelectedChildId(null);
+    }
+    showSuccess(`${childToDelete.name} was removed.`);
+    await loadChildren(false, true);
+  };
 
   const formatSubmissionTime = (iso: string) => {
     const date = new Date(iso);
@@ -904,27 +971,6 @@ export function ParentChildrenScreen() {
               </View>
               <Divider />
               <Text variant="labelLarge" style={styles.subSectionTitle}>
-                Difficulty
-              </Text>
-              <View style={styles.chipRow}>
-                {(["easy", "medium", "hard"] as const).map((tier) => (
-                  <Chip
-                    key={tier}
-                    selected={selectedDraft.difficulty_level === tier}
-                    onPress={() =>
-                      setDrafts((prev) => ({
-                        ...prev,
-                        [selectedChild.id]: { ...selectedDraft, difficulty_level: tier },
-                      }))
-                    }
-                    compact
-                  >
-                    {difficultyTierLabel(tier)}
-                  </Chip>
-                ))}
-              </View>
-              <Divider />
-              <Text variant="labelLarge" style={styles.subSectionTitle}>
                 Sound / Audio Guidance Speed
               </Text>
               <View style={styles.chipRow}>
@@ -945,7 +991,12 @@ export function ParentChildrenScreen() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.childCard}>
+          <Card
+            style={[
+              styles.childCard,
+              submissionsHighlight && { borderColor: c.warning, borderWidth: 2 },
+            ]}
+          >
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="clipboard-check-outline"
@@ -1008,13 +1059,28 @@ export function ParentChildrenScreen() {
               <ParentSectionHeader
                 icon="timer-outline"
                 title="Screen Time & Bedtime"
-                subtitle="Adjust daily limits and quiet hours with the arrows."
+                subtitle="Turn limits on or off, then adjust values."
                 style={styles.sectionHeaderInCard}
               />
+              <View style={styles.toggleRow}>
+                <Text variant="labelLarge" style={{ color: c.text, fontWeight: "700" }}>
+                  Screen time
+                </Text>
+                <Switch
+                  value={selectedDraft.screen_limit_enabled}
+                  onValueChange={(screen_limit_enabled) =>
+                    setDrafts((prev) => ({
+                      ...prev,
+                      [selectedChild.id]: { ...selectedDraft, screen_limit_enabled },
+                    }))
+                  }
+                />
+              </View>
               <StepperControl
                 label="Daily Screen Limit"
                 value={formatDailyLimitDisplay(selectedDraft.daily_limit_minutes, selectedChild.daily_limit_minutes)}
-                onValuePress={() => setDurationPickerOpen(true)}
+                disabled={!selectedDraft.screen_limit_enabled}
+                onValuePress={() => selectedDraft.screen_limit_enabled && setDurationPickerOpen(true)}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1044,10 +1110,25 @@ export function ParentChildrenScreen() {
                 decrementAccessibilityLabel="Decrease daily screen limit"
                 incrementAccessibilityLabel="Increase daily screen limit"
               />
+              <View style={styles.toggleRow}>
+                <Text variant="labelLarge" style={{ color: c.text, fontWeight: "700" }}>
+                  Bedtime
+                </Text>
+                <Switch
+                  value={selectedDraft.bedtime_enabled}
+                  onValueChange={(bedtime_enabled) =>
+                    setDrafts((prev) => ({
+                      ...prev,
+                      [selectedChild.id]: { ...selectedDraft, bedtime_enabled },
+                    }))
+                  }
+                />
+              </View>
               <StepperControl
                 label="Bedtime Start"
                 value={formatBedtime12h(selectedDraft.bedtime_start)}
-                onValuePress={() => setBedtimePickerField("start")}
+                disabled={!selectedDraft.bedtime_enabled}
+                onValuePress={() => selectedDraft.bedtime_enabled && setBedtimePickerField("start")}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1072,7 +1153,8 @@ export function ParentChildrenScreen() {
               <StepperControl
                 label="Bedtime End"
                 value={formatBedtime12h(selectedDraft.bedtime_end)}
-                onValuePress={() => setBedtimePickerField("end")}
+                disabled={!selectedDraft.bedtime_enabled}
+                onValuePress={() => selectedDraft.bedtime_enabled && setBedtimePickerField("end")}
                 onDecrement={() =>
                   setDrafts((prev) => ({
                     ...prev,
@@ -1208,30 +1290,72 @@ export function ParentChildrenScreen() {
       />
 
       <Portal>
-        <Dialog visible={childPickerVisible} onDismiss={() => setChildPickerVisible(false)}>
+        <Dialog visible={childPickerVisible} onDismiss={() => setChildPickerVisible(false)} style={styles.pickerDialog}>
           <Dialog.Title>Select child</Dialog.Title>
-          <Dialog.ScrollArea style={styles.pickerDialogScroll}>
-            {children.map((child) => (
-              <List.Item
-                key={child.id}
-                title={child.name}
-                description={`Age ${child.age}`}
-                left={() =>
-                  child.avatar_url ? (
-                    <Image source={{ uri: child.avatar_url }} style={styles.pickerListAvatar} />
-                  ) : (
-                    <View style={styles.pickerListAvatarFallback}>
-                      <Text style={styles.pickerListAvatarLetter}>{child.name.slice(0, 1).toUpperCase()}</Text>
+          <Dialog.Content style={styles.pickerDialogContent}>
+            <ScrollView
+              style={styles.pickerScroll}
+              contentContainerStyle={styles.pickerScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+            >
+              {children.map((child) => (
+                <View key={child.id} style={[styles.pickerRow, { borderBottomColor: c.border }]}>
+                  <Pressable
+                    style={styles.pickerRowMain}
+                    onPress={() => {
+                      setSelectedChildId(child.id);
+                      setChildPickerVisible(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${child.name}`}
+                  >
+                    {child.avatar_url ? (
+                      <Image source={{ uri: child.avatar_url }} style={styles.pickerListAvatar} />
+                    ) : (
+                      <View style={styles.pickerListAvatarFallback}>
+                        <Text style={styles.pickerListAvatarLetter}>{child.name.slice(0, 1).toUpperCase()}</Text>
+                      </View>
+                    )}
+                    <View style={styles.pickerRowText}>
+                      <Text variant="titleSmall" style={{ color: c.text, fontWeight: "700" }}>
+                        {child.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: c.subtext }}>
+                        Age {child.age}
+                      </Text>
                     </View>
-                  )
-                }
-                onPress={() => {
-                  setSelectedChildId(child.id);
-                  setChildPickerVisible(false);
-                }}
-              />
-            ))}
-          </Dialog.ScrollArea>
+                  </Pressable>
+                  <IconButton
+                    icon="delete-outline"
+                    iconColor="#B91C1C"
+                    size={22}
+                    onPress={() => setChildToDelete(child)}
+                    accessibilityLabel={`Remove ${child.name}`}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </Dialog.Content>
+        </Dialog>
+
+        <Dialog visible={Boolean(childToDelete)} onDismiss={() => !deleteBusy && setChildToDelete(null)}>
+          <Dialog.Title>Remove child?</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium">
+              Remove {childToDelete?.name ?? "this child"} from your account? Their tasks and history will be deleted.
+              This cannot be undone.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <PrimaryButton label="Cancel" mode="text" onPress={() => setChildToDelete(null)} disabled={deleteBusy} />
+            <PrimaryButton
+              label={deleteBusy ? "Removing…" : "Remove"}
+              onPress={() => void removeChildAccount()}
+              disabled={deleteBusy}
+            />
+          </Dialog.Actions>
         </Dialog>
 
         <Dialog visible={showCreateDialog} onDismiss={() => setShowCreateDialog(false)}>
@@ -1314,7 +1438,10 @@ export function ParentChildrenScreen() {
           <Dialog.Title>Assign learning game</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Choose a mini-game your child must complete to earn rewards.
+              Choose a game and difficulty for this assignment. Star reward is set from difficulty.
+            </Text>
+            <Text variant="labelMedium" style={[styles.subSectionTitle, { marginTop: 8 }]}>
+              Game
             </Text>
             <View style={styles.chipRow}>
               {CHILD_GAME_CATALOG.map((g) => (
@@ -1323,13 +1450,24 @@ export function ParentChildrenScreen() {
                 </Chip>
               ))}
             </View>
-            <TextInput
-              label="Reward points (stars)"
-              mode="outlined"
-              value={learningPoints}
-              keyboardType="number-pad"
-              onChangeText={(v) => setLearningPoints(v.replace(/[^0-9]/g, "").slice(0, 4))}
-            />
+            <Text variant="labelMedium" style={[styles.subSectionTitle, { marginTop: 8 }]}>
+              Difficulty
+            </Text>
+            <View style={styles.chipRow}>
+              {(["easy", "medium", "hard"] as const).map((tier) => (
+                <Chip
+                  key={tier}
+                  selected={learningDifficulty === tier}
+                  onPress={() => setLearningDifficulty(tier)}
+                  compact
+                >
+                  {difficultyTierLabel(tier)}
+                </Chip>
+              ))}
+            </View>
+            <Text variant="bodySmall" style={[styles.helper, { marginTop: 4 }]}>
+              Reward: +{learningTaskXpReward(learningDifficulty, learningGameId)} stars on completion
+            </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <PrimaryButton label="Cancel" mode="text" onPress={() => setLearningTarget(null)} />
@@ -1401,9 +1539,43 @@ function createStyles(c: AppColors) {
   cardContent: {
     gap: 10,
   },
-  pickerDialogScroll: {
-    maxHeight: 320,
-    paddingHorizontal: 8,
+  pickerDialog: {
+    maxHeight: "85%",
+  },
+  pickerDialogContent: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    maxHeight: 360,
+  },
+  pickerScroll: {
+    maxHeight: 360,
+  },
+  pickerScrollContent: {
+    paddingBottom: 8,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingRight: 4,
+  },
+  pickerRowMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    paddingLeft: 4,
+  },
+  pickerRowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
   },
   pickerListAvatar: {
     width: 40,

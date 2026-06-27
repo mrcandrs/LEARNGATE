@@ -27,11 +27,25 @@ export type ChildMonitor = {
   hasLinkedAccount: boolean;
   stars: number;
   pendingReview: number;
-  activeTasks: number;
-  completedThisWeek: number;
-  completionRatePct: number;
+  /** Total assigned tasks (excluding rejected). */
+  taskCount: number;
+  /** Completed / approved tasks. */
+  completedCount: number;
+  /** Tasks still open (pending, in progress, or submitted). */
+  pendingCount: number;
+  /** Foreground app usage in the last 7 days (seconds). */
+  appTimeSeconds: number;
   weekByCategory: { learning: number; exercise: number; chore: number };
 };
+
+export function formatAppTimeShort(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "0m";
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
+}
 
 export type TaskPipeline = {
   pending: number;
@@ -73,6 +87,7 @@ export function buildParentDashboardAnalytics(params: {
   tasks: TaskRow[];
   pendingReviewsByChild: Record<string, number>;
   activityPointsThisWeek: number;
+  appTimeSecondsByChild?: Record<string, number>;
 }): ParentDashboardAnalytics {
   const now = Date.now();
   const weekStart = now - WEEK_MS;
@@ -118,9 +133,12 @@ export function buildParentDashboardAnalytics(params: {
     for (const t of completedWeek) {
       weekCat[t.category] += 1;
     }
-    const activeTasks = childTasks.filter((t) => !["completed", "rejected"].includes(t.status)).length;
-    const assigned = childTasks.length;
-    const completionRatePct = assigned > 0 ? Math.round((completed.length / assigned) * 100) : 0;
+    const taskCount = childTasks.filter((t) => t.status !== "rejected").length;
+    const completedCount = childTasks.filter((t) => t.status === "completed" || t.status === "approved").length;
+    const pendingCount = childTasks.filter((t) =>
+      ["pending", "in_progress", "submitted"].includes(t.status)
+    ).length;
+    const appTimeSeconds = params.appTimeSecondsByChild?.[c.id] ?? 0;
 
     return {
       childId: c.id,
@@ -130,9 +148,10 @@ export function buildParentDashboardAnalytics(params: {
       hasLinkedAccount: Boolean(c.child_user_id),
       stars: c.stars ?? 0,
       pendingReview: params.pendingReviewsByChild[c.id] ?? 0,
-      activeTasks,
-      completedThisWeek: completedWeek.length,
-      completionRatePct,
+      taskCount,
+      completedCount,
+      pendingCount,
+      appTimeSeconds,
       weekByCategory: weekCat,
     };
   });

@@ -10,13 +10,36 @@ export type UserNotification = {
   created_at: string;
 };
 
+const RETENTION_DAYS = 30;
+
+export const NOTIFICATION_RETENTION_HINT =
+  "Notifications older than 30 days are removed automatically.";
+
+/** Deletes notifications older than 30 days for the signed-in user (requires step-y SQL). */
+export async function pruneOldNotifications(): Promise<void> {
+  if (!supabase) {
+    return;
+  }
+  const { error } = await supabase.rpc("prune_my_notifications");
+  if (error && __DEV__) {
+    console.warn("[notifications] prune:", error.message);
+  }
+}
+
 export async function fetchMyNotifications(limit = 50): Promise<UserNotification[]> {
   if (!supabase) {
     return [];
   }
+
+  await pruneOldNotifications();
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+
   const { data, error } = await supabase
     .from("user_notifications")
     .select("id, kind, title, body, data, read_at, created_at")
+    .gte("created_at", cutoff.toISOString())
     .order("created_at", { ascending: false })
     .limit(limit);
 

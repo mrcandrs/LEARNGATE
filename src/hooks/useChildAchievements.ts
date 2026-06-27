@@ -7,6 +7,7 @@ import {
   type AchievementProgress,
   type ChildAchievementStats,
 } from "@/services/childAchievements";
+import { claimAchievementReward, loadClaimedAchievementIds } from "@/services/achievementClaims";
 
 const seenKey = (childId: string) => `learngate_achievements_seen_${childId}`;
 
@@ -16,6 +17,9 @@ export function useChildAchievements(
   const [stats, setStats] = useState<ChildAchievementStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [newUnlockTitle, setNewUnlockTitle] = useState<string | null>(null);
+  const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set());
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const [claimMessage, setClaimMessage] = useState<string | null>(null);
 
   const progress = useMemo(() => (stats ? evaluateAchievements(stats) : []), [stats]);
   const unlockedCount = useMemo(() => progress.filter((p) => p.unlocked).length, [progress]);
@@ -24,12 +28,17 @@ export function useChildAchievements(
   const refresh = useCallback(async () => {
     if (!child) {
       setStats(null);
+      setClaimedIds(new Set());
       setLoading(false);
       return;
     }
     setLoading(true);
-    const nextStats = await fetchChildAchievementStats(child);
+    const [nextStats, claimed] = await Promise.all([
+      fetchChildAchievementStats(child),
+      loadClaimedAchievementIds(child.id),
+    ]);
     setStats(nextStats);
+    setClaimedIds(claimed);
     const nextProgress = evaluateAchievements(nextStats);
     const unlockedIds = nextProgress.filter((p) => p.unlocked).map((p) => p.definition.id);
 
@@ -57,6 +66,29 @@ export function useChildAchievements(
 
   const clearNewUnlock = useCallback(() => setNewUnlockTitle(null), []);
 
+  const claimAchievement = useCallback(
+    async (achievementId: string, onStarsAwarded?: () => void) => {
+      if (!child) {
+        return;
+      }
+      setClaimingId(achievementId);
+      setClaimMessage(null);
+      const result = await claimAchievementReward({ childId: child.id, achievementId });
+      setClaimingId(null);
+      if (result.ok) {
+        setClaimedIds((prev) => new Set([...prev, achievementId]));
+        setClaimMessage(result.message);
+        onStarsAwarded?.();
+        await refresh();
+      } else {
+        setClaimMessage(result.message);
+      }
+    },
+    [child, refresh]
+  );
+
+  const isClaimed = useCallback((achievementId: string) => claimedIds.has(achievementId), [claimedIds]);
+
   return {
     stats,
     progress,
@@ -67,6 +99,11 @@ export function useChildAchievements(
     refresh,
     newUnlockTitle,
     clearNewUnlock,
+    claimAchievement,
+    claimingId,
+    claimMessage,
+    clearClaimMessage: () => setClaimMessage(null),
+    isClaimed,
   };
 }
 

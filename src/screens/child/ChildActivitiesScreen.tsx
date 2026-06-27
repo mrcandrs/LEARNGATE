@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,7 +14,6 @@ import { EXERCISES } from "@/data/exercises";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
-
 type Nav = NativeStackNavigationProp<ChildActivitiesStackParamList, "ActivitiesMain">;
 type Route = RouteProp<ChildActivitiesStackParamList, "ActivitiesMain">;
 
@@ -26,6 +26,25 @@ export function ChildActivitiesScreen() {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(c), [c]);
   const [segment, setSegment] = useState<Segment>(route.params?.segment ?? "games");
+
+  useEffect(() => {
+    if (route.params?.segment) {
+      setSegment(route.params.segment);
+    }
+  }, [route.params?.segment]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const key = route.params?.navKey;
+      if (!key) {
+        return;
+      }
+      if (route.params?.segment) {
+        setSegment(route.params.segment);
+      }
+      navigation.setParams({ segment: undefined, navKey: undefined });
+    }, [navigation, route.params?.navKey, route.params?.segment])
+  );
 
   return (
     <ScreenContainer scroll contentPadding={0} includeTopInset={false}>
@@ -70,7 +89,7 @@ export function ChildActivitiesScreen() {
                   Learning Games
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  Each game has 10 questions. Difficulty follows your learning level.
+                  Each game has 10 questions. Assigned tasks use your learning level; extra play defaults to Easy.
                 </Text>
               </View>
             </View>

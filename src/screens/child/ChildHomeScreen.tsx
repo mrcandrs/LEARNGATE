@@ -45,6 +45,11 @@ export function ChildHomeScreen() {
     nextUp,
     loading: achievementsLoading,
     refresh: refreshAchievements,
+    claimAchievement,
+    claimingId,
+    claimMessage,
+    clearClaimMessage,
+    isClaimed,
   } = useChildAchievements(child);
 
   const tabNav = useNavigation<NavigationProp<ChildTabParamList>>();
@@ -118,7 +123,6 @@ export function ChildHomeScreen() {
       {child ? (
         <ChildDashboardHeader
           name={child.name}
-          level={child.difficulty_level}
           stars={child.stars}
           avatarUrl={child.avatar_url}
           onAvatarPress={() => navigation.navigate("ProfileSettings")}
@@ -260,7 +264,17 @@ export function ChildHomeScreen() {
             ) : null}
             <View style={styles.badgeGrid}>
               {achievementProgress.map((item) => (
-                <AchievementBadgeCard key={item.definition.id} item={item} />
+                <AchievementBadgeCard
+                  key={item.definition.id}
+                  item={item}
+                  claimed={isClaimed(item.definition.id)}
+                  claiming={claimingId === item.definition.id}
+                  onClaim={
+                    item.unlocked && !isClaimed(item.definition.id) && item.definition.bonusStars > 0
+                      ? () => void claimAchievement(item.definition.id, () => void refreshProfile())
+                      : undefined
+                  }
+                />
               ))}
             </View>
           </Card.Content>
@@ -279,6 +293,9 @@ export function ChildHomeScreen() {
 
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={4000}>
         {snackbar ?? ""}
+      </Snackbar>
+      <Snackbar visible={Boolean(claimMessage)} onDismiss={clearClaimMessage} duration={3500}>
+        {claimMessage ?? ""}
       </Snackbar>
     </ScreenContainer>
   );

@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import type { ChildMonitor } from "@/services/parentDashboardAnalytics";
+import { formatAppTimeShort, type ChildMonitor } from "@/services/parentDashboardAnalytics";
 import { colors, radii } from "@/theme/theme";
 
 type Props = {
@@ -31,8 +31,8 @@ export function ChildMonitorCard({ monitor }: Props) {
       </View>
 
       <View style={styles.metrics}>
-        <Metric icon="clipboard-list-outline" label="Active" value={String(monitor.activeTasks)} />
-        <Metric icon="check-decagram-outline" label="This week" value={String(monitor.completedThisWeek)} />
+        <Metric icon="clipboard-list-outline" label="Task" value={String(monitor.taskCount)} />
+        <Metric icon="check-decagram-outline" label="Done" value={String(monitor.completedCount)} />
         <Metric icon="star" label="Stars" value={String(monitor.stars)} color={colors.warning} />
         <Metric
           icon="camera-outline"
@@ -44,7 +44,7 @@ export function ChildMonitorCard({ monitor }: Props) {
 
       <View style={styles.footer}>
         <Text variant="labelSmall" style={styles.footerText}>
-          {monitor.completionRatePct}% completion ·{" "}
+          {formatAppTimeShort(monitor.appTimeSeconds)} app time ·{" "}
           {monitor.hasLinkedAccount ? "App linked" : "No child login yet"}
         </Text>
       </View>

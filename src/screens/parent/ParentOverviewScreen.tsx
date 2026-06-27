@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Button, Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -25,6 +27,7 @@ import { displayAppUsageLabel, iconForPackage } from "@/constants/blockedAppPack
 import { formatAppError } from "@/utils/errors";
 import { filterReportableUsageRows } from "@/utils/appUsagePackages";
 import { hasMyPushToken, registerAndSavePushToken } from "@/services/pushNotifications";
+import type { ParentTabParamList } from "@/types/navigation";
 
 type OverviewToast = {
   message: string;
@@ -189,6 +192,8 @@ function buildInsights(children: ChildRow[], rows: TaskRow[]): ChildInsight[] {
 
 export function ParentOverviewScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const route = useRoute<RouteProp<ParentTabParamList, "Overview">>();
+  const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const c = useAppColors();
   const [stats, setStats] = useState<ParentStat[]>([]);
   const [analytics, setAnalytics] = useState<ParentDashboardAnalytics | null>(null);
@@ -226,6 +231,26 @@ export function ParentOverviewScreen() {
         active = false;
       };
     }, [])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const key = route.params?.navKey;
+      if (!key) {
+        return;
+      }
+      if (route.params?.childId) {
+        setSelectedChildId(route.params.childId);
+      }
+      if (route.params?.expandInsights) {
+        setInsightExpanded(true);
+      }
+      navigation.setParams({
+        childId: undefined,
+        expandInsights: undefined,
+        navKey: undefined,
+      });
+    }, [navigation, route.params?.childId, route.params?.expandInsights, route.params?.navKey])
   );
 
   const loadAppUsageForChild = useCallback(
@@ -318,11 +343,12 @@ export function ParentOverviewScreen() {
     let recentActivity: ActivityItem[] = [];
     let pendingReviewsByChild: Record<string, number> = {};
     let activityPointsThisWeek = 0;
+    const appTimeSecondsByChild: Record<string, number> = {};
 
     if (childIds.length > 0) {
       const weekStartIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [tasksRes, logsRes, subsRes, pointsRes] = await Promise.all([
+      const [tasksRes, logsRes, subsRes, pointsRes, usageRes] = await Promise.all([
         supabase
           .from("tasks")
           .select("child_id, title, category, status, created_at, completed_at")
@@ -341,6 +367,12 @@ export function ParentOverviewScreen() {
           .select("points")
           .in("child_id", childIds)
           .gte("created_at", weekStartIso),
+        supabase
+          .from("child_app_usage_events")
+          .select("child_id, duration_seconds")
+          .in("child_id", childIds)
+          .eq("event_type", "foreground")
+          .gte("event_at", weekStartIso),
       ]);
 
       if (tasksRes.error) {
@@ -368,6 +400,12 @@ export function ParentOverviewScreen() {
         (sum, row) => sum + ((row as { points: number }).points ?? 0),
         0
       );
+
+      for (const row of usageRes.data ?? []) {
+        const cid = (row as { child_id: string }).child_id;
+        const secs = (row as { duration_seconds: number | null }).duration_seconds ?? 0;
+        appTimeSecondsByChild[cid] = (appTimeSecondsByChild[cid] ?? 0) + secs;
+      }
     }
 
     const managed = childRows.map((c) => ({
@@ -381,6 +419,7 @@ export function ParentOverviewScreen() {
       tasks: taskRows,
       pendingReviewsByChild,
       activityPointsThisWeek,
+      appTimeSecondsByChild,
     });
 
     const nextInsights = buildInsights(childRows, taskRows);

@@ -21,10 +21,16 @@ export type AchievementDefinition = {
   title: string;
   description: string;
   icon: AchievementIcon;
+  /** Bonus stars the child can claim once when unlocked. */
+  bonusStars: number;
   category: "stars" | "tasks" | "games" | "chores" | "exercise" | "streak" | "special";
   isUnlocked: (stats: ChildAchievementStats) => boolean;
   progress?: (stats: ChildAchievementStats) => { current: number; target: number };
 };
+
+export function getAchievementBonusStars(achievementId: string): number {
+  return ACHIEVEMENT_DEFINITIONS.find((a) => a.id === achievementId)?.bonusStars ?? 0;
+}
 
 export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   {
@@ -32,6 +38,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "First Star",
     description: "Earn your first star.",
     icon: "star",
+    bonusStars: 5,
     category: "stars",
     isUnlocked: (s) => s.stars > 0,
     progress: (s) => ({ current: Math.min(s.stars, 1), target: 1 }),
@@ -41,6 +48,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Star Collector",
     description: "Reach 200 total stars.",
     icon: "star-circle",
+    bonusStars: 15,
     category: "stars",
     isUnlocked: (s) => s.stars >= 200,
     progress: (s) => ({ current: Math.min(s.stars, 200), target: 200 }),
@@ -50,6 +58,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Star Master",
     description: "Reach 500 total stars.",
     icon: "star-shooting",
+    bonusStars: 30,
     category: "stars",
     isUnlocked: (s) => s.stars >= 500,
     progress: (s) => ({ current: Math.min(s.stars, 500), target: 500 }),
@@ -59,6 +68,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Getting Started",
     description: "Complete your first task.",
     icon: "flag-checkered",
+    bonusStars: 5,
     category: "tasks",
     isUnlocked: (s) => s.completedTasks >= 1,
     progress: (s) => ({ current: Math.min(s.completedTasks, 1), target: 1 }),
@@ -68,6 +78,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Task Finisher",
     description: "Complete 10 tasks.",
     icon: "trophy",
+    bonusStars: 10,
     category: "tasks",
     isUnlocked: (s) => s.completedTasks >= 10,
     progress: (s) => ({ current: Math.min(s.completedTasks, 10), target: 10 }),
@@ -77,6 +88,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Learning Champ",
     description: "Complete 50 tasks.",
     icon: "book-open-page-variant",
+    bonusStars: 25,
     category: "tasks",
     isUnlocked: (s) => s.completedTasks >= 50,
     progress: (s) => ({ current: Math.min(s.completedTasks, 50), target: 50 }),
@@ -86,6 +98,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Brain Builder",
     description: "Complete 5 learning tasks.",
     icon: "brain",
+    bonusStars: 10,
     category: "tasks",
     isUnlocked: (s) => s.completedLearning >= 5,
     progress: (s) => ({ current: Math.min(s.completedLearning, 5), target: 5 }),
@@ -95,6 +108,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Game On",
     description: "Finish your first game.",
     icon: "gamepad-variant",
+    bonusStars: 5,
     category: "games",
     isUnlocked: (s) => s.gamesCompleted >= 1,
     progress: (s) => ({ current: Math.min(s.gamesCompleted, 1), target: 1 }),
@@ -104,6 +118,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Game Fan",
     description: "Finish 10 games.",
     icon: "controller-classic",
+    bonusStars: 15,
     category: "games",
     isUnlocked: (s) => s.gamesCompleted >= 10,
     progress: (s) => ({ current: Math.min(s.gamesCompleted, 10), target: 10 }),
@@ -113,6 +128,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Chore Helper",
     description: "Complete your first chore.",
     icon: "broom",
+    bonusStars: 5,
     category: "chores",
     isUnlocked: (s) => s.completedChores >= 1,
     progress: (s) => ({ current: Math.min(s.completedChores, 1), target: 1 }),
@@ -122,6 +138,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Photo Pro",
     description: "Submit a chore photo for review.",
     icon: "camera",
+    bonusStars: 8,
     category: "chores",
     isUnlocked: (s) => s.choreSubmissions >= 1,
     progress: (s) => ({ current: Math.min(s.choreSubmissions, 1), target: 1 }),
@@ -131,6 +148,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Exercise Hero",
     description: "Complete an exercise task.",
     icon: "run",
+    bonusStars: 10,
     category: "exercise",
     isUnlocked: (s) => s.completedExercise >= 1,
     progress: (s) => ({ current: Math.min(s.completedExercise, 1), target: 1 }),
@@ -140,6 +158,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "On a Roll",
     description: "Stay active 3 days in a row.",
     icon: "fire",
+    bonusStars: 10,
     category: "streak",
     isUnlocked: (s) => s.dailyStreak >= 3,
     progress: (s) => ({ current: Math.min(s.dailyStreak, 3), target: 3 }),
@@ -149,6 +168,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Week Warrior",
     description: "Stay active 7 days in a row.",
     icon: "calendar-week",
+    bonusStars: 20,
     category: "streak",
     isUnlocked: (s) => s.dailyStreak >= 7,
     progress: (s) => ({ current: Math.min(s.dailyStreak, 7), target: 7 }),
@@ -158,6 +178,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     title: "Level Rising",
     description: "Reach difficulty level 5.",
     icon: "chart-line",
+    bonusStars: 15,
     category: "special",
     isUnlocked: (s) => s.difficultyLevel >= 5,
     progress: (s) => ({ current: Math.min(s.difficultyLevel, 5), target: 5 }),

@@ -12,7 +12,7 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
-import { getGameSettings } from "@/data/gameDifficulty";
+import { BONUS_PLAY_DIFFICULTY_LEVEL, getGameSettings } from "@/data/gameDifficulty";
 import {
   COLOR_CATEGORY_CHALLENGES,
   COLOR_MIX_CHALLENGES,
@@ -348,7 +348,40 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   const styles = useMemo(() => createStyles(c), [c]);
   const { child, loading: profileLoading, error: profileError, refresh } = useChildProfile();
   const audio = useAudioGuidance();
-  const difficultyLevel = child?.difficulty_level ?? 5;
+  const [assignedDifficultyLevel, setAssignedDifficultyLevel] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!taskId || !supabase) {
+      setAssignedDifficultyLevel(null);
+      return;
+    }
+    let active = true;
+    void supabase
+      .from("tasks")
+      .select("description")
+      .eq("id", taskId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active || !data?.description) {
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data.description) as { difficultyLevel?: number };
+          if (typeof parsed.difficultyLevel === "number") {
+            setAssignedDifficultyLevel(parsed.difficultyLevel);
+          }
+        } catch {
+          // legacy tasks without difficulty in description
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [taskId]);
+
+  const difficultyLevel = taskId
+    ? (assignedDifficultyLevel ?? child?.difficulty_level ?? 5)
+    : BONUS_PLAY_DIFFICULTY_LEVEL;
   const settings = useMemo(() => getGameSettings(difficultyLevel, gameId), [difficultyLevel, gameId]);
   const [questionOrder, setQuestionOrder] = useState(() => shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
   const [round, setRound] = useState(0);

@@ -118,33 +118,37 @@ const styles = StyleSheet.create({
   },
   detail: {
     borderTopWidth: 1,
-    paddingTop: 12,
-    gap: 6,
+    paddingTop: 14,
+    gap: 8,
   },
   detailName: {
     fontWeight: "800",
-    fontSize: 15,
+    fontSize: 18,
   },
   detailLine: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 16,
+    lineHeight: 24,
   },
   detailFocus: {
     color: "#7C3AED",
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: 16,
+    lineHeight: 24,
   },
   detailRec: {
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "600",
+    lineHeight: 25,
   },
   detailStep: {
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: 17,
+    lineHeight: 25,
   },
   aiNote: {
     fontStyle: "italic",
-    fontSize: 12,
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: 4,
   },
 });

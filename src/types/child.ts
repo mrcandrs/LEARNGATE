@@ -5,6 +5,8 @@ export type ChildProfileRow = {
   difficulty_level: number;
   stars: number;
   daily_limit_minutes: number;
+  screen_limit_enabled: boolean;
+  bedtime_enabled: boolean;
   bedtime_start: string;
   bedtime_end: string;
   avatar_url: string | null;
