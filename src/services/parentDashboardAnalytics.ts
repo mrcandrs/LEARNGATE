@@ -11,6 +11,7 @@ export type ChildRow = {
   id: string;
   name: string;
   stars: number;
+  stars_lifetime?: number;
   daily_limit_minutes: number;
   difficulty_level: number;
   is_online: boolean;
@@ -25,7 +26,10 @@ export type ChildMonitor = {
   isOnline: boolean;
   lastSeenLabel: string;
   hasLinkedAccount: boolean;
+  /** Current week star balance (resets Monday UTC). */
   stars: number;
+  /** Stars from the most recently closed week, if a snapshot exists. */
+  lastWeekStars: number | null;
   pendingReview: number;
   /** Total assigned tasks (excluding rejected). */
   taskCount: number;
@@ -88,6 +92,7 @@ export function buildParentDashboardAnalytics(params: {
   pendingReviewsByChild: Record<string, number>;
   activityPointsThisWeek: number;
   appTimeSecondsByChild?: Record<string, number>;
+  lastWeekStarsByChild?: Record<string, number>;
 }): ParentDashboardAnalytics {
   const now = Date.now();
   const weekStart = now - WEEK_MS;
@@ -147,6 +152,7 @@ export function buildParentDashboardAnalytics(params: {
       lastSeenLabel: formatLastSeen(c.last_seen_at, c.is_online),
       hasLinkedAccount: Boolean(c.child_user_id),
       stars: c.stars ?? 0,
+      lastWeekStars: params.lastWeekStarsByChild?.[c.id] ?? null,
       pendingReview: params.pendingReviewsByChild[c.id] ?? 0,
       taskCount,
       completedCount,

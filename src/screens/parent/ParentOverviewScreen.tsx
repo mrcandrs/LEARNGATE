@@ -10,6 +10,7 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { ParentDashboardCarousel } from "@/components/parent/ParentDashboardCarousel";
 import { ParentHeroAffirmationCard } from "@/components/parent/ParentHeroAffirmationCard";
 import { ParentInsightsSummaryCard, type ParentChildInsight } from "@/components/parent/ParentInsightsSummaryCard";
+import { StarHistoryCard } from "@/components/StarHistoryCard";
 import { ParentLiveMonitoringCard } from "@/components/parent/ParentLiveMonitoringCard";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { useAuth } from "@/store/AuthContext";
@@ -33,6 +34,7 @@ import {
   storedInsightToCard,
   type StoredParentInsight,
 } from "@/services/parentInsights";
+import { fetchLatestWeeklySnapshots, fetchWeeklyStarHistory, type WeeklyStarSnapshot } from "@/services/weeklyStarSnapshots";
 import type { ParentTabParamList } from "@/types/navigation";
 
 type OverviewToast = {
@@ -116,6 +118,11 @@ export function ParentOverviewScreen() {
   const [appUsage, setAppUsage] = useState<AppUsageItem[]>([]);
   const [managedChildren, setManagedChildren] = useState<ManagedChild[]>([]);
   const [storedInsights, setStoredInsights] = useState<Record<string, StoredParentInsight>>({});
+  const [childStarMeta, setChildStarMeta] = useState<
+    Record<string, { stars: number; stars_lifetime: number }>
+  >({});
+  const [starHistory, setStarHistory] = useState<WeeklyStarSnapshot[]>([]);
+  const [starHistoryLoading, setStarHistoryLoading] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [monitorMenuVisible, setMonitorMenuVisible] = useState(false);
   const [insightExpanded, setInsightExpanded] = useState(false);
@@ -243,7 +250,7 @@ export function ParentOverviewScreen() {
     const { data: children, error: childrenError } = await supabase
       .from("children")
       .select(
-        "id, name, stars, daily_limit_minutes, difficulty_level, is_online, last_seen_at, child_user_id, avatar_url"
+        "id, name, stars, stars_lifetime, daily_limit_minutes, difficulty_level, is_online, last_seen_at, child_user_id, avatar_url"
       )
       .eq("parent_id", user.id);
 
@@ -331,12 +338,18 @@ export function ParentOverviewScreen() {
       avatar_url: c.avatar_url ?? null,
     }));
 
+    const weeklySnapshots = await fetchLatestWeeklySnapshots(childIds);
+    const lastWeekStarsByChild = Object.fromEntries(
+      Object.entries(weeklySnapshots).map(([id, snap]) => [id, snap.stars_at_reset])
+    );
+
     const built = buildParentDashboardAnalytics({
       children: childRows,
       tasks: taskRows,
       pendingReviewsByChild,
       activityPointsThisWeek,
       appTimeSecondsByChild,
+      lastWeekStarsByChild,
     });
 
     const stored = await fetchStoredParentInsights(childIds);
@@ -353,6 +366,17 @@ export function ParentOverviewScreen() {
     ]);
     setActivity(recentActivity);
     setManagedChildren(managed);
+    setChildStarMeta(
+      Object.fromEntries(
+        childRows.map((row) => [
+          row.id,
+          {
+            stars: row.stars ?? 0,
+            stars_lifetime: row.stars_lifetime ?? row.stars ?? 0,
+          },
+        ])
+      )
+    );
     setStoredInsights(Object.fromEntries(stored.map((row) => [row.child_id, row])));
     setSelectedChildId((prev) =>
       prev && managed.some((c) => c.id === prev) ? prev : managed[0]?.id ?? null
@@ -374,9 +398,32 @@ export function ParentOverviewScreen() {
     void loadDashboard(false);
   }, [loadDashboard]);
 
+  const loadStarHistory = useCallback(async (childId: string) => {
+    setStarHistoryLoading(true);
+    try {
+      const rows = await fetchWeeklyStarHistory(childId);
+      setStarHistory(rows);
+    } finally {
+      setStarHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    if (!childId) {
+      setStarHistory([]);
+      return;
+    }
+    void loadStarHistory(childId);
+  }, [loadStarHistory, managedChildren, selectedChildId]);
+
   const onRefresh = useCallback(() => {
     void loadDashboard(true);
-  }, [loadDashboard]);
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    if (childId) {
+      void loadStarHistory(childId);
+    }
+  }, [loadDashboard, loadStarHistory, managedChildren, selectedChildId]);
 
   const generateInsightForChild = useCallback(
     async (childId: string) => {
@@ -438,6 +485,19 @@ export function ParentOverviewScreen() {
     const childId = selectedChildId ?? analytics?.monitors[0]?.childId;
     return analytics?.monitors.find((m) => m.childId === childId) ?? analytics?.monitors[0] ?? null;
   }, [analytics, selectedChildId]);
+
+  const selectedStarMeta = useMemo(() => {
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    if (!childId) {
+      return null;
+    }
+    return childStarMeta[childId] ?? { stars: 0, stars_lifetime: 0 };
+  }, [childStarMeta, managedChildren, selectedChildId]);
+
+  const selectedChildName = useMemo(() => {
+    const childId = selectedChildId ?? managedChildren[0]?.id;
+    return managedChildren.find((c) => c.id === childId)?.name;
+  }, [managedChildren, selectedChildId]);
 
   const visibleAppUsage = useMemo(
     () => (activityExpanded ? appUsage : appUsage.slice(0, 5)),
@@ -508,6 +568,16 @@ export function ParentOverviewScreen() {
           onOpenMenu={() => setMonitorMenuVisible(true)}
           onDismissMenu={() => setMonitorMenuVisible(false)}
           onSelectChild={onSelectChild}
+        />
+      ) : null}
+
+      {selectedStarMeta && managedChildren.length > 0 ? (
+        <StarHistoryCard
+          history={starHistory}
+          starsThisWeek={selectedStarMeta.stars}
+          starsLifetime={selectedStarMeta.stars_lifetime}
+          loading={starHistoryLoading}
+          childName={selectedChildName}
         />
       ) : null}
 

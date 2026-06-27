@@ -46,11 +46,15 @@ export function evaluateAchievements(stats: ChildAchievementStats): AchievementP
 export async function fetchChildAchievementStats(child: {
   id: string;
   stars: number;
+  stars_lifetime?: number;
   difficulty_level: number;
 }): Promise<ChildAchievementStats> {
+  const lifetimeStars = child.stars_lifetime ?? child.stars ?? 0;
+
   if (!supabase) {
     return {
-      stars: child.stars ?? 0,
+      stars: lifetimeStars,
+      starsThisWeek: child.stars ?? 0,
       difficultyLevel: child.difficulty_level ?? 1,
       completedTasks: 0,
       completedLearning: 0,
@@ -121,7 +125,8 @@ export async function fetchChildAchievementStats(child: {
   }
 
   return {
-    stars: child.stars ?? 0,
+    stars: lifetimeStars,
+    starsThisWeek: child.stars ?? 0,
     difficultyLevel: child.difficulty_level ?? 1,
     completedTasks: completed.length,
     completedLearning,

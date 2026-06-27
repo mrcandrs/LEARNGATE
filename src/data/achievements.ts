@@ -4,7 +4,10 @@ import type { MaterialCommunityIcons } from "@expo/vector-icons";
 export type AchievementIcon = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 export type ChildAchievementStats = {
+  /** Lifetime stars (never reset weekly). */
   stars: number;
+  /** Current week star balance. */
+  starsThisWeek: number;
   difficultyLevel: number;
   completedTasks: number;
   completedLearning: number;
@@ -46,7 +49,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   {
     id: "star_collector",
     title: "Star Collector",
-    description: "Reach 200 total stars.",
+    description: "Reach 200 lifetime stars.",
     icon: "star-circle",
     bonusStars: 15,
     category: "stars",
@@ -56,7 +59,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   {
     id: "star_master",
     title: "Star Master",
-    description: "Reach 500 total stars.",
+    description: "Reach 500 lifetime stars.",
     icon: "star-shooting",
     bonusStars: 30,
     category: "stars",

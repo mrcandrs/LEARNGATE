@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Avatar, Button, Chip, Dialog, Portal, Switch, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { StarResetCountdown } from "@/components/child/StarResetCountdown";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { blockedAppsForDisplay } from "@/constants/blockedAppPackages";
 import { useAuth } from "@/store/AuthContext";
@@ -187,7 +188,7 @@ export function ChildProfileSettingsScreen() {
               ]}
             >
               <MaterialCommunityIcons name="star" size={16} color={c.pinIcon} />
-              <Text style={[styles.statPillText, { color: c.text }]}>{child?.stars ?? 0} Stars</Text>
+              <Text style={[styles.statPillText, { color: c.text }]}>{child?.stars ?? 0} Stars (week)</Text>
             </View>
             <View style={[styles.statPill, { backgroundColor: c.surfaceTint }]}>
               <Text style={[styles.statPillText, { color: c.text }]}>{tasksDone} Task Done</Text>
@@ -196,6 +197,7 @@ export function ChildProfileSettingsScreen() {
               <Text style={[styles.statPillText, { color: c.text }]}>{streakDays} Day Streak</Text>
             </View>
           </View>
+          <StarResetCountdown variant="card" subtextColor={c.subtext} />
         </View>
 
         <View style={[styles.card, { backgroundColor: c.card }]}>

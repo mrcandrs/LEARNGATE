@@ -4,6 +4,7 @@ import { Text } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { NotificationBell } from "@/components/NotificationBell";
+import { StarResetCountdown } from "@/components/child/StarResetCountdown";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
 type Props = {
@@ -57,12 +58,15 @@ export function ChildDashboardHeader({
             {subtitle}
           </Text>
           <View style={styles.metaRow}>
-            <View style={styles.pill}>
-              <MaterialCommunityIcons name="star" size={14} color="#FBBF24" />
-              <Text variant="labelMedium" style={styles.pillText}>
-                {stars} stars
-              </Text>
+            <View style={styles.pillRow}>
+              <View style={styles.pill}>
+                <MaterialCommunityIcons name="star" size={14} color="#FBBF24" />
+                <Text variant="labelMedium" style={styles.pillText}>
+                  {stars} stars this week
+                </Text>
+              </View>
             </View>
+            <StarResetCountdown variant="header" />
           </View>
         </View>
         {showNotifications ? <NotificationBell enabled variant="dashboard" /> : null}
@@ -117,10 +121,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   metaRow: {
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 2,
+    marginTop: 6,
+  },
+  pillRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
-    marginTop: 6,
   },
   pill: {
     flexDirection: "row",

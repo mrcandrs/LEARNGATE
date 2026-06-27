@@ -9,9 +9,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { AchievementBadgeCard } from "@/components/AchievementBadgeCard";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
+import { StarHistoryCard } from "@/components/StarHistoryCard";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import { supabase } from "@/services/supabase";
+import { fetchWeeklyStarHistory, type WeeklyStarSnapshot } from "@/services/weeklyStarSnapshots";
 import { useAuth } from "@/store/AuthContext";
 import { useChildAchievements } from "@/hooks/useChildAchievements";
 import { useChildProfile } from "@/hooks/useChildProfile";
@@ -34,6 +36,8 @@ export function ChildHomeScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
+  const [starHistory, setStarHistory] = useState<WeeklyStarSnapshot[]>([]);
+  const [starHistoryLoading, setStarHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +68,15 @@ export function ChildHomeScreen() {
     submitChorePhoto,
     error: actionError,
   } = useChildTaskActions(tabNav);
+
+  const loadStarHistory = useCallback(async (childId: string) => {
+    setStarHistoryLoading(true);
+    try {
+      setStarHistory(await fetchWeeklyStarHistory(childId));
+    } finally {
+      setStarHistoryLoading(false);
+    }
+  }, []);
 
   const loadHomeData = useCallback(
     async (fromPull = false) => {
@@ -104,16 +117,20 @@ export function ChildHomeScreen() {
   useEffect(() => {
     if (child) {
       void loadHomeData(false);
+      void loadStarHistory(child.id);
     } else if (!profileLoading) {
       setLoading(false);
     }
-  }, [child, profileLoading, loadHomeData]);
+  }, [child, profileLoading, loadHomeData, loadStarHistory]);
 
   const onRefresh = useCallback(() => {
     void refreshProfile();
     void loadHomeData(true);
     void refreshAchievements();
-  }, [refreshProfile, loadHomeData, refreshAchievements]);
+    if (child) {
+      void loadStarHistory(child.id);
+    }
+  }, [refreshProfile, loadHomeData, refreshAchievements, loadStarHistory, child]);
 
   const streakDays = achievementStats?.dailyStreak ?? 0;
   const showError = profileError ?? error ?? actionError;
@@ -244,9 +261,18 @@ export function ChildHomeScreen() {
             <StatRow label="Tasks Completed" value={String(achievementStats?.completedTasks ?? 0)} />
             <StatRow label="Games Finished" value={String(achievementStats?.gamesCompleted ?? 0)} />
             <StatRow label="Daily streak" value={`${streakDays} days`} />
-            <StatRow label="Stars Earned" value={String(child?.stars ?? 0)} />
+            <StatRow label="Stars This Week" value={String(child?.stars ?? 0)} />
           </Card.Content>
         </Card>
+
+        <View style={styles.historyWrap}>
+          <StarHistoryCard
+            history={starHistory}
+            starsThisWeek={child?.stars ?? 0}
+            starsLifetime={child?.stars_lifetime ?? child?.stars ?? 0}
+            loading={starHistoryLoading}
+          />
+        </View>
 
         <Card style={styles.statsCard}>
           <Card.Title
@@ -369,6 +395,7 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     gameTitle: { color: "#FFFFFF", fontWeight: "700", marginTop: 8 },
     gameXp: { color: "rgba(255,255,255,0.9)", marginTop: 4 },
     statsCard: { backgroundColor: c.card, borderRadius: radii.md, marginTop: 4, ...shadows.card },
+    historyWrap: { marginTop: 4 },
     cardTitle: { color: c.text, fontWeight: "700" },
     statsList: { gap: 10 },
     nextUp: { color: c.primaryDark, fontWeight: "600", marginBottom: 8 },

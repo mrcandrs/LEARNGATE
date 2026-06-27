@@ -81,10 +81,22 @@ function parseInsightJson(raw: string): InsightPayload | null {
   }
 }
 
+type WeeklySnapshotRow = {
+  week_start: string;
+  week_end: string;
+  stars_at_reset: number;
+  points_earned: number;
+  tasks_completed: number;
+  completions_by_category: { learning?: number; exercise?: number; chore?: number };
+  app_time_seconds: number;
+};
+
 function buildContext(params: {
   childName: string;
   age: number | null;
-  stars: number;
+  starsThisWeek: number;
+  starsLifetime: number;
+  pointsEarnedThisWeek: number;
   dailyLimitMinutes: number;
   difficultyLevel: number;
   isOnline: boolean;
@@ -92,6 +104,7 @@ function buildContext(params: {
   pendingReviews: number;
   appTimeSeconds: number;
   topApps: { label: string; minutes: number }[];
+  lastWeekSnapshot: WeeklySnapshotRow | null;
 }) {
   const now = Date.now();
   const weekMs = 7 * 24 * 60 * 60 * 1000;
@@ -123,7 +136,9 @@ function buildContext(params: {
   return {
     child_name: params.childName,
     age: params.age,
-    stars: params.stars,
+    stars_this_week: params.starsThisWeek,
+    stars_lifetime: params.starsLifetime,
+    points_earned_this_week: params.pointsEarnedThisWeek,
     daily_screen_limit_minutes: params.dailyLimitMinutes,
     difficulty_level: params.difficultyLevel,
     is_online_now: params.isOnline,
@@ -141,13 +156,24 @@ function buildContext(params: {
       reading: learningTitles.some((t) => t.includes("alphabet") || t.includes("read")),
       science: learningTitles.some((t) => t.includes("science")),
     },
+    last_week: params.lastWeekSnapshot
+      ? {
+          week_start: params.lastWeekSnapshot.week_start,
+          week_end: params.lastWeekSnapshot.week_end,
+          stars_earned: params.lastWeekSnapshot.stars_at_reset,
+          points_earned: params.lastWeekSnapshot.points_earned,
+          tasks_completed: params.lastWeekSnapshot.tasks_completed,
+          completions_by_category: params.lastWeekSnapshot.completions_by_category,
+          app_time_minutes: Math.round(params.lastWeekSnapshot.app_time_seconds / 60),
+        }
+      : null,
   };
 }
 
 async function loadContext(supabase: SupabaseClient, childId: string, parentId: string) {
   const { data: child, error: childError } = await supabase
     .from("children")
-    .select("id, name, age, stars, daily_limit_minutes, difficulty_level, is_online, parent_id")
+    .select("id, name, age, stars, stars_lifetime, daily_limit_minutes, difficulty_level, is_online, parent_id")
     .eq("id", childId)
     .maybeSingle();
 
@@ -157,7 +183,7 @@ async function loadContext(supabase: SupabaseClient, childId: string, parentId: 
 
   const weekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [tasksRes, subsRes, usageRes] = await Promise.all([
+  const [tasksRes, subsRes, usageRes, pointsRes, snapshotRes] = await Promise.all([
     supabase
       .from("tasks")
       .select("title, category, status, created_at, completed_at")
@@ -171,10 +197,30 @@ async function loadContext(supabase: SupabaseClient, childId: string, parentId: 
       .eq("child_id", childId)
       .eq("event_type", "foreground")
       .gte("event_at", weekStart),
+    supabase
+      .from("activity_logs")
+      .select("points")
+      .eq("child_id", childId)
+      .gte("created_at", weekStart)
+      .neq("type", "weekly_star_reset"),
+    supabase
+      .from("child_weekly_star_snapshots")
+      .select(
+        "week_start, week_end, stars_at_reset, points_earned, tasks_completed, completions_by_category, app_time_seconds",
+      )
+      .eq("child_id", childId)
+      .order("week_start", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const tasks = (tasksRes.data ?? []) as TaskRow[];
   const usageRows = (usageRes.data ?? []) as UsageRow[];
+  const pointsEarnedThisWeek = (pointsRes.data ?? []).reduce(
+    (sum, row) => sum + ((row.points as number) ?? 0),
+    0,
+  );
+  const lastWeekSnapshot = (snapshotRes.data ?? null) as WeeklySnapshotRow | null;
 
   const appMinutes = new Map<string, number>();
   for (const row of usageRows) {
@@ -191,7 +237,9 @@ async function loadContext(supabase: SupabaseClient, childId: string, parentId: 
   const context = buildContext({
     childName: (child.name as string) ?? "Child",
     age: typeof child.age === "number" ? child.age : null,
-    stars: (child.stars as number) ?? 0,
+    starsThisWeek: (child.stars as number) ?? 0,
+    starsLifetime: (child.stars_lifetime as number) ?? (child.stars as number) ?? 0,
+    pointsEarnedThisWeek,
     dailyLimitMinutes: (child.daily_limit_minutes as number) ?? 0,
     difficultyLevel: (child.difficulty_level as number) ?? 1,
     isOnline: Boolean(child.is_online),
@@ -199,6 +247,7 @@ async function loadContext(supabase: SupabaseClient, childId: string, parentId: 
     pendingReviews: subsRes.data?.length ?? 0,
     appTimeSeconds: usageRows.reduce((sum, r) => sum + (r.duration_seconds ?? 0), 0),
     topApps,
+    lastWeekSnapshot,
   });
 
   return { child, context };
@@ -281,7 +330,7 @@ async function callGemini(
 
   const prompt = `You are a supportive parenting coach for LearnGate, a family app that helps children complete learning tasks, exercise, and chores.
 
-Write a brief, personalized insight for the parent based ONLY on the JSON context below. Be specific and actionable. Do not shame the child or parent. Do not give medical or mental-health diagnoses. Use warm, practical language.
+Write a brief, personalized insight for the parent based ONLY on the JSON context below. Stars reset every Monday at midnight Asia/Manila time (stars_this_week is the current week balance; last_week has the prior closed week if available). Be specific and actionable. Do not shame the child or parent. Do not give medical or mental-health diagnoses. Use warm, practical language.
 
 Return JSON only with these exact keys:
 - summary (1-2 sentences on overall week)

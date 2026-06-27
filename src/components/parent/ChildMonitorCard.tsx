@@ -33,7 +33,7 @@ export function ChildMonitorCard({ monitor }: Props) {
       <View style={styles.metrics}>
         <Metric icon="clipboard-list-outline" label="Task" value={String(monitor.taskCount)} />
         <Metric icon="check-decagram-outline" label="Done" value={String(monitor.completedCount)} />
-        <Metric icon="star" label="Stars" value={String(monitor.stars)} color={colors.warning} />
+        <Metric icon="star" label="Stars (week)" value={String(monitor.stars)} color={colors.warning} />
         <Metric
           icon="camera-outline"
           label="Review"
@@ -46,6 +46,7 @@ export function ChildMonitorCard({ monitor }: Props) {
         <Text variant="labelSmall" style={styles.footerText}>
           {formatAppTimeShort(monitor.appTimeSeconds)} app time ·{" "}
           {monitor.hasLinkedAccount ? "App linked" : "No child login yet"}
+          {monitor.lastWeekStars != null ? ` · Last week: ${monitor.lastWeekStars} stars` : ""}
         </Text>
       </View>
     </View>
