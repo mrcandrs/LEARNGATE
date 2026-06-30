@@ -9,8 +9,13 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
-import { CHILD_GAME_CATALOG } from "@/data/childGames";
+import { AgeBandGamesBanner } from "@/components/child/AgeBandGamesBanner";
+import { ChildGameCard } from "@/components/child/ChildGameCard";
+import { getAgeBandForChild } from "@/data/childAgeBands";
+import { getGamesForChildAge } from "@/data/childGames";
+import { getChildAge } from "@/utils/childBirthday";
 import { EXERCISES } from "@/data/exercises";
+import { useChildProfile } from "@/hooks/useChildProfile";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
@@ -25,6 +30,10 @@ export function ChildActivitiesScreen() {
   const c = useAppColors();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(c), [c]);
+  const { child } = useChildProfile();
+  const childAge = child ? getChildAge(child) : null;
+  const ageBand = useMemo(() => getAgeBandForChild(childAge), [childAge]);
+  const ageGames = useMemo(() => getGamesForChildAge(childAge), [childAge]);
   const [segment, setSegment] = useState<Segment>(route.params?.segment ?? "games");
 
   useEffect(() => {
@@ -58,8 +67,15 @@ export function ChildActivitiesScreen() {
           Activities
         </Text>
         <Text variant="bodyMedium" style={styles.headerSub}>
-          Play games or complete movement activities.
+          {segment === "games"
+            ? ageBand.gamesHint
+            : "Play games or complete movement activities."}
         </Text>
+        {segment === "games" ? (
+          <View style={styles.bannerWrap}>
+            <AgeBandGamesBanner band={ageBand} childAge={childAge} />
+          </View>
+        ) : null}
       </LinearGradient>
 
       <View style={styles.pad}>
@@ -86,33 +102,22 @@ export function ChildActivitiesScreen() {
               </View>
               <View style={styles.sectionText}>
                 <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Learning Games
+                  {ageBand.heroTitle}
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  Each game has 10 questions. Assigned tasks use your learning level; extra play defaults to Easy.
+                  {ageGames.length} games picked for {ageBand.label.toLowerCase()}s ({ageBand.shortLabel}). Each
+                  round has 10 questions — assigned tasks use your learning level.
                 </Text>
               </View>
             </View>
             <View style={styles.grid}>
-              {CHILD_GAME_CATALOG.map((game) => (
+              {ageGames.map((game) => (
                 <Pressable
                   key={game.id}
                   style={({ pressed }) => [styles.gridItem, styles.gridItemFill, pressed && styles.pressed]}
                   onPress={() => navigation.navigate("GamePlay", { gameId: game.id, title: game.title })}
                 >
-                  <View style={[styles.gameCard, { backgroundColor: game.color }]}>
-                    <View style={styles.gameDeco} />
-                    <Text style={styles.gameGlyph}>{game.glyph}</Text>
-                    <Text style={styles.gameName}>{game.title}</Text>
-                    <Text style={styles.gameBlurb} numberOfLines={2}>
-                      {game.blurb}
-                    </Text>
-                    <View style={styles.gameFooter}>
-                      <MaterialCommunityIcons name="star" size={14} color="#FFFDE7" />
-                      <Text style={styles.gameFooterText}>10 questions</Text>
-                    </View>
-                    <Text style={styles.playLink}>Play ›</Text>
-                  </View>
+                  <ChildGameCard game={game} />
                 </Pressable>
               ))}
             </View>
@@ -180,6 +185,7 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     },
     headerTitle: { color: "#FFFFFF", fontWeight: "800" },
     headerSub: { color: "rgba(255,255,255,0.92)", marginTop: 4 },
+    bannerWrap: { marginTop: 12 },
     pad: { paddingHorizontal: 16, paddingBottom: 24, gap: 14 },
     segmentWrap: {
       flexDirection: "row",
@@ -212,29 +218,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     gridItem: { width: "48%" },
     gridItemFill: { alignSelf: "flex-start" },
     pressed: { opacity: 0.92, transform: [{ scale: 0.98 }] },
-    gameCard: {
-      borderRadius: radii.md,
-      padding: 14,
-      height: 176,
-      overflow: "hidden",
-      justifyContent: "space-between",
-      ...shadows.card,
-    },
-    gameDeco: {
-      position: "absolute",
-      top: -20,
-      right: -20,
-      width: 70,
-      height: 70,
-      borderRadius: 35,
-      backgroundColor: "rgba(255,255,255,0.15)",
-    },
-    gameGlyph: { color: "#FFFFFF", fontSize: 28, fontWeight: "800", lineHeight: 32, minHeight: 32 },
-    gameName: { color: "#FFFFFF", fontWeight: "700", marginTop: 6 },
-    gameBlurb: { color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 4, lineHeight: 16 },
-    gameFooter: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 10 },
-    gameFooterText: { color: "#FFFDE7", fontSize: 12 },
-    playLink: { color: "#FFFFFF", fontWeight: "700", marginTop: 8 },
     moveCard: {
       borderRadius: radii.md,
       padding: 12,

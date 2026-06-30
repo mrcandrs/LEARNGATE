@@ -1,6 +1,7 @@
 export type ChildProfileRow = {
   id: string;
   name: string;
+  birthday: string | null;
   age: number;
   difficulty_level: number;
   stars: number;

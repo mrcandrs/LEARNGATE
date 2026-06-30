@@ -11,6 +11,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepperControl } from "@/components/parent/StepperControl";
 import { DurationPickerModal } from "@/components/parent/DurationPickerModal";
 import { BedtimePickerModal } from "@/components/parent/BedtimePickerModal";
+import { BirthdayPickerModal } from "@/components/parent/BirthdayPickerModal";
 import { ParentSectionHeader } from "@/components/parent/ParentSectionHeader";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { ParentChildLocationPreview } from "@/components/parent/ParentChildLocationPreview";
@@ -23,8 +24,16 @@ import { formatAppError } from "@/utils/errors";
 import { radii, shadows } from "@/theme/theme";
 import { env } from "@/config/env";
 import { EXERCISES, type ExerciseId } from "@/data/exercises";
-import { CHILD_GAME_CATALOG } from "@/data/childGames";
-import type { GameId } from "@/data/childGames";
+import { getGamesForChildAge, isGameAllowedForChildAge, type GameId } from "@/data/childGames";
+import { getAgeBandForChild } from "@/data/childAgeBands";
+import {
+  childBirthdayFieldHelper,
+  defaultBirthdayForNewChild,
+  formatBirthdayDisplay,
+  formatChildAgeLine,
+  getChildAge,
+  validateBirthdayIso,
+} from "@/utils/childBirthday";
 import { difficultyTierLabel, difficultyTierToLevel, levelToDifficultyTier, type DifficultyTier } from "@/utils/difficulty";
 import { learningTaskXpReward } from "@/data/gameDifficulty";
 import type { ParentTabParamList } from "@/types/navigation";
@@ -66,6 +75,7 @@ type ChildRow = {
   login_secret: string | null;
   auth_pin: string;
   name: string;
+  birthday: string | null;
   age: number;
   stars: number;
   daily_limit_minutes: number;
@@ -206,7 +216,9 @@ export function ParentChildrenScreen() {
     setToast({ message, variant: "success" });
   }, []);
   const [newChildName, setNewChildName] = useState("");
-  const [newChildAge, setNewChildAge] = useState("");
+  const [newChildBirthday, setNewChildBirthday] = useState(() => defaultBirthdayForNewChild());
+  const [birthdayPickerMode, setBirthdayPickerMode] = useState<"create" | "edit" | null>(null);
+  const [birthdaySaving, setBirthdaySaving] = useState(false);
   const [newChildEmail, setNewChildEmail] = useState("");
   const [exerciseTarget, setExerciseTarget] = useState<ChildRow | null>(null);
   const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping_jacks");
@@ -228,6 +240,25 @@ export function ParentChildrenScreen() {
   const [rejectTarget, setRejectTarget] = useState<SubmissionPreviewRow | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [submissionImageUrls, setSubmissionImageUrls] = useState<Record<string, string>>({});
+
+  const assignableLearningGames = useMemo(
+    () => (learningTarget ? getGamesForChildAge(getChildAge(learningTarget)) : []),
+    [learningTarget]
+  );
+
+  const learningTargetAgeBand = useMemo(
+    () => (learningTarget ? getAgeBandForChild(getChildAge(learningTarget)) : null),
+    [learningTarget]
+  );
+
+  useEffect(() => {
+    if (!learningTarget || assignableLearningGames.length === 0) {
+      return;
+    }
+    if (!isGameAllowedForChildAge(learningGameId, getChildAge(learningTarget))) {
+      setLearningGameId(assignableLearningGames[0].id);
+    }
+  }, [learningTarget, assignableLearningGames, learningGameId]);
 
   const loadChildren = useCallback(async (fromPull = false, silent = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -258,7 +289,7 @@ export function ParentChildrenScreen() {
     const { data, error: childrenError } = await supabase
       .from("children")
       .select(
-        "id, child_user_id, login_email, login_secret, auth_pin, name, age, stars, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, difficulty_level, bedtime_start, bedtime_end, audio_guide_rate, avatar_url, is_online, last_seen_at"
+        "id, child_user_id, login_email, login_secret, auth_pin, name, birthday, age, stars, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, difficulty_level, bedtime_start, bedtime_end, audio_guide_rate, avatar_url, is_online, last_seen_at"
       )
       .eq("parent_id", user.id)
       .order("created_at", { ascending: true });
@@ -637,14 +668,14 @@ export function ParentChildrenScreen() {
     if (!supabase) {
       return;
     }
-    if (!newChildName.trim() || !newChildAge.trim() || !newChildEmail.trim()) {
-      showError("Name, age, and child email are required.");
+    if (!newChildName.trim() || !newChildBirthday.trim() || !newChildEmail.trim()) {
+      showError("Name, birthday, and child email are required.");
       return;
     }
 
-    const age = Number(newChildAge);
-    if (Number.isNaN(age) || age <= 0 || age >= 18) {
-      showError("Child age must be between 1 and 17.");
+    const birthdayResult = validateBirthdayIso(newChildBirthday);
+    if (!birthdayResult.ok) {
+      showError(birthdayResult.message);
       return;
     }
     const {
@@ -698,7 +729,7 @@ export function ParentChildrenScreen() {
       login_secret: loginSecret,
       auth_pin: pin,
       name: newChildName.trim(),
-      age,
+      birthday: birthdayResult.birthday,
     });
 
     setIsCreating(false);
@@ -708,10 +739,33 @@ export function ParentChildrenScreen() {
     }
 
     setNewChildName("");
-    setNewChildAge("");
+    setNewChildBirthday(defaultBirthdayForNewChild());
     setNewChildEmail("");
     setShowCreateDialog(false);
     showSuccess(`Child registered! PIN: ${pin}`);
+    await loadChildren(false, true);
+  };
+
+  const saveChildBirthday = async (childId: string, birthday: string) => {
+    if (!supabase) {
+      return;
+    }
+    const validated = validateBirthdayIso(birthday);
+    if (!validated.ok) {
+      showError(validated.message);
+      return;
+    }
+    setBirthdaySaving(true);
+    const { error: updateError } = await supabase
+      .from("children")
+      .update({ birthday: validated.birthday })
+      .eq("id", childId);
+    setBirthdaySaving(false);
+    if (updateError) {
+      showError(formatAppError(updateError));
+      return;
+    }
+    showSuccess(`Birthday updated · now age ${validated.age}`);
     await loadChildren(false, true);
   };
 
@@ -806,7 +860,13 @@ export function ParentChildrenScreen() {
       return;
     }
 
-    const game = CHILD_GAME_CATALOG.find((g) => g.id === learningGameId) ?? CHILD_GAME_CATALOG[0];
+    const game =
+      getGamesForChildAge(getChildAge(learningTarget)).find((g) => g.id === learningGameId) ??
+      getGamesForChildAge(getChildAge(learningTarget))[0];
+    if (!game) {
+      showError("No learning games are available for this child's age.");
+      return;
+    }
     const difficultyLevel = difficultyTierToLevel(learningDifficulty);
     const xpReward = learningTaskXpReward(learningDifficulty, game.id);
     setAssigningLearning(true);
@@ -1000,7 +1060,9 @@ export function ParentChildrenScreen() {
                 </View>
               )}
               <Text variant="titleMedium" style={styles.childSelectorName}>
-                {selectedChild ? `${selectedChild.name} (Age ${selectedChild.age})` : "Select child"}
+                {selectedChild
+                  ? `${selectedChild.name} (${formatChildAgeLine(selectedChild).split(" · ")[0]})`
+                  : "Select child"}
               </Text>
               <MaterialCommunityIcons name="chevron-down" size={24} color={c.subtext} />
             </Pressable>
@@ -1024,6 +1086,23 @@ export function ParentChildrenScreen() {
                 <Text variant="bodySmall" style={styles.pinHint}>
                   Child signs in using name + this PIN.
                 </Text>
+                <View style={styles.birthdayRow}>
+                  <View style={styles.birthdayText}>
+                    <Text variant="titleSmall" style={{ color: c.text, fontWeight: "600" }}>
+                      Birthday
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: c.subtext }}>
+                      {formatChildAgeLine(selectedChild)}
+                    </Text>
+                  </View>
+                  <PrimaryButton
+                    label="Change"
+                    mode="text"
+                    onPress={() => setBirthdayPickerMode("edit")}
+                    loading={birthdaySaving}
+                    disabled={birthdaySaving}
+                  />
+                </View>
                 <PrimaryButton label="+ Register Child" mode="outlined" onPress={() => setShowCreateDialog(true)} />
               </>
             ) : null}
@@ -1446,6 +1525,32 @@ export function ParentChildrenScreen() {
         </>
       ) : null}
 
+      <BirthdayPickerModal
+        visible={birthdayPickerMode !== null}
+        birthdayIso={
+          birthdayPickerMode === "create"
+            ? newChildBirthday
+            : selectedChild?.birthday ?? defaultBirthdayForNewChild()
+        }
+        title={
+          birthdayPickerMode === "create"
+            ? "Child's birthday"
+            : `Birthday for ${selectedChild?.name ?? "child"}`
+        }
+        onDismiss={() => setBirthdayPickerMode(null)}
+        onConfirm={(iso) => {
+          if (birthdayPickerMode === "create") {
+            setNewChildBirthday(iso);
+            setBirthdayPickerMode(null);
+            return;
+          }
+          if (birthdayPickerMode === "edit" && selectedChild) {
+            void saveChildBirthday(selectedChild.id, iso);
+            setBirthdayPickerMode(null);
+          }
+        }}
+      />
+
       <ParentManageToast
         visible={toast != null}
         message={toast?.message ?? ""}
@@ -1488,7 +1593,7 @@ export function ParentChildrenScreen() {
                         {child.name}
                       </Text>
                       <Text variant="bodySmall" style={{ color: c.subtext }}>
-                        Age {child.age}
+                        {formatChildAgeLine(child)}
                       </Text>
                     </View>
                   </Pressable>
@@ -1556,13 +1661,20 @@ export function ParentChildrenScreen() {
               Parent creates child login + PIN in one step.
             </Text>
             <TextInput label="Child Name" mode="outlined" value={newChildName} onChangeText={setNewChildName} />
-            <TextInput
-              label="Child Age"
-              mode="outlined"
-              value={newChildAge}
-              keyboardType="number-pad"
-              onChangeText={(value) => setNewChildAge(value.replace(/[^0-9]/g, ""))}
-            />
+            <Pressable onPress={() => setBirthdayPickerMode("create")} accessibilityRole="button">
+              <View pointerEvents="none">
+                <TextInput
+                  label="Birthday"
+                  mode="outlined"
+                  value={formatBirthdayDisplay(newChildBirthday)}
+                  editable={false}
+                  right={<TextInput.Icon icon="calendar" />}
+                />
+              </View>
+            </Pressable>
+            <Text variant="bodySmall" style={styles.helper}>
+              {childBirthdayFieldHelper()}
+            </Text>
             <TextInput
               label="Child Email"
               mode="outlined"
@@ -1629,13 +1741,14 @@ export function ParentChildrenScreen() {
           <Dialog.Title>Assign learning game</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Choose a game and difficulty for this assignment. Star reward is set from difficulty.
+              Games match {learningTarget?.name}&apos;s age ({learningTargetAgeBand?.label},{" "}
+              {learningTargetAgeBand?.shortLabel}).
             </Text>
             <Text variant="labelMedium" style={[styles.subSectionTitle, { marginTop: 8 }]}>
               Game
             </Text>
             <View style={styles.chipRow}>
-              {CHILD_GAME_CATALOG.map((g) => (
+              {assignableLearningGames.map((g) => (
                 <Chip key={g.id} selected={learningGameId === g.id} onPress={() => setLearningGameId(g.id)}>
                   {g.title}
                 </Chip>
@@ -1861,6 +1974,18 @@ function createStyles(c: AppColors) {
   },
   pinHint: {
     color: c.subtext,
+  },
+  birthdayRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  birthdayText: {
+    flex: 1,
+    gap: 2,
   },
   childSelectorRow: {
     flexDirection: "row",

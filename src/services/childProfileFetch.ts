@@ -22,7 +22,7 @@ export async function fetchChildProfileForCurrentUser(): Promise<{
   const { data, error: childError } = await supabase
     .from("children")
     .select(
-      "id, name, age, difficulty_level, stars, stars_lifetime, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, bedtime_start, bedtime_end, avatar_url, audio_guide_enabled, audio_guide_rate"
+      "id, name, birthday, age, difficulty_level, stars, stars_lifetime, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, bedtime_start, bedtime_end, avatar_url, audio_guide_enabled, audio_guide_rate"
     )
     .eq("child_user_id", user.id)
     .maybeSingle();

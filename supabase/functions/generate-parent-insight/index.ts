@@ -18,6 +18,40 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.4
 const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.1-flash-lite"] as const;
 const DEFAULT_CACHE_MS = 24 * 60 * 60 * 1000;
 const CACHE_MS = Number(Deno.env.get("PARENT_INSIGHT_CACHE_MS") ?? DEFAULT_CACHE_MS);
+const MANILA_TZ = "Asia/Manila";
+
+function manilaTodayParts(from = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: MANILA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(from);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return { year: get("year"), month: get("month"), day: get("day") };
+}
+
+function computeAgeFromBirthday(birthdayIso: string, from = new Date()): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(birthdayIso.trim());
+  if (!match) {
+    return 0;
+  }
+  const born = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  const today = manilaTodayParts(from);
+  let age = today.year - born.year;
+  if (today.month < born.month || (today.month === born.month && today.day < born.day)) {
+    age -= 1;
+  }
+  return age;
+}
+
+function resolveChildAge(child: { birthday?: string | null; age?: number | null }): number | null {
+  if (child.birthday) {
+    return computeAgeFromBirthday(String(child.birthday));
+  }
+  return typeof child.age === "number" ? child.age : null;
+}
 
 type InsightPayload = {
   summary: string;
@@ -173,7 +207,7 @@ function buildContext(params: {
 async function loadContext(supabase: SupabaseClient, childId: string, parentId: string) {
   const { data: child, error: childError } = await supabase
     .from("children")
-    .select("id, name, age, stars, stars_lifetime, daily_limit_minutes, difficulty_level, is_online, parent_id")
+    .select("id, name, birthday, age, stars, stars_lifetime, daily_limit_minutes, difficulty_level, is_online, parent_id")
     .eq("id", childId)
     .maybeSingle();
 
@@ -236,7 +270,7 @@ async function loadContext(supabase: SupabaseClient, childId: string, parentId: 
 
   const context = buildContext({
     childName: (child.name as string) ?? "Child",
-    age: typeof child.age === "number" ? child.age : null,
+    age: resolveChildAge(child),
     starsThisWeek: (child.stars as number) ?? 0,
     starsLifetime: (child.stars_lifetime as number) ?? (child.stars as number) ?? 0,
     pointsEarnedThisWeek,

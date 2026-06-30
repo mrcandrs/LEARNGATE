@@ -21,7 +21,8 @@ import { clearBlockedPackagesFromNative, getAccessibilityEnabled, isAppBlockingA
 import { getUsageAccessGranted, isUsageStatsAvailable } from "@/services/appUsageStats";
 import { hasLearnGateNativeModules } from "@/services/learnGateNative";
 import { registerAndSavePushToken, hasMyPushToken } from "@/services/pushNotifications";
-import { levelToDifficultyLabel } from "@/utils/difficulty";
+import { getAgeBandForChild } from "@/data/childAgeBands";
+import { formatChildAgeLine, getChildAge } from "@/utils/childBirthday";
 
 function StatusInfoRow({
   label,
@@ -177,7 +178,8 @@ export function ChildProfileSettingsScreen() {
             {child?.name ?? "Profile"}
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
-            Age {child?.age ?? "—"} · {child ? levelToDifficultyLabel(child.difficulty_level) : "—"}
+            {child ? formatChildAgeLine(child) : "—"} · {child ? getAgeBandForChild(getChildAge(child)).label : "—"} ·{" "}
+            {child ? levelToDifficultyLabel(child.difficulty_level) : "—"}
           </Text>
           <View style={styles.statPills}>
             <View

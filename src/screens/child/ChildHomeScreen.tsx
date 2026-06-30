@@ -20,7 +20,10 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { useChildTaskActions } from "@/hooks/useChildTaskActions";
 import { ChorePhotoReviewModal } from "@/components/child/ChorePhotoReviewModal";
 import { formatAppError } from "@/utils/errors";
-import { CHILD_GAME_CATALOG } from "@/data/childGames";
+import { getGamesForChildAge, getRecommendedGamesForChildAge, isGameAllowedForChildAge } from "@/data/childGames";
+import { getAgeBandForChild } from "@/data/childAgeBands";
+import { getChildAge } from "@/utils/childBirthday";
+import { ChildGameCard } from "@/components/child/ChildGameCard";
 import type { ChildHomeStackParamList, ChildTabParamList } from "@/types/navigation";
 import { taskCategoryIcon, taskCategoryTint, taskSubtitle, type TaskRow } from "@/utils/childTaskDisplay";
 
@@ -133,6 +136,12 @@ export function ChildHomeScreen() {
   }, [refreshProfile, loadHomeData, refreshAchievements, loadStarHistory, child]);
 
   const streakDays = achievementStats?.dailyStreak ?? 0;
+  const childAge = child ? getChildAge(child) : null;
+  const ageBand = useMemo(() => getAgeBandForChild(childAge), [childAge]);
+  const recommendedGames = useMemo(
+    () => getRecommendedGamesForChildAge(childAge, 2),
+    [childAge]
+  );
   const showError = profileError ?? error ?? actionError;
   const previewTasks = tasks.slice(0, 4);
   return (
@@ -143,6 +152,7 @@ export function ChildHomeScreen() {
           stars={child.stars}
           avatarUrl={child.avatar_url}
           onAvatarPress={() => navigation.navigate("ProfileSettings")}
+          subtitle={`${ageBand.emoji} ${ageBand.heroTitle} — games picked for age ${childAge ?? "—"}`}
         />
       ) : null}
 
@@ -219,7 +229,7 @@ export function ChildHomeScreen() {
 
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
           <Text variant="titleLarge" style={styles.sectionTitle}>
-            Recommended Games
+            {ageBand.emoji} Picked for You
           </Text>
           <Pressable
             onPress={() => navigation.navigate("Activities", { screen: "ActivitiesMain", params: { segment: "games" } })}
@@ -230,7 +240,7 @@ export function ChildHomeScreen() {
         </View>
 
         <View style={styles.gameRow}>
-          {CHILD_GAME_CATALOG.slice(0, 2).map((game) => (
+          {recommendedGames.map((game) => (
             <Pressable
               key={game.id}
               accessibilityRole="button"
@@ -242,14 +252,7 @@ export function ChildHomeScreen() {
                 })
               }
             >
-              <View style={[styles.gameMini, { backgroundColor: game.color }]}>
-                <View style={styles.gameMiniTop}>
-                  <Text style={styles.gameGlyph}>{game.glyph}</Text>
-                  <MaterialCommunityIcons name="play-circle" size={28} color="rgba(255,255,255,0.95)" />
-                </View>
-                <Text style={styles.gameTitle}>{game.title}</Text>
-                <Text style={styles.gameXp}>+50 XP</Text>
-              </View>
+              <ChildGameCard game={game} compact />
             </Pressable>
           ))}
         </View>

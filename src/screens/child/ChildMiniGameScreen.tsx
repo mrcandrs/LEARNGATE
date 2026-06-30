@@ -13,6 +13,9 @@ import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
 import { BONUS_PLAY_DIFFICULTY_LEVEL, getGameSettings } from "@/data/gameDifficulty";
+import { getAgeBandForChild } from "@/data/childAgeBands";
+import { isGameAllowedForChildAge } from "@/data/childGames";
+import { getChildAge } from "@/utils/childBirthday";
 import {
   COLOR_CATEGORY_CHALLENGES,
   COLOR_MIX_CHALLENGES,
@@ -661,6 +664,27 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
             <Text variant="titleMedium" style={styles.summaryTitle}>
               Preparing your difficulty...
             </Text>
+          </Card.Content>
+        </Card>
+      </ScreenContainer>
+    );
+  }
+
+  if (!taskId && child && !isGameAllowedForChildAge(gameId, getChildAge(child))) {
+    const band = getAgeBandForChild(getChildAge(child));
+    return (
+      <ScreenContainer scroll>
+        <Card style={[{ backgroundColor: c.card, borderRadius: radii.lg }, shadows.card]}>
+          <Card.Content style={styles.summaryInner}>
+            <MaterialCommunityIcons name="emoticon-sad-outline" size={48} color={c.subtext} />
+            <Text variant="titleMedium" style={styles.summaryTitle}>
+              This game isn&apos;t for your age yet
+            </Text>
+            <Text variant="bodyMedium" style={styles.summaryMeta}>
+              You&apos;re in the {band.label} group ({band.shortLabel}). Pick a game from Activities that matches
+              your level!
+            </Text>
+            <PrimaryButton label="Back to games" onPress={() => navigation.navigate("ActivitiesMain")} />
           </Card.Content>
         </Card>
       </ScreenContainer>
