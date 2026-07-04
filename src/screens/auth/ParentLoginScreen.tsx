@@ -20,6 +20,7 @@ import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { signInWithGoogleOAuth } from "@/services/googleOAuth";
 import { formatAppError } from "@/utils/errors";
+import { LegalFooterLinks } from "@/components/legal/LegalFooterLinks";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
 
@@ -214,6 +215,8 @@ export function ParentLoginScreen({ navigation }: Props) {
                 Supabase keys are not configured yet. Add your .env values to enable real authentication.
               </Text>
             ) : null}
+
+            {isSupabaseConfigured ? <LegalFooterLinks textColor="#6B7280" /> : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

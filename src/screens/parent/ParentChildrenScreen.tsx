@@ -1692,6 +1692,10 @@ export function ParentChildrenScreen() {
               autoCorrect={false}
               onChangeText={setNewChildEmail}
             />
+            <Text variant="bodySmall" style={styles.helper}>
+              By creating this profile you confirm you are the parent or guardian and consent to LearnGate collecting
+              this child&apos;s learning, location, and app-usage data as described in Settings → Legal.
+            </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <PrimaryButton label="Cancel" mode="text" onPress={() => setShowCreateDialog(false)} />

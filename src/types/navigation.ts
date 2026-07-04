@@ -1,12 +1,16 @@
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import type { GameId } from "@/data/childGames";
 import type { ExerciseId } from "@/data/exercises";
+import type { LegalDocumentId } from "@/content/legalDocuments";
+
+export type LegalDocumentParams = { documentId: LegalDocumentId };
 
 export type AuthStackParamList = {
   RoleSelect: undefined;
   ParentLogin: undefined;
   ParentSignUp: undefined;
   ChildAccess: undefined;
+  LegalDocument: LegalDocumentParams;
 };
 
 /** Optional params when opening a tab from the notification bell or a push tap. */
@@ -26,6 +30,11 @@ export type ParentTabParamList = {
   Overview: ParentOverviewParams | undefined;
   Children: ParentChildrenParams | undefined;
   Settings: undefined;
+};
+
+export type ParentStackParamList = {
+  ParentTabs: NavigatorScreenParams<ParentTabParamList> | undefined;
+  LegalDocument: LegalDocumentParams;
 };
 
 export type ChildHomeStackParamList = {

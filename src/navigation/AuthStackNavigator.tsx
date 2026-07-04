@@ -3,6 +3,8 @@ import { RoleSelectScreen } from "@/screens/auth/RoleSelectScreen";
 import { ParentLoginScreen } from "@/screens/auth/ParentLoginScreen";
 import { ParentSignUpScreen } from "@/screens/auth/ParentSignUpScreen";
 import { ChildAccessScreen } from "@/screens/auth/ChildAccessScreen";
+import { LegalDocumentScreen } from "@/screens/legal/LegalDocumentScreen";
+import { legalDocumentLabel } from "@/content/legalDocuments";
 import { AuthStackParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 
@@ -22,6 +24,14 @@ export function AuthStackNavigator() {
       <Stack.Screen name="ParentLogin" component={ParentLoginScreen} options={{ headerShown: false }} />
       <Stack.Screen name="ParentSignUp" component={ParentSignUpScreen} options={{ title: "Create Parent Account", ...greenHeader }} />
       <Stack.Screen name="ChildAccess" component={ChildAccessScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
+        options={({ route }) => ({
+          title: legalDocumentLabel(route.params.documentId),
+          ...greenHeader,
+        })}
+      />
     </Stack.Navigator>
   );
 }

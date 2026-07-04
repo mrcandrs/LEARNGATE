@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text, TextInput } from "react-native-paper";
+import { Checkbox, Text, TextInput } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { LegalFooterLinks } from "@/components/legal/LegalFooterLinks";
+import { LegalLinkButton } from "@/components/legal/LegalLinkButton";
+import { openLegalDocument } from "@/navigation/openLegalDocument";
 import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
 import { colors } from "@/theme/theme";
@@ -19,6 +22,7 @@ export function ParentSignUpScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
 
   const handleSignUp = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -28,6 +32,11 @@ export function ParentSignUpScreen({ navigation }: Props) {
 
     if (!email.trim() || !password.trim()) {
       setError("Email and password are required.");
+      return;
+    }
+
+    if (!acceptedLegal) {
+      setError("Please accept the Terms & Conditions and Privacy Policy.");
       return;
     }
 
@@ -87,8 +96,34 @@ export function ParentSignUpScreen({ navigation }: Props) {
           autoCapitalize="none"
         />
 
-        <PrimaryButton label="Create Account" onPress={() => void handleSignUp()} disabled={isSubmitting} />
+        <View style={styles.legalRow}>
+          <Checkbox status={acceptedLegal ? "checked" : "unchecked"} onPress={() => setAcceptedLegal((v) => !v)} />
+          <View style={styles.legalTextWrap}>
+            <Text variant="bodySmall" style={styles.legalText}>
+              I am a parent or legal guardian and I agree to the{" "}
+            </Text>
+            <View style={styles.legalLinks}>
+              <LegalLinkButton label="Terms & Conditions" onPress={() => openLegalDocument("terms")} />
+              <Text variant="bodySmall" style={styles.legalText}>
+                {" "}
+                and{" "}
+              </Text>
+              <LegalLinkButton label="Privacy Policy" onPress={() => openLegalDocument("privacy")} />
+              <Text variant="bodySmall" style={styles.legalText}>
+                .
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <PrimaryButton
+          label="Create Account"
+          onPress={() => void handleSignUp()}
+          disabled={isSubmitting || !acceptedLegal}
+        />
         <PrimaryButton label="Back to Login" onPress={() => navigation.navigate("ParentLogin")} mode="text" />
+
+        <LegalFooterLinks align="left" />
 
         {error ? (
           <Text variant="bodySmall" style={styles.errorText}>
@@ -127,5 +162,24 @@ const styles = StyleSheet.create({
   successText: {
     color: colors.primaryDark,
     marginTop: 4,
+  },
+  legalRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 4,
+    marginTop: 4,
+  },
+  legalTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  legalLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  legalText: {
+    color: colors.subtext,
+    lineHeight: 20,
   },
 });

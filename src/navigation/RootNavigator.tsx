@@ -6,7 +6,7 @@ import { ChildAppUsageBridge } from "@/components/ChildAppUsageBridge";
 import { ChildScreenLockProvider } from "@/store/ChildScreenLockContext";
 import { PushNotificationBridge } from "@/components/PushNotificationBridge";
 import { AuthStackNavigator } from "@/navigation/AuthStackNavigator";
-import { ParentTabsNavigator } from "@/navigation/ParentTabsNavigator";
+import { ParentStackNavigator } from "@/navigation/ParentStackNavigator";
 import { ChildTabsNavigator } from "@/navigation/ChildTabsNavigator";
 import { useAuth } from "@/store/AuthContext";
 import { colors } from "@/theme/theme";
@@ -28,7 +28,7 @@ export function RootNavigator() {
         {appMode === "auth" ? (
           <AuthStackNavigator />
         ) : appMode === "parent" ? (
-          <ParentTabsNavigator />
+          <ParentStackNavigator />
         ) : (
           <ChildScreenLockProvider>
             <ChildTabsNavigator />

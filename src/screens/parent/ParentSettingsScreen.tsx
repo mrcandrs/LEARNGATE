@@ -11,6 +11,7 @@ import { PrimaryButton } from "@/components/PrimaryButton";
 import { formatAppError } from "@/utils/errors";
 import { useThemeMode } from "@/store/ThemeModeContext";
 import { registerAndSavePushToken } from "@/services/pushNotifications";
+import { LegalSectionCard } from "@/components/legal/LegalSectionCard";
 
 type ChildSummary = {
   id: string;
@@ -282,6 +283,8 @@ export function ParentSettingsScreen() {
           </View>
         </Card.Content>
       </Card>
+
+      <LegalSectionCard />
 
       <PrimaryButton label="Save Settings" onPress={() => void saveRules()} disabled={!rule} />
       <Button mode="contained" onPress={() => setConfirmVisible(true)} style={styles.logoutButton}>
