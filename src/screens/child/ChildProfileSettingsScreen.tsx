@@ -23,6 +23,7 @@ import { hasLearnGateNativeModules } from "@/services/learnGateNative";
 import { registerAndSavePushToken, hasMyPushToken } from "@/services/pushNotifications";
 import { getAgeBandForChild } from "@/data/childAgeBands";
 import { formatChildAgeLine, getChildAge } from "@/utils/childBirthday";
+import { levelToDifficultyLabel } from "@/utils/difficulty";
 
 function StatusInfoRow({
   label,

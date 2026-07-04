@@ -4,7 +4,16 @@ import { useAuth } from "@/store/AuthContext";
 import type { ChildProfileRow } from "@/types/child";
 import { fetchChildProfileForCurrentUser } from "@/services/childProfileFetch";
 import { supabase } from "@/services/supabase";
-import { addTodayUsageMinutes, getTodayUsageMinutes } from "@/services/childScreenTimeUsage";
+import {
+  addCountableMs,
+  buildSnapshot,
+  canTrackScreenTime,
+  getTodayUsageMinutes,
+  minutesIncludingSession,
+  resetUsageForEpoch,
+  sessionStartAfterEpoch,
+  type ScreenLimitSnapshot,
+} from "@/services/childScreenTimeUsage";
 import { formatTimeLabel, isInBedtimeWindow } from "@/utils/bedtime";
 
 export type ChildLockReason = "bedtime" | "daily_limit";
@@ -20,7 +29,7 @@ export type ChildLockState = {
   bedtimeEnd: string;
 };
 
-const TICK_MS = 30_000;
+const TICK_MS = 5_000;
 
 function evaluateLock(params: {
   now: Date;
@@ -30,9 +39,18 @@ function evaluateLock(params: {
   bedtimeEnd: string;
   screenLimitEnabled: boolean;
   bedtimeEnabled: boolean;
+  trackingActive: boolean;
 }): Pick<ChildLockState, "isLocked" | "reason" | "title" | "message"> {
-  const { now, minutesUsed, dailyLimitMinutes, bedtimeStart, bedtimeEnd, screenLimitEnabled, bedtimeEnabled } =
-    params;
+  const {
+    now,
+    minutesUsed,
+    dailyLimitMinutes,
+    bedtimeStart,
+    bedtimeEnd,
+    screenLimitEnabled,
+    bedtimeEnabled,
+    trackingActive,
+  } = params;
 
   if (bedtimeEnabled && isInBedtimeWindow(now, bedtimeStart, bedtimeEnd)) {
     return {
@@ -43,16 +61,17 @@ function evaluateLock(params: {
     };
   }
 
-  if (screenLimitEnabled && minutesUsed >= dailyLimitMinutes) {
+  if (screenLimitEnabled && trackingActive && minutesUsed >= dailyLimitMinutes) {
     const hours = Math.floor(dailyLimitMinutes / 60);
     const mins = dailyLimitMinutes % 60;
     const limitLabel =
       hours > 0 && mins > 0 ? `${hours}h ${mins}m` : hours > 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : `${mins} minutes`;
+    const usedLabel = Math.round(minutesUsed * 10) / 10;
     return {
       isLocked: true,
       reason: "daily_limit",
       title: "Screen time limit reached",
-      message: `You've used today's ${limitLabel} limit (${minutesUsed} min). Ask your parent if you need more time.`,
+      message: `You've used today's ${limitLabel} limit (${usedLabel} min). Ask your parent if you need more time.`,
     };
   }
 
@@ -70,61 +89,82 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
   const [profileLoading, setProfileLoading] = useState(true);
   const enabled = appMode === "child" && isSupabaseConfigured;
 
-  const [minutesUsedToday, setMinutesUsedToday] = useState(0);
+  const [storedMinutes, setStoredMinutes] = useState(0);
   const [usageReady, setUsageReady] = useState(false);
   const [clock, setClock] = useState(() => new Date());
 
   const sessionStartRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const childIdRef = useRef<string | null>(null);
+  const limitSnapshotRef = useRef<ScreenLimitSnapshot | null>(null);
 
   const dailyLimitMinutes = child?.daily_limit_minutes ?? 120;
   const screenLimitEnabled = child?.screen_limit_enabled !== false;
   const bedtimeEnabled = child?.bedtime_enabled !== false;
   const bedtimeStart = child?.bedtime_start ?? "20:00";
   const bedtimeEnd = child?.bedtime_end ?? "07:00";
+  const trackingActive = canTrackScreenTime(limitSnapshotRef.current);
 
-  const refreshProfile = useCallback(async (silent = false) => {
-    if (!enabled) {
-      setChild(null);
-      setProfileLoading(false);
+  const minutesUsedToday = useMemo(() => {
+    const epochMs = limitSnapshotRef.current?.effectiveEpochMs ?? null;
+    return minutesIncludingSession(storedMinutes, sessionStartRef.current, epochMs, clock.getTime());
+  }, [storedMinutes, clock]);
+
+  const syncSnapshot = useCallback(async (row: ChildProfileRow) => {
+    const prev = limitSnapshotRef.current;
+    const snapshot = buildSnapshot(row, prev);
+    const prevEpoch = prev?.effectiveEpochMs ?? null;
+    const nextEpoch = snapshot.effectiveEpochMs;
+
+    limitSnapshotRef.current = snapshot;
+    childIdRef.current = row.id;
+
+    if (nextEpoch == null) {
+      sessionStartRef.current = null;
+      setStoredMinutes(0);
       return;
     }
-    if (!silent) {
-      setProfileLoading(true);
-    }
-    const { child: row } = await fetchChildProfileForCurrentUser();
-    setChild(row);
-    setClock(new Date());
-    setProfileLoading(false);
-  }, [enabled]);
 
-  const isLockedNow = useMemo(
-    () =>
-      enabled &&
-      usageReady &&
-      Boolean(child?.id) &&
-      evaluateLock({
-        now: clock,
-        minutesUsed: minutesUsedToday,
-        dailyLimitMinutes,
-        bedtimeStart,
-        bedtimeEnd,
-        screenLimitEnabled,
-        bedtimeEnabled,
-      }).isLocked,
-    [
-      enabled,
-      usageReady,
-      child?.id,
-      clock,
-      minutesUsedToday,
-      dailyLimitMinutes,
-      bedtimeStart,
-      bedtimeEnd,
-      screenLimitEnabled,
-      bedtimeEnabled,
-    ]
+    if (prev != null && prevEpoch !== nextEpoch) {
+      sessionStartRef.current = null;
+      await resetUsageForEpoch(row.id, nextEpoch);
+      setStoredMinutes(0);
+      if (AppState.currentState === "active") {
+        sessionStartRef.current = nextEpoch;
+      }
+    } else {
+      const loaded = await getTodayUsageMinutes(row.id, nextEpoch);
+      setStoredMinutes(loaded);
+      if (AppState.currentState === "active") {
+        sessionStartRef.current = sessionStartAfterEpoch(Date.now(), nextEpoch);
+      }
+    }
+  }, []);
+
+  const refreshProfile = useCallback(
+    async (silent = false) => {
+      if (!enabled) {
+        setChild(null);
+        setProfileLoading(false);
+        return;
+      }
+      if (!silent) {
+        setProfileLoading(true);
+      }
+      const { child: row } = await fetchChildProfileForCurrentUser();
+      if (row) {
+        await syncSnapshot(row);
+      } else {
+        limitSnapshotRef.current = null;
+        childIdRef.current = null;
+        sessionStartRef.current = null;
+        setStoredMinutes(0);
+      }
+      setChild(row);
+      setClock(new Date());
+      setProfileLoading(false);
+    },
+    [enabled, syncSnapshot]
   );
 
   const lockEval = useMemo(
@@ -137,6 +177,7 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
         bedtimeEnd,
         screenLimitEnabled,
         bedtimeEnabled,
+        trackingActive: canTrackScreenTime(limitSnapshotRef.current),
       }),
     [
       clock,
@@ -146,48 +187,60 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
       bedtimeEnd,
       screenLimitEnabled,
       bedtimeEnabled,
+      child?.screen_limit_set_at,
+      child?.daily_limit_minutes,
+      child?.screen_limit_enabled,
     ]
   );
 
+  const isLockedNow = enabled && usageReady && Boolean(child?.id) && lockEval.isLocked;
+
   const flushSession = useCallback(async () => {
     const childId = childIdRef.current;
+    const snapshot = limitSnapshotRef.current;
     const started = sessionStartRef.current;
-    if (!childId || started == null) {
+    const epochMs = snapshot?.effectiveEpochMs ?? null;
+
+    if (!childId || !snapshot || started == null || epochMs == null) {
       return;
     }
-    if (
-      evaluateLock({
-        now: new Date(),
-        minutesUsed: minutesUsedToday,
-        dailyLimitMinutes,
-        bedtimeStart,
-        bedtimeEnd,
-        screenLimitEnabled,
-        bedtimeEnabled,
-      }).isLocked
-    ) {
-      sessionStartRef.current = null;
-      return;
-    }
-    const elapsedMs = Date.now() - started;
-    sessionStartRef.current = Date.now();
+
+    const now = Date.now();
+    const elapsedMs = now - Math.max(started, epochMs);
+    sessionStartRef.current = now;
+
     if (elapsedMs < 1000) {
       return;
     }
-    const deltaMinutes = elapsedMs / 60_000;
-    const total = await addTodayUsageMinutes(childId, deltaMinutes);
-    setMinutesUsedToday(total);
-  }, [minutesUsedToday, dailyLimitMinutes, bedtimeStart, bedtimeEnd]);
 
-  const loadUsage = useCallback(async (childId: string) => {
-    const total = await getTodayUsageMinutes(childId);
-    setMinutesUsedToday(total);
-    setUsageReady(true);
+    const total = await addCountableMs(childId, epochMs, elapsedMs);
+    setStoredMinutes(total);
+  }, []);
+
+  const startSession = useCallback(() => {
+    const epochMs = limitSnapshotRef.current?.effectiveEpochMs ?? null;
+    if (epochMs == null || !canTrackScreenTime(limitSnapshotRef.current)) {
+      sessionStartRef.current = null;
+      return;
+    }
+    sessionStartRef.current = sessionStartAfterEpoch(Date.now(), epochMs);
   }, []);
 
   useEffect(() => {
-    void refreshProfile();
+    void refreshProfile().finally(() => setUsageReady(true));
   }, [refreshProfile]);
+
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        void refreshProfile(true);
+      }
+    });
+    return () => sub.remove();
+  }, [enabled, refreshProfile]);
 
   useEffect(() => {
     const client = supabase;
@@ -232,31 +285,9 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
   }, [enabled, refreshProfile]);
 
   useEffect(() => {
-    childIdRef.current = child?.id ?? null;
-    if (!enabled || !child?.id) {
-      setUsageReady(false);
-      setMinutesUsedToday(0);
-      sessionStartRef.current = null;
-      return;
-    }
-    setUsageReady(false);
-    void loadUsage(child.id);
-  }, [child?.id, enabled, loadUsage]);
-
-  useEffect(() => {
     if (!enabled || !child?.id || !usageReady) {
       return;
     }
-
-    const startSession = () => {
-      sessionStartRef.current = Date.now();
-    };
-
-    const stopSession = () => {
-      void flushSession().then(() => {
-        sessionStartRef.current = null;
-      });
-    };
 
     if (appStateRef.current === "active" && !isLockedNow) {
       startSession();
@@ -264,7 +295,7 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
 
     const tick = setInterval(() => {
       setClock(new Date());
-      if (appStateRef.current === "active" && sessionStartRef.current != null) {
+      if (appStateRef.current === "active" && sessionStartRef.current != null && !isLockedNow) {
         void flushSession();
       }
     }, TICK_MS);
@@ -279,7 +310,9 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
         }
       }
       if (next.match(/inactive|background/) && prev === "active") {
-        stopSession();
+        void flushSession().finally(() => {
+          sessionStartRef.current = null;
+        });
       }
     });
 
@@ -287,10 +320,10 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
       clearInterval(tick);
       sub.remove();
       if (appStateRef.current === "active") {
-        stopSession();
+        void flushSession();
       }
     };
-  }, [child?.id, enabled, flushSession, usageReady, isLockedNow]);
+  }, [child?.id, enabled, flushSession, usageReady, isLockedNow, startSession]);
 
   useEffect(() => {
     if (!enabled || !usageReady) {
@@ -300,23 +333,9 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
       void flushSession();
       sessionStartRef.current = null;
     } else if (appStateRef.current === "active" && child?.id) {
-      sessionStartRef.current = Date.now();
+      startSession();
     }
-  }, [isLockedNow, enabled, usageReady, flushSession, child?.id]);
-
-  useEffect(() => {
-    if (!enabled || !childIdRef.current) {
-      return;
-    }
-    const timer = setInterval(() => {
-      const now = new Date();
-      if (now.getHours() === 0 && now.getMinutes() === 0 && childIdRef.current) {
-        void loadUsage(childIdRef.current);
-        setClock(now);
-      }
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, [enabled, loadUsage]);
+  }, [isLockedNow, enabled, usageReady, flushSession, child?.id, startSession]);
 
   return {
     loading: profileLoading || (enabled && !usageReady),
@@ -324,7 +343,7 @@ export function useChildScreenLock(): ChildLockState & { loading: boolean } {
     reason: isLockedNow ? lockEval.reason : null,
     title: lockEval.title,
     message: lockEval.message,
-    minutesUsedToday,
+    minutesUsedToday: Math.round(minutesUsedToday * 10) / 10,
     dailyLimitMinutes,
     bedtimeStart,
     bedtimeEnd,

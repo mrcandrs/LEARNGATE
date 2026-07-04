@@ -8,6 +8,7 @@ export type ChildProfileRow = {
   stars_lifetime?: number;
   daily_limit_minutes: number;
   screen_limit_enabled: boolean;
+  screen_limit_set_at: string | null;
   bedtime_enabled: boolean;
   bedtime_start: string;
   bedtime_end: string;

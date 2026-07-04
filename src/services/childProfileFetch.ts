@@ -22,7 +22,7 @@ export async function fetchChildProfileForCurrentUser(): Promise<{
   const { data, error: childError } = await supabase
     .from("children")
     .select(
-      "id, name, birthday, age, difficulty_level, stars, stars_lifetime, daily_limit_minutes, screen_limit_enabled, bedtime_enabled, bedtime_start, bedtime_end, avatar_url, audio_guide_enabled, audio_guide_rate"
+      "id, name, birthday, age, difficulty_level, stars, stars_lifetime, daily_limit_minutes, screen_limit_enabled, screen_limit_set_at, bedtime_enabled, bedtime_start, bedtime_end, avatar_url, audio_guide_enabled, audio_guide_rate"
     )
     .eq("child_user_id", user.id)
     .maybeSingle();
@@ -53,6 +53,8 @@ export async function fetchChildProfileForCurrentUser(): Promise<{
       ...(row as ChildProfileRow),
       screen_limit_enabled: row.screen_limit_enabled !== false,
       bedtime_enabled: row.bedtime_enabled !== false,
+      screen_limit_set_at:
+        typeof row.screen_limit_set_at === "string" ? row.screen_limit_set_at : null,
       blocked_apps_json: blocked.filter((p): p is string => typeof p === "string" && p.length > 0),
     },
     error: null,

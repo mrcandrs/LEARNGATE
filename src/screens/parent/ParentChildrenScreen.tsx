@@ -479,16 +479,24 @@ export function ParentChildrenScreen() {
     const bedtimeStart = startResult.value;
     const bedtimeEnd = endResult.value;
 
-    const { error: updateError } = await supabase
-      .from("children")
-      .update({
-        daily_limit_minutes: dailyLimit,
-        bedtime_start: bedtimeStart,
-        bedtime_end: bedtimeEnd,
-        screen_limit_enabled: draft.screen_limit_enabled,
-        bedtime_enabled: draft.bedtime_enabled,
-      })
-      .eq("id", childId);
+    const childPayload = {
+      daily_limit_minutes: dailyLimit,
+      bedtime_start: bedtimeStart,
+      bedtime_end: bedtimeEnd,
+      screen_limit_enabled: draft.screen_limit_enabled,
+      bedtime_enabled: draft.bedtime_enabled,
+    };
+
+    let updateError = (
+      await supabase
+        .from("children")
+        .update({ ...childPayload, screen_limit_set_at: new Date().toISOString() })
+        .eq("id", childId)
+    ).error;
+
+    if (updateError?.message?.includes("screen_limit_set_at")) {
+      updateError = (await supabase.from("children").update(childPayload).eq("id", childId)).error;
+    }
 
     if (updateError) {
       const raw = updateError.message ?? "";
