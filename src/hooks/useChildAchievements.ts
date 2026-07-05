@@ -1,38 +1,47 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
+  evaluateAchievementLadders,
   evaluateAchievements,
   fetchChildAchievementStats,
-  getNextLockedAchievement,
+  getNextLockedTier,
+  groupLaddersByCategory,
+  type AchievementCategoryGroup,
+  type AchievementLadderProgress,
   type AchievementProgress,
   type ChildAchievementStats,
+  type LadderTierProgress,
 } from "@/services/childAchievements";
 import { claimAchievementReward, loadClaimedAchievementIds } from "@/services/achievementClaims";
 
 const seenKey = (childId: string) => `learngate_achievements_seen_${childId}`;
 
 export function useChildAchievements(
-  child: { id: string; stars: number; difficulty_level: number } | null | undefined,
+  child: { id: string; stars: number; stars_lifetime?: number; difficulty_level: number } | null | undefined,
 ) {
   const [stats, setStats] = useState<ChildAchievementStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [newUnlockTitle, setNewUnlockTitle] = useState<string | null>(null);
   const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set());
   const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimMessage, setClaimMessage] = useState<string | null>(null);
+  const [claimToast, setClaimToast] = useState<{ message: string; variant: "success" | "error" } | null>(null);
 
   const progress = useMemo(() => (stats ? evaluateAchievements(stats) : []), [stats]);
+  const ladderProgress = useMemo(() => (stats ? evaluateAchievementLadders(stats) : []), [stats]);
+  const ladderGroups = useMemo(() => groupLaddersByCategory(ladderProgress), [ladderProgress]);
   const unlockedCount = useMemo(() => progress.filter((p) => p.unlocked).length, [progress]);
-  const nextUp = useMemo(() => getNextLockedAchievement(progress), [progress]);
+  const nextUp = useMemo(() => getNextLockedTier(ladderProgress), [ladderProgress]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (silent = false) => {
     if (!child) {
       setStats(null);
       setClaimedIds(new Set());
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     const [nextStats, claimed] = await Promise.all([
       fetchChildAchievementStats(child),
       loadClaimedAchievementIds(child.id),
@@ -42,19 +51,21 @@ export function useChildAchievements(
     const nextProgress = evaluateAchievements(nextStats);
     const unlockedIds = nextProgress.filter((p) => p.unlocked).map((p) => p.definition.id);
 
-    try {
-      const raw = await AsyncStorage.getItem(seenKey(child.id));
-      const seen: string[] = raw ? (JSON.parse(raw) as string[]) : [];
-      const brandNew = unlockedIds.filter((id) => !seen.includes(id));
-      if (brandNew.length > 0) {
-        const first = nextProgress.find((p) => p.definition.id === brandNew[0]);
-        if (first) {
-          setNewUnlockTitle(first.definition.title);
+    if (!silent) {
+      try {
+        const raw = await AsyncStorage.getItem(seenKey(child.id));
+        const seen: string[] = raw ? (JSON.parse(raw) as string[]) : [];
+        const brandNew = unlockedIds.filter((id) => !seen.includes(id));
+        if (brandNew.length > 0) {
+          const first = nextProgress.find((p) => p.definition.id === brandNew[0]);
+          if (first) {
+            setNewUnlockTitle(first.definition.title);
+          }
+          await AsyncStorage.setItem(seenKey(child.id), JSON.stringify(unlockedIds));
         }
-        await AsyncStorage.setItem(seenKey(child.id), JSON.stringify(unlockedIds));
+      } catch {
+        // non-fatal
       }
-    } catch {
-      // non-fatal
     }
 
     setLoading(false);
@@ -72,16 +83,28 @@ export function useChildAchievements(
         return;
       }
       setClaimingId(achievementId);
-      setClaimMessage(null);
       const result = await claimAchievementReward({ childId: child.id, achievementId });
       setClaimingId(null);
       if (result.ok) {
         setClaimedIds((prev) => new Set([...prev, achievementId]));
-        setClaimMessage(result.message);
+        const bonus = result.stars ?? 0;
+        setStats((prev) =>
+          prev
+            ? {
+                ...prev,
+                stars: prev.stars + bonus,
+                starsThisWeek: prev.starsThisWeek + bonus,
+              }
+            : prev
+        );
+        setClaimToast({
+          message: bonus > 0 ? `+${bonus} stars claimed!` : result.message,
+          variant: "success",
+        });
         onStarsAwarded?.();
-        await refresh();
+        void refresh(true);
       } else {
-        setClaimMessage(result.message);
+        setClaimToast({ message: result.message, variant: "error" });
       }
     },
     [child, refresh]
@@ -92,6 +115,8 @@ export function useChildAchievements(
   return {
     stats,
     progress,
+    ladderProgress,
+    ladderGroups,
     unlockedCount,
     totalCount: progress.length,
     nextUp,
@@ -101,10 +126,10 @@ export function useChildAchievements(
     clearNewUnlock,
     claimAchievement,
     claimingId,
-    claimMessage,
-    clearClaimMessage: () => setClaimMessage(null),
+    claimToast,
+    clearClaimToast: () => setClaimToast(null),
     isClaimed,
   };
 }
 
-export type { AchievementProgress };
+export type { AchievementProgress, AchievementCategoryGroup, AchievementLadderProgress, LadderTierProgress };

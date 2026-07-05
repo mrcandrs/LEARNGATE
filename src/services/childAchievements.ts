@@ -1,7 +1,11 @@
 import { supabase } from "@/services/supabase";
 import {
+  ACHIEVEMENT_CATEGORY_ORDER,
   ACHIEVEMENT_DEFINITIONS,
+  ACHIEVEMENT_LADDERS,
+  type AchievementCategory,
   type AchievementDefinition,
+  type AchievementLadder,
   type ChildAchievementStats,
 } from "@/data/achievements";
 
@@ -10,7 +14,30 @@ export type { ChildAchievementStats } from "@/data/achievements";
 export type AchievementProgress = {
   definition: AchievementDefinition;
   unlocked: boolean;
-  progress?: { current: number; target: number };
+  progress: { current: number; target: number };
+};
+
+export type LadderTierProgress = {
+  definition: AchievementDefinition;
+  unlocked: boolean;
+  progress: { current: number; target: number };
+};
+
+export type AchievementLadderProgress = {
+  ladder: AchievementLadder;
+  currentValue: number;
+  tiers: LadderTierProgress[];
+  unlockedCount: number;
+  /** Progress toward the next locked step (0–1 within that segment). */
+  segmentProgress: number;
+  nextTier: LadderTierProgress | null;
+};
+
+export type AchievementCategoryGroup = {
+  category: AchievementCategory;
+  ladders: AchievementLadderProgress[];
+  unlockedCount: number;
+  totalCount: number;
 };
 
 function dayKey(date: Date): string {
@@ -39,8 +66,78 @@ export function evaluateAchievements(stats: ChildAchievementStats): AchievementP
   return ACHIEVEMENT_DEFINITIONS.map((definition) => ({
     definition,
     unlocked: definition.isUnlocked(stats),
-    progress: definition.progress?.(stats),
+    progress: definition.progress(stats),
   }));
+}
+
+function computeSegmentProgress(ladder: AchievementLadder, currentValue: number): number {
+  const tiers = ladder.tiers;
+  if (tiers.length === 0) {
+    return 0;
+  }
+  if (currentValue >= tiers[tiers.length - 1].target) {
+    return 1;
+  }
+
+  let prevTarget = 0;
+  for (const tier of tiers) {
+    if (currentValue < tier.target) {
+      const span = tier.target - prevTarget;
+      if (span <= 0) {
+        return 0;
+      }
+      return (currentValue - prevTarget) / span;
+    }
+    prevTarget = tier.target;
+  }
+  return 1;
+}
+
+export function evaluateAchievementLadders(stats: ChildAchievementStats): AchievementLadderProgress[] {
+  return ACHIEVEMENT_LADDERS.map((ladder) => {
+    const currentValue = ladder.getValue(stats);
+    const tiers: LadderTierProgress[] = ladder.tiers.map((tier) => {
+      const definition = ACHIEVEMENT_DEFINITIONS.find((d) => d.id === tier.id)!;
+      return {
+        definition,
+        unlocked: currentValue >= tier.target,
+        progress: definition.progress(stats),
+      };
+    });
+    const unlockedCount = tiers.filter((t) => t.unlocked).length;
+    const nextTier = tiers.find((t) => !t.unlocked) ?? null;
+
+    return {
+      ladder,
+      currentValue,
+      tiers,
+      unlockedCount,
+      segmentProgress: computeSegmentProgress(ladder, currentValue),
+      nextTier,
+    };
+  });
+}
+
+export function groupLaddersByCategory(ladders: AchievementLadderProgress[]): AchievementCategoryGroup[] {
+  const byCategory = new Map<AchievementCategory, AchievementLadderProgress[]>();
+
+  for (const ladder of ladders) {
+    const cat = ladder.ladder.category;
+    const list = byCategory.get(cat) ?? [];
+    list.push(ladder);
+    byCategory.set(cat, list);
+  }
+
+  return ACHIEVEMENT_CATEGORY_ORDER.filter((cat) => byCategory.has(cat)).map((category) => {
+    const groupLadders = byCategory.get(category)!;
+    let unlockedCount = 0;
+    let totalCount = 0;
+    for (const l of groupLadders) {
+      unlockedCount += l.unlockedCount;
+      totalCount += l.tiers.length;
+    }
+    return { category, ladders: groupLadders, unlockedCount, totalCount };
+  });
 }
 
 export async function fetchChildAchievementStats(child: {
@@ -140,14 +237,32 @@ export async function fetchChildAchievementStats(child: {
 }
 
 export function getNextLockedAchievement(progress: AchievementProgress[]): AchievementProgress | null {
-  const locked = progress.filter((p) => !p.unlocked && p.progress);
+  const locked = progress.filter((p) => !p.unlocked);
   if (locked.length === 0) {
     return null;
   }
   locked.sort((a, b) => {
-    const aPct = (a.progress!.current / a.progress!.target);
-    const bPct = (b.progress!.current / b.progress!.target);
+    const aPct = a.progress.target > 0 ? a.progress.current / a.progress.target : 0;
+    const bPct = b.progress.target > 0 ? b.progress.current / b.progress.target : 0;
     return bPct - aPct;
   });
   return locked[0];
+}
+
+export function getNextLockedTier(ladders: AchievementLadderProgress[]): LadderTierProgress | null {
+  const candidates: LadderTierProgress[] = [];
+  for (const ladder of ladders) {
+    if (ladder.nextTier) {
+      candidates.push(ladder.nextTier);
+    }
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  candidates.sort((a, b) => {
+    const aPct = a.progress.target > 0 ? a.progress.current / a.progress.target : 0;
+    const bPct = b.progress.target > 0 ? b.progress.current / b.progress.target : 0;
+    return bPct - aPct;
+  });
+  return candidates[0];
 }

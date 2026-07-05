@@ -6,7 +6,9 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { AchievementBadgeCard } from "@/components/AchievementBadgeCard";
+import { ParentManageToast } from "@/components/parent/ParentManageToast";
+import { AchievementLadderCard } from "@/components/AchievementLadderCard";
+import { ACHIEVEMENT_CATEGORY_LABELS } from "@/data/achievements";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
 import { StarHistoryCard } from "@/components/StarHistoryCard";
@@ -46,7 +48,7 @@ export function ChildHomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const {
     stats: achievementStats,
-    progress: achievementProgress,
+    ladderGroups,
     unlockedCount,
     totalCount,
     nextUp,
@@ -54,8 +56,8 @@ export function ChildHomeScreen() {
     refresh: refreshAchievements,
     claimAchievement,
     claimingId,
-    claimMessage,
-    clearClaimMessage,
+    claimToast,
+    clearClaimToast,
     isClaimed,
   } = useChildAchievements(child);
 
@@ -288,22 +290,32 @@ export function ChildHomeScreen() {
             {achievementsLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
             {nextUp && !nextUp.unlocked ? (
               <Text style={styles.nextUp}>
-                Next up: {nextUp.definition.title} ({nextUp.progress?.current ?? 0}/{nextUp.progress?.target ?? "?"})
+                Next up: {nextUp.definition.title} ({nextUp.progress.current}/{nextUp.progress.target})
               </Text>
             ) : null}
-            <View style={styles.badgeGrid}>
-              {achievementProgress.map((item) => (
-                <AchievementBadgeCard
-                  key={item.definition.id}
-                  item={item}
-                  claimed={isClaimed(item.definition.id)}
-                  claiming={claimingId === item.definition.id}
-                  onClaim={
-                    item.unlocked && !isClaimed(item.definition.id) && item.definition.bonusStars > 0
-                      ? () => void claimAchievement(item.definition.id, () => void refreshProfile())
-                      : undefined
-                  }
-                />
+            <View style={styles.ladderList}>
+              {ladderGroups.map((group) => (
+                <View key={group.category} style={styles.ladderCategory}>
+                  <View style={styles.ladderCategoryHeader}>
+                    <Text variant="labelLarge" style={styles.ladderCategoryTitle}>
+                      {ACHIEVEMENT_CATEGORY_LABELS[group.category]}
+                    </Text>
+                    <Text variant="labelSmall" style={styles.ladderCategoryCount}>
+                      {group.unlockedCount}/{group.totalCount}
+                    </Text>
+                  </View>
+                  {group.ladders.map((ladder) => (
+                    <AchievementLadderCard
+                      key={ladder.ladder.id}
+                      ladder={ladder}
+                      isClaimed={isClaimed}
+                      claimingId={claimingId}
+                      onClaim={(tier) =>
+                        void claimAchievement(tier.definition.id, () => void refreshProfile(true))
+                      }
+                    />
+                  ))}
+                </View>
               ))}
             </View>
           </Card.Content>
@@ -323,9 +335,13 @@ export function ChildHomeScreen() {
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={4000}>
         {snackbar ?? ""}
       </Snackbar>
-      <Snackbar visible={Boolean(claimMessage)} onDismiss={clearClaimMessage} duration={3500}>
-        {claimMessage ?? ""}
-      </Snackbar>
+      <ParentManageToast
+        visible={claimToast != null}
+        message={claimToast?.message ?? ""}
+        variant={claimToast?.variant ?? "success"}
+        onHide={clearClaimToast}
+        durationMs={3500}
+      />
     </ScreenContainer>
   );
 }
@@ -402,7 +418,16 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     cardTitle: { color: c.text, fontWeight: "700" },
     statsList: { gap: 10 },
     nextUp: { color: c.primaryDark, fontWeight: "600", marginBottom: 8 },
-    badgeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+    ladderList: { gap: 16 },
+    ladderCategory: { gap: 10 },
+    ladderCategoryHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginTop: 4,
+    },
+    ladderCategoryTitle: { color: c.text, fontWeight: "800" },
+    ladderCategoryCount: { color: c.subtext, fontWeight: "700" },
     errorText: { color: "#B91C1C" },
   });
 }
