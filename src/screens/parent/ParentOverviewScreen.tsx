@@ -44,6 +44,7 @@ type OverviewToast = {
 
 type ActivityItem = {
   id: string;
+  child_id: string;
   type: string;
   points: number;
   metadata: Record<string, unknown>;
@@ -203,16 +204,47 @@ export function ParentOverviewScreen() {
     [isSupabaseConfigured]
   );
 
+  const loadActivityForChild = useCallback(
+    async (childId: string) => {
+      if (!isSupabaseConfigured || !supabase) {
+        setActivity([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("activity_logs")
+        .select("id, child_id, type, points, metadata, created_at")
+        .eq("child_id", childId)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      if (error) {
+        console.warn("[LearnGate] activity logs load failed:", error.message);
+        return;
+      }
+
+      setActivity((data as ActivityItem[]) ?? []);
+    },
+    [isSupabaseConfigured]
+  );
+
+  const loadRecentActivityForChild = useCallback(
+    async (childId: string) => {
+      await Promise.all([loadAppUsageForChild(childId), loadActivityForChild(childId)]);
+    },
+    [loadActivityForChild, loadAppUsageForChild]
+  );
+
   const refreshAppUsage = useCallback(async () => {
     if (!selectedChildId) return;
     setUsageRefreshing(true);
     try {
-      await loadAppUsageForChild(selectedChildId);
+      await loadRecentActivityForChild(selectedChildId);
       showSuccess("Recent activity refreshed.");
     } finally {
       setUsageRefreshing(false);
     }
-  }, [selectedChildId, loadAppUsageForChild, showSuccess]);
+  }, [selectedChildId, loadRecentActivityForChild, showSuccess]);
 
   const loadDashboard = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -264,7 +296,6 @@ export function ParentOverviewScreen() {
     const childRows = children as ChildRow[];
     const childIds = childRows.map((c) => c.id);
     let taskRows: TaskRow[] = [];
-    let recentActivity: ActivityItem[] = [];
     let pendingReviewsByChild: Record<string, number> = {};
     let activityPointsThisWeek = 0;
     const appTimeSecondsByChild: Record<string, number> = {};
@@ -272,19 +303,13 @@ export function ParentOverviewScreen() {
     if (childIds.length > 0) {
       const weekStartIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const [tasksRes, logsRes, subsRes, pointsRes, usageRes] = await Promise.all([
+      const [tasksRes, subsRes, pointsRes, usageRes] = await Promise.all([
         supabase
           .from("tasks")
           .select("child_id, title, category, status, created_at, completed_at")
           .in("child_id", childIds)
           .order("created_at", { ascending: false })
           .limit(500),
-        supabase
-          .from("activity_logs")
-          .select("id, type, points, metadata, created_at")
-          .in("child_id", childIds)
-          .order("created_at", { ascending: false })
-          .limit(12),
         supabase.from("task_submissions").select("child_id").eq("status", "submitted"),
         supabase
           .from("activity_logs")
@@ -305,15 +330,8 @@ export function ParentOverviewScreen() {
         setRefreshing(false);
         return;
       }
-      if (logsRes.error) {
-        showError(formatAppError(logsRes.error));
-        setIsLoading(false);
-        setRefreshing(false);
-        return;
-      }
 
       taskRows = (tasksRes.data as TaskRow[]) ?? [];
-      recentActivity = (logsRes.data as ActivityItem[]) ?? [];
 
       for (const row of subsRes.data ?? []) {
         const cid = (row as { child_id: string }).child_id;
@@ -364,7 +382,7 @@ export function ParentOverviewScreen() {
       { label: "Pending Reviews", value: String(built.pendingReviewsTotal) },
       { label: "Completed This Week", value: String(built.week.totalCompleted) },
     ]);
-    setActivity(recentActivity);
+    setActivity([]);
     setManagedChildren(managed);
     setChildStarMeta(
       Object.fromEntries(
@@ -381,18 +399,19 @@ export function ParentOverviewScreen() {
     setSelectedChildId((prev) =>
       prev && managed.some((c) => c.id === prev) ? prev : managed[0]?.id ?? null
     );
-    const usageChildId =
+    const activityChildId =
       selectedChildId && managed.some((c) => c.id === selectedChildId)
         ? selectedChildId
         : managed[0]?.id ?? null;
-    if (usageChildId) {
-      await loadAppUsageForChild(usageChildId);
+    if (activityChildId) {
+      await loadRecentActivityForChild(activityChildId);
     } else {
       setAppUsage([]);
+      setActivity([]);
     }
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured, loadAppUsageForChild, selectedChildId, showError]);
+  }, [isSupabaseConfigured, loadRecentActivityForChild, selectedChildId, showError]);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -514,9 +533,10 @@ export function ParentOverviewScreen() {
   const onSelectChild = useCallback(
     (childId: string) => {
       setSelectedChildId(childId);
-      void loadAppUsageForChild(childId);
+      setActivityExpanded(false);
+      void loadRecentActivityForChild(childId);
     },
-    [loadAppUsageForChild]
+    [loadRecentActivityForChild]
   );
 
   return (
@@ -594,7 +614,14 @@ export function ParentOverviewScreen() {
 
       <View style={styles.recentSection}>
         <View style={styles.recentHeader}>
-          <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Recent Activity</Text>
+          <View style={styles.recentTitleWrap}>
+            <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Recent Activity</Text>
+            {selectedChildName ? (
+              <Text variant="labelMedium" style={{ color: c.subtext }}>
+                {selectedChildName}
+              </Text>
+            ) : null}
+          </View>
           <Pressable
             onPress={() => void refreshAppUsage()}
             disabled={usageRefreshing || !selectedChildId}
@@ -714,6 +741,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  recentTitleWrap: {
+    flex: 1,
+    gap: 2,
   },
   refreshLink: {
     fontWeight: "700",
