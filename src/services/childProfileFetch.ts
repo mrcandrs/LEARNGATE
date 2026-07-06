@@ -1,5 +1,6 @@
 import { supabase } from "@/services/supabase";
 import type { ChildProfileRow } from "@/types/child";
+import type { TempUnlockRow } from "@/constants/appUnlock";
 import { formatAppError } from "@/utils/errors";
 
 export async function fetchChildProfileForCurrentUser(): Promise<{
@@ -46,6 +47,11 @@ export async function fetchChildProfileForCurrentUser(): Promise<{
 
   const blocked = Array.isArray(ruleRow?.blocked_apps_json) ? ruleRow!.blocked_apps_json : [];
 
+  const { data: tempData } = await supabase.rpc("fn_get_child_temp_unlocks", {
+    p_child_id: data.id,
+  });
+  const tempUnlocks = (Array.isArray(tempData) ? tempData : []) as TempUnlockRow[];
+
   const row = data as Record<string, unknown>;
 
   return {
@@ -56,6 +62,7 @@ export async function fetchChildProfileForCurrentUser(): Promise<{
       screen_limit_set_at:
         typeof row.screen_limit_set_at === "string" ? row.screen_limit_set_at : null,
       blocked_apps_json: blocked.filter((p): p is string => typeof p === "string" && p.length > 0),
+      temp_unlocks: tempUnlocks,
     },
     error: null,
   };

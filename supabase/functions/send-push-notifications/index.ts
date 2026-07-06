@@ -537,6 +537,104 @@ async function buildOutboxDrain(supabase: SupabaseClient): Promise<{
         });
         pushedForRow++;
       }
+    } else if (row.event_type === "app_unlock_requested") {
+      const appLabel = (p.app_label as string) ?? "an app";
+      const stars = (p.stars as number) ?? 0;
+      const childNote = (p.child_message as string)?.trim();
+      const noteSuffix = childNote ? ` Note: “${childNote}”.` : "";
+      for (const to of parentTokenList) {
+        messages.push({
+          to,
+          outboxId: row.id,
+          title: "Unlock request",
+          body: `${childName} wants to unlock ${appLabel} (${stars} stars).${noteSuffix}`,
+          data: {
+            kind: "app_unlock_requested",
+            child_id: childId,
+            request_id: p.request_id,
+            package_name: p.package_name,
+          },
+          sound: "default",
+          priority: "high",
+          channelId: "tasks",
+        });
+        pushedForRow++;
+      }
+    } else if (row.event_type === "app_unlock_approved") {
+      const appLabel = (p.app_label as string) ?? "the app";
+      const unlockUntil = (p.unlock_until as string) ?? "";
+      const untilLabel = unlockUntil
+        ? new Date(unlockUntil).toLocaleString(undefined, {
+            month: "short",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : null;
+      const body = untilLabel
+        ? `Your parent approved ${appLabel}. You can use it until ${untilLabel}.`
+        : `Your parent approved ${appLabel}. You can open it now!`;
+      for (const to of childTokenList) {
+        messages.push({
+          to,
+          outboxId: row.id,
+          title: "Unlock approved",
+          body,
+          data: {
+            kind: "app_unlock_approved",
+            child_id: childId,
+            request_id: p.request_id,
+            package_name: p.package_name,
+            unlock_until: unlockUntil,
+            duration: p.duration,
+            started_at: p.started_at,
+          },
+          sound: "default",
+          priority: "high",
+          channelId: "tasks",
+          childUserId: childUserId ?? undefined,
+        });
+        pushedForRow++;
+      }
+    } else if (row.event_type === "app_unlock_denied") {
+      const appLabel = (p.app_label as string) ?? "the app";
+      for (const to of childTokenList) {
+        messages.push({
+          to,
+          outboxId: row.id,
+          title: "Unlock denied",
+          body: `Your parent declined the unlock for ${appLabel}. Your stars were returned.`,
+          data: {
+            kind: "app_unlock_denied",
+            child_id: childId,
+            request_id: p.request_id,
+          },
+          sound: "default",
+          channelId: "tasks",
+          childUserId: childUserId ?? undefined,
+        });
+        pushedForRow++;
+      }
+    } else if (row.event_type === "app_unlock_expired") {
+      const appLabel = (p.app_label as string) ?? "the app";
+      for (const to of childTokenList) {
+        messages.push({
+          to,
+          outboxId: row.id,
+          title: "Unlock ended",
+          body: `Your time on ${appLabel} is over. The app is blocked again.`,
+          data: {
+            kind: "app_unlock_expired",
+            child_id: childId,
+            package_name: p.package_name,
+          },
+          sound: "default",
+          priority: "high",
+          channelId: "tasks",
+          childUserId: childUserId ?? undefined,
+        });
+        pushedForRow++;
+      }
     } else {
       processedIds.push(row.id);
       results.push({

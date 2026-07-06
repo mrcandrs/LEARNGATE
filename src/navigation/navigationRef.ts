@@ -82,6 +82,14 @@ export function navigateFromNotification(kind: string, data: Record<string, unkn
         navigateParent("Overview", { childId, expandInsights: true, navKey });
         return;
 
+      case "app_unlock_requested":
+        navigateParent("Overview", { childId, focusUnlockRequests: true, navKey });
+        return;
+
+      case "app_unlock_expired":
+        navigateChildHome("HomeMain");
+        return;
+
       case "task_assigned":
         if (category === "learning") {
           navigateChildActivities("games");

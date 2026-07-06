@@ -12,7 +12,7 @@ object AppBlockPolicyStore {
   fun setBlockedPackages(context: Context, packages: Collection<String>) {
     val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val copy = HashSet(packages.filter { it.isNotBlank() })
-    prefs.edit().putStringSet(KEY_PACKAGES, copy).apply()
+    prefs.edit().putStringSet(KEY_PACKAGES, copy).commit()
   }
 
   fun getBlockedPackages(context: Context): Set<String> {
@@ -23,6 +23,6 @@ object AppBlockPolicyStore {
 
   fun clear(context: Context) {
     val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    prefs.edit().remove(KEY_PACKAGES).apply()
+    prefs.edit().remove(KEY_PACKAGES).commit()
   }
 }

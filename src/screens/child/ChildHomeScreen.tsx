@@ -11,6 +11,7 @@ import { AchievementLadderCard } from "@/components/AchievementLadderCard";
 import { ACHIEVEMENT_CATEGORY_LABELS } from "@/data/achievements";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
+import { ActiveAppUnlocksCard } from "@/components/child/ActiveAppUnlocksCard";
 import { StarHistoryCard } from "@/components/StarHistoryCard";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
@@ -161,6 +162,8 @@ export function ChildHomeScreen() {
       <View style={styles.pad}>
         {profileLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
         {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
+
+        <ActiveAppUnlocksCard child={child} />
 
         <LinearGradient colors={["#FF9800", "#FFB74D", "#FFC107"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.streakCard}>
           <MaterialCommunityIcons name="fire" size={36} color="#FFFFFF" />

@@ -33,11 +33,11 @@ export function RootNavigator() {
           <ChildScreenLockProvider>
             <ChildTabsNavigator />
             <ChildAppUsageBridge />
+            <BlockedReturnDialog />
           </ChildScreenLockProvider>
         )}
       </NavigationContainer>
       <PushNotificationBridge />
-      <BlockedReturnDialog />
     </>
   );
 }

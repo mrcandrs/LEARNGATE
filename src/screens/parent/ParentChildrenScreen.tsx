@@ -39,6 +39,7 @@ import { learningTaskXpReward } from "@/data/gameDifficulty";
 import type { ParentTabParamList } from "@/types/navigation";
 import {
   BLOCKABLE_APP_GROUPS,
+  blockedAppsForDisplay,
   displayAppUsageLabel,
   iconForPackage,
   isCuratedPackage,
@@ -65,6 +66,8 @@ import {
   stepBedtime,
   stepDailyLimit,
 } from "@/utils/screenControlSteppers";
+import type { UnlockPricingEntry, UnlockPricingJson } from "@/constants/appUnlock";
+import { pricingModeLabel } from "@/utils/appUnlockPackages";
 
 type ManageToast = { message: string; variant: "success" | "error" };
 
@@ -97,6 +100,8 @@ type ScreenRule = {
   reward_multiplier: number;
   daily_report_enabled: boolean;
   task_reminders_enabled: boolean;
+  app_unlock_enabled: boolean;
+  unlock_pricing_json: UnlockPricingJson;
 };
 
 type UsedAppRow = {
@@ -335,7 +340,9 @@ export function ParentChildrenScreen() {
     }
     const { data, error: rulesError } = await supabase
       .from("screen_rules")
-      .select("child_id, blocked_apps_json, unlock_after_task_count, reward_multiplier, daily_report_enabled, task_reminders_enabled")
+      .select(
+        "child_id, blocked_apps_json, unlock_after_task_count, reward_multiplier, daily_report_enabled, task_reminders_enabled, app_unlock_enabled, unlock_pricing_json"
+      )
       .eq("child_id", childId)
       .maybeSingle();
     if (rulesError) {
@@ -349,8 +356,16 @@ export function ParentChildrenScreen() {
       reward_multiplier: 1,
       daily_report_enabled: true,
       task_reminders_enabled: true,
+      app_unlock_enabled: true,
+      unlock_pricing_json: {},
     };
-    setScreenRule((data as ScreenRule | null) ?? fallbackRule);
+    const row = (data as ScreenRule | null) ?? fallbackRule;
+    setScreenRule({
+      ...row,
+      app_unlock_enabled: row.app_unlock_enabled !== false,
+      unlock_pricing_json:
+        row.unlock_pricing_json && typeof row.unlock_pricing_json === "object" ? row.unlock_pricing_json : {},
+    });
   }, [showError]);
 
   const loadUsedApps = useCallback(async (childId: string) => {
@@ -993,6 +1008,21 @@ export function ParentChildrenScreen() {
     return Array.from(map, ([pkg, label]) => ({ pkg, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [usedApps, screenRule?.blocked_apps_json]);
 
+  const blockedForPricing = useMemo(
+    () => (screenRule ? blockedAppsForDisplay(screenRule.blocked_apps_json) : []),
+    [screenRule?.blocked_apps_json, screenRule]
+  );
+
+  const setUnlockPricingEntry = (key: string, entry: UnlockPricingEntry) => {
+    setScreenRule((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        unlock_pricing_json: { ...prev.unlock_pricing_json, [key]: entry },
+      };
+    });
+  };
+
   const ruleSummary = useMemo(() => {
     if (!selectedChild || !selectedDraft) {
       return "";
@@ -1481,6 +1511,94 @@ export function ParentChildrenScreen() {
                     Clear recorded app history
                   </Text>
                 </Pressable>
+              ) : null}
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.childCard}>
+            <Card.Content style={styles.cardContent}>
+              <ParentSectionHeader
+                icon="star-circle-outline"
+                title="Star unlock pricing"
+                subtitle="Children can spend weekly stars to ask you to temporarily unlock blocked apps. You still approve every request."
+                style={styles.sectionHeaderInCard}
+              />
+              <List.Item
+                title="Allow star unlock requests"
+                description="When off, blocked apps cannot be unlocked with stars."
+                right={() => (
+                  <Switch
+                    value={screenRule?.app_unlock_enabled !== false}
+                    onValueChange={(on) =>
+                      setScreenRule((prev) => (prev ? { ...prev, app_unlock_enabled: on } : prev))
+                    }
+                    disabled={!screenRule}
+                  />
+                )}
+              />
+              {blockedForPricing.length === 0 ? (
+                <Text variant="bodySmall" style={styles.helper}>
+                  Block at least one app above to set star prices for unlock requests.
+                </Text>
+              ) : screenRule?.app_unlock_enabled !== false ? (
+                blockedForPricing.map((app) => {
+                  if (!screenRule) return null;
+                  const entry = screenRule.unlock_pricing_json[app.key] ?? { mode: "suggested" as const };
+                  const mode = entry.mode ?? "suggested";
+                  return (
+                    <View key={app.key} style={[styles.unlockPricingRow, { borderColor: theme.colors.outlineVariant }]}>
+                      <View style={styles.unlockPricingHead}>
+                        <MaterialCommunityIcons name={app.icon} size={20} color={theme.colors.primary} />
+                        <Text variant="titleSmall" style={styles.unlockPricingLabel}>
+                          {app.label}
+                        </Text>
+                      </View>
+                      <View style={styles.unlockModeRow}>
+                        {(["suggested", "fixed", "disabled"] as const).map((m) => {
+                          const selected = mode === m;
+                          return (
+                            <Chip
+                              key={m}
+                              compact
+                              selected={selected}
+                              onPress={() =>
+                                setUnlockPricingEntry(app.key, {
+                                  mode: m,
+                                  fixed_stars: m === "fixed" ? entry.fixed_stars ?? 15 : undefined,
+                                })
+                              }
+                              style={styles.unlockModeChip}
+                            >
+                              {m === "suggested" ? "Suggested" : m === "fixed" ? "Fixed" : "Off"}
+                            </Chip>
+                          );
+                        })}
+                      </View>
+                      {mode === "fixed" ? (
+                        <StepperControl
+                          label="Stars for rest of today"
+                          value={`${entry.fixed_stars ?? 15} ★`}
+                          onDecrement={() => {
+                            const next = Math.max(3, (entry.fixed_stars ?? 15) - 1);
+                            setUnlockPricingEntry(app.key, { mode: "fixed", fixed_stars: next });
+                          }}
+                          onIncrement={() => {
+                            const next = Math.min(100, (entry.fixed_stars ?? 15) + 1);
+                            setUnlockPricingEntry(app.key, { mode: "fixed", fixed_stars: next });
+                          }}
+                          decrementAccessibilityLabel="Fewer stars"
+                          incrementAccessibilityLabel="More stars"
+                        />
+                      ) : (
+                        <Text variant="bodySmall" style={styles.helper}>
+                          {mode === "fixed"
+                            ? "30 min and until Monday scale from this rest-of-today price."
+                            : pricingModeLabel(mode)}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })
               ) : null}
             </Card.Content>
           </Card>
@@ -2104,6 +2222,28 @@ function createStyles(c: AppColors) {
   },
   clearHistoryText: {
     fontWeight: "600",
+  },
+  unlockPricingRow: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  unlockPricingHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  unlockPricingLabel: {
+    fontWeight: "700",
+  },
+  unlockModeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  unlockModeChip: {
+    marginRight: 0,
   },
   appTile: {
     width: "31%",

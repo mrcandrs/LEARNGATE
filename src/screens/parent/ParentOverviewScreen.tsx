@@ -12,6 +12,7 @@ import { ParentHeroAffirmationCard } from "@/components/parent/ParentHeroAffirma
 import { ParentInsightsSummaryCard, type ParentChildInsight } from "@/components/parent/ParentInsightsSummaryCard";
 import { StarHistoryCard } from "@/components/StarHistoryCard";
 import { ParentLiveMonitoringCard } from "@/components/parent/ParentLiveMonitoringCard";
+import { ParentAppUnlockRequestsCard } from "@/components/parent/ParentAppUnlockRequestsCard";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { useAuth } from "@/store/AuthContext";
 import { useAppColors } from "@/theme/useAppColors";
@@ -59,6 +60,10 @@ const ACTIVITY_ICONS: Record<string, IconName> = {
   chore_approved: "thumb-up-outline",
   stars_earned: "star-outline",
   game_milestone: "gamepad-variant-outline",
+  app_unlock_requested: "shield-lock-outline",
+  app_unlock_approved: "lock-open-variant-outline",
+  app_unlock_denied: "lock-outline",
+  app_unlock_expired: "timer-off-outline",
 };
 
 function formatActivityTime(iso: string): string {
@@ -137,6 +142,7 @@ export function ParentOverviewScreen() {
   const [toast, setToast] = useState<OverviewToast | null>(null);
   const [pushTokenReady, setPushTokenReady] = useState<boolean | null>(null);
   const [pushRegistering, setPushRegistering] = useState(false);
+  const [highlightUnlockRequests, setHighlightUnlockRequests] = useState(false);
 
   const showError = useCallback((message: string) => {
     setToast({ message, variant: "error" });
@@ -170,12 +176,23 @@ export function ParentOverviewScreen() {
       if (route.params?.expandInsights) {
         setInsightExpanded(true);
       }
+      if (route.params?.focusUnlockRequests) {
+        setHighlightUnlockRequests(true);
+        setTimeout(() => setHighlightUnlockRequests(false), 4000);
+      }
       navigation.setParams({
         childId: undefined,
         expandInsights: undefined,
+        focusUnlockRequests: undefined,
         navKey: undefined,
       });
-    }, [navigation, route.params?.childId, route.params?.expandInsights, route.params?.navKey])
+    }, [
+      navigation,
+      route.params?.childId,
+      route.params?.expandInsights,
+      route.params?.focusUnlockRequests,
+      route.params?.navKey,
+    ])
   );
 
   const loadAppUsageForChild = useCallback(
@@ -588,6 +605,14 @@ export function ParentOverviewScreen() {
           onOpenMenu={() => setMonitorMenuVisible(true)}
           onDismissMenu={() => setMonitorMenuVisible(false)}
           onSelectChild={onSelectChild}
+        />
+      ) : null}
+
+      {managedChildren.length > 0 ? (
+        <ParentAppUnlockRequestsCard
+          childIds={managedChildren.map((c) => c.id)}
+          highlighted={highlightUnlockRequests}
+          onResolved={() => void loadDashboard(true)}
         />
       ) : null}
 

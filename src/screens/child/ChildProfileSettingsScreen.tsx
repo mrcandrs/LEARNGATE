@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Image, Platform, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Avatar, Button, Chip, Dialog, Portal, Switch, Text } from "react-native-paper";
@@ -7,6 +7,9 @@ import { ScreenContainer } from "@/components/ScreenContainer";
 import { StarResetCountdown } from "@/components/child/StarResetCountdown";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { blockedAppsForDisplay } from "@/constants/blockedAppPackages";
+import { formatUnlockRemaining, unlockRowForPackage } from "@/utils/appUnlockTime";
+import { packagesForUnlockKey } from "@/utils/appUnlockPackages";
+import { unlockDurationLabel } from "@/constants/appUnlock";
 import { useAuth } from "@/store/AuthContext";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
@@ -111,6 +114,27 @@ export function ChildProfileSettingsScreen() {
   );
 
   const blockedApps = useMemo(() => blockedAppsForDisplay(child?.blocked_apps_json ?? []), [child?.blocked_apps_json]);
+
+  const [unlockTick, setUnlockTick] = useState(0);
+
+  useEffect(() => {
+    if (!child?.temp_unlocks?.length) return;
+    const id = setInterval(() => setUnlockTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [child?.temp_unlocks?.length]);
+
+  const tempUnlockRowForApp = useCallback(
+    (appKey: string) => {
+      const pkgs = packagesForUnlockKey(appKey);
+      for (const pkg of pkgs) {
+        const row = unlockRowForPackage(pkg, child?.temp_unlocks ?? []);
+        if (row) return row;
+      }
+      return null;
+    },
+    [child?.temp_unlocks, unlockTick]
+  );
+
   const nativeReady = hasLearnGateNativeModules();
   const streakDays = achievementStats?.dailyStreak ?? 0;
   const tasksDone = achievementStats?.completedTasks ?? 0;
@@ -285,13 +309,32 @@ export function ChildProfileSettingsScreen() {
             {blockedApps.length === 0 ? (
               <Text style={styles.cardSub}>None right now.</Text>
             ) : (
-              blockedApps.map((app) => (
+              blockedApps.map((app) => {
+                const unlockRow = tempUnlockRowForApp(app.key);
+                return (
                 <View key={app.key} style={[styles.blockedRow, { borderColor: c.border }]}>
                   <MaterialCommunityIcons name={app.icon} size={22} color={c.primaryDark} />
-                  <Text style={{ color: c.text, flex: 1, fontWeight: "600" }}>{app.label}</Text>
-                  <MaterialCommunityIcons name="lock" size={16} color={c.warning} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: c.text, fontWeight: "600" }}>{app.label}</Text>
+                    {unlockRow ? (
+                      <>
+                        <Text variant="labelSmall" style={{ color: c.subtext }}>
+                          {unlockRow.duration ? unlockDurationLabel(unlockRow.duration) : "Unlocked"}
+                        </Text>
+                        <Text variant="labelSmall" style={{ color: c.primary }}>
+                          {formatUnlockRemaining(unlockRow)}
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
+                  <MaterialCommunityIcons
+                    name={unlockRow ? "lock-open-variant" : "lock"}
+                    size={16}
+                    color={unlockRow ? c.primary : c.warning}
+                  />
                 </View>
-              ))
+              );
+              })
             )}
           </View>
         ) : null}

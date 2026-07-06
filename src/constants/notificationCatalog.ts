@@ -89,6 +89,42 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     push: false,
     inApp: true,
   },
+  {
+    kind: "app_unlock_requested",
+    audience: "parent",
+    title: "Unlock request",
+    description: "Child spent stars to ask for a temporarily unlocked blocked app.",
+    trigger: "Child requests unlock from the blocked-app dialog",
+    push: true,
+    inApp: true,
+  },
+  {
+    kind: "app_unlock_approved",
+    audience: "child",
+    title: "Unlock approved",
+    description: "Parent approved a star unlock request.",
+    trigger: "Parent taps Approve on Home unlock requests",
+    push: true,
+    inApp: true,
+  },
+  {
+    kind: "app_unlock_denied",
+    audience: "child",
+    title: "Unlock denied",
+    description: "Parent declined unlock; escrowed stars returned.",
+    trigger: "Parent taps Deny on Home unlock requests",
+    push: true,
+    inApp: true,
+  },
+  {
+    kind: "app_unlock_expired",
+    audience: "child",
+    title: "Unlock ended",
+    description: "Temporary star unlock timed out; the app is blocked again.",
+    trigger: "Unlock timer reaches zero (server purge cron)",
+    push: true,
+    inApp: true,
+  },
 ];
 
 export function catalogForAudience(audience: NotificationAudience): NotificationCatalogEntry[] {

@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { navigateFromNotification } from "@/navigation/navigationRef";
+import { onChildUnlockApprovedPush, onChildUnlockExpiredPush } from "@/services/appUnlockNativeSync";
 import { supabase } from "@/services/supabase";
 
 Notifications.setNotificationHandler({
@@ -30,6 +31,14 @@ export function initPushNotificationListeners() {
   listenersInitialized = true;
 
   Notifications.addNotificationReceivedListener((notification) => {
+    const data = notification.request.content.data as Record<string, unknown> | undefined;
+    const kind = typeof data?.kind === "string" ? data.kind : "";
+    if (kind === "app_unlock_approved") {
+      void onChildUnlockApprovedPush(data ?? {});
+    }
+    if (kind === "app_unlock_expired") {
+      void onChildUnlockExpiredPush();
+    }
     if (__DEV__) {
       console.log("[push] received", notification.request.content.title, notification.request.content.body);
     }
@@ -38,6 +47,12 @@ export function initPushNotificationListeners() {
   Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data as Record<string, unknown> | undefined;
     const kind = typeof data?.kind === "string" ? data.kind : "";
+    if (kind === "app_unlock_approved") {
+      void onChildUnlockApprovedPush(data ?? {});
+    }
+    if (kind === "app_unlock_expired") {
+      void onChildUnlockExpiredPush();
+    }
     if (kind && kind !== "token_health_ping") {
       navigateFromNotification(kind, data ?? {});
     }

@@ -17,6 +17,7 @@ export type AuthStackParamList = {
 export type ParentOverviewParams = {
   childId?: string;
   expandInsights?: boolean;
+  focusUnlockRequests?: boolean;
   navKey?: number;
 };
 

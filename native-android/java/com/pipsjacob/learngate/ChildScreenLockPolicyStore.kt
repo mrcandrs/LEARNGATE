@@ -12,7 +12,7 @@ object ChildScreenLockPolicyStore {
       .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
       .edit()
       .putBoolean(KEY_LOCKED, locked)
-      .apply()
+      .commit()
   }
 
   fun isLocked(context: Context): Boolean {
