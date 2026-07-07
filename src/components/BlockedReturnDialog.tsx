@@ -9,6 +9,8 @@ import {
   launchAppPackage,
 } from "@/services/appBlocking";
 import {
+  activateAppUnlock,
+  fetchChildTempUnlocks,
   fetchPendingUnlockForPackage,
   fetchUnlockQuote,
   requestAppUnlock,
@@ -45,6 +47,7 @@ export function BlockedReturnDialog() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const timeoutIdsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const lastRelaunchRef = useRef<Record<string, number>>({});
 
   const refreshChild = useCallback(async () => {
     const { child: row } = await fetchChildProfileForCurrentUser();
@@ -93,13 +96,26 @@ export function BlockedReturnDialog() {
     setQuoteLoading(false);
   }, []);
 
-  const openUnlockedApp = useCallback(async (pkg: string, unlockRow?: TempUnlockRow | null) => {
-    const row =
-      unlockRow ??
-      unlockRowForPackage(pkg, childRef.current?.temp_unlocks ?? []);
-    const allRows = childRef.current?.temp_unlocks ?? [];
+  const openUnlockedApp = useCallback(async (pkg: string, _unlockRow?: TempUnlockRow | null) => {
+    // Break the bounce ↔ auto-relaunch ping-pong: if we just relaunched this app, don't slam it
+    // open again. One relaunch is enough; if the child is still being bounced, let them tap back in
+    // from the "Unlocked apps" card instead of flickering between LearnGate and the app.
+    const now = Date.now();
+    if (now - (lastRelaunchRef.current[pkg] ?? 0) < 6000) {
+      return;
+    }
+    lastRelaunchRef.current[pkg] = now;
+
+    const childId = childRef.current?.id;
+    // Start the clock now for fixed-length passes (no-op for anchored/already-started passes),
+    // then read the fresh window so we launch with the real remaining time.
+    if (childId) {
+      await activateAppUnlock(childId, pkg);
+    }
+    const freshRows = childId ? await fetchChildTempUnlocks(childId) : childRef.current?.temp_unlocks ?? [];
+    const row = unlockRowForPackage(pkg, freshRows);
     if (row) {
-      await ensurePackageAllowedOnNative(pkg, row, allRows, childRef.current?.blocked_apps_json ?? []);
+      await ensurePackageAllowedOnNative(pkg, row, freshRows, childRef.current?.blocked_apps_json ?? []);
     } else {
       await flushTempUnlocksToNative();
     }
@@ -107,6 +123,7 @@ export function BlockedReturnDialog() {
     if (!launched && __DEV__) {
       console.warn("[LearnGate] Could not launch package:", pkg);
     }
+    emitChildProfileRefresh();
   }, []);
 
   const tryShowPending = useCallback(async () => {

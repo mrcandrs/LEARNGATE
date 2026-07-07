@@ -1,6 +1,6 @@
 import { BLOCKABLE_APP_GROUPS } from "@/constants/blockedAppPackages";
 import type { TempUnlockRow } from "@/constants/appUnlock";
-import { effectiveUnlockEndMs } from "@/utils/appUnlockTime";
+import { isUnlockActive } from "@/utils/appUnlockTime";
 import { packagesForUnlockKey, unlockPricingKey } from "@/utils/appUnlockPackages";
 
 /** Expand group slugs (e.g. "youtube") and curated tiles to real Android package names. */
@@ -30,7 +30,9 @@ export function effectiveBlockedPackagesForNative(
   const blocked = new Set(expandBlockedPackagesForNative(blockedPackages));
 
   for (const row of tempUnlocks) {
-    if (effectiveUnlockEndMs(row, nowMs) <= nowMs) {
+    // Only a STARTED (activated) pass grants an exception. Granted-but-not-opened passes stay
+    // blocked until the child opens the app (which starts the clock).
+    if (!isUnlockActive(row, nowMs)) {
       continue;
     }
     for (const pkg of packagesForUnlockKey(unlockPricingKey(row.package_name))) {

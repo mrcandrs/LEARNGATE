@@ -1,4 +1,4 @@
-export type UnlockDuration = "30m" | "rest_of_day" | "week";
+export type UnlockDuration = "1m" | "5m" | "30m" | "rest_of_day" | "week";
 
 export type UnlockPricingMode = "suggested" | "fixed" | "disabled";
 
@@ -14,6 +14,8 @@ export type TempUnlockRow = {
   unlock_until: string;
   duration?: UnlockDuration | null;
   started_at?: string | null;
+  /** When the child actually opened the app and the clock started. NULL = granted but not started. */
+  activated_at?: string | null;
 };
 
 export type AppUnlockRequestRow = {
@@ -50,10 +52,22 @@ export const UNLOCK_DURATIONS: readonly {
   description: string;
 }[] = [
   {
+    id: "1m",
+    label: "1 minute",
+    shortLabel: "1 min",
+    description: "Quick test unlock",
+  },
+  {
+    id: "5m",
+    label: "5 minutes",
+    shortLabel: "5 min",
+    description: "Very short break",
+  },
+  {
     id: "30m",
     label: "30 minutes",
     shortLabel: "30 min",
-    description: "Short break — lowest star cost",
+    description: "Short break — low star cost",
   },
   {
     id: "rest_of_day",

@@ -1,3 +1,5 @@
+import type { TempUnlockRow } from "@/constants/appUnlock";
+
 export type ChildProfileRow = {
   id: string;
   name: string;
@@ -16,5 +18,5 @@ export type ChildProfileRow = {
   audio_guide_enabled: boolean;
   audio_guide_rate: number;
   blocked_apps_json: string[];
-  temp_unlocks?: { package_name: string; unlock_until: string }[];
+  temp_unlocks?: TempUnlockRow[];
 };

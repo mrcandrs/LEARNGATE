@@ -9,6 +9,8 @@ import { radii, shadows } from "@/theme/theme";
 import { activeUnlocksForDisplay, formatUnlockRemaining, unlockRowForPackage } from "@/utils/appUnlockTime";
 import { packagesForUnlockKey } from "@/utils/appUnlockPackages";
 import { launchAppPackage } from "@/services/appBlocking";
+import { activateAppUnlock, fetchChildTempUnlocks } from "@/services/appUnlock";
+import { emitChildProfileRefresh } from "@/services/childProfileEvents";
 import { ensurePackageAllowedOnNative, flushTempUnlocksToNative } from "@/services/appUnlockNativeSync";
 
 type Props = {
@@ -32,6 +34,26 @@ export function ActiveAppUnlocksCard({ child }: Props) {
     return () => clearInterval(id);
   }, [unlocks.length]);
 
+  const openUnlock = async (key: string) => {
+    const pkg = packagesForUnlockKey(key)[0];
+    const childId = child?.id;
+    // Start the clock now for fixed passes (no-op for anchored/already-started ones), then relaunch
+    // with the fresh window so the child gets the full duration from this open.
+    if (childId) {
+      await activateAppUnlock(childId, pkg);
+    }
+    const freshRows = childId ? await fetchChildTempUnlocks(childId) : child?.temp_unlocks ?? [];
+    const row = unlockRowForPackage(pkg, freshRows);
+    if (row) {
+      await ensurePackageAllowedOnNative(pkg, row, freshRows, child?.blocked_apps_json ?? []);
+      await launchAppPackage(pkg, row, child?.blocked_apps_json ?? []);
+    } else {
+      await flushTempUnlocksToNative();
+      await launchAppPackage(pkg);
+    }
+    emitChildProfileRefresh();
+  };
+
   if (unlocks.length === 0) {
     return null;
   }
@@ -54,22 +76,9 @@ export function ActiveAppUnlocksCard({ child }: Props) {
           <Pressable
             key={item.key}
             style={[styles.row, { borderColor: c.border }]}
-            onPress={() => {
-              const pkg = packagesForUnlockKey(item.key)[0];
-              const row = unlockRowForPackage(pkg, child?.temp_unlocks ?? []);
-              if (row) {
-                void ensurePackageAllowedOnNative(
-                  pkg,
-                  row,
-                  child?.temp_unlocks ?? [],
-                  child?.blocked_apps_json ?? []
-                ).then(() => launchAppPackage(pkg, row, child?.blocked_apps_json ?? []));
-              } else {
-                void flushTempUnlocksToNative().then(() => launchAppPackage(pkg));
-              }
-            }}
+            onPress={() => void openUnlock(item.key)}
             accessibilityRole="button"
-            accessibilityLabel={`Open ${item.label}`}
+            accessibilityLabel={item.activated ? `Open ${item.label}` : `Start and open ${item.label}`}
           >
             <MaterialCommunityIcons name={item.icon} size={24} color={c.primaryDark} />
             <View style={styles.rowText}>
@@ -78,7 +87,9 @@ export function ActiveAppUnlocksCard({ child }: Props) {
                 {item.duration ? unlockDurationLabel(item.duration) : "Unlocked"}
               </Text>
               <Text variant="bodySmall" style={{ color: c.primary }}>
-                {formatUnlockRemaining(item, nowMs)}
+                {item.activated
+                  ? formatUnlockRemaining(item.unlock_until, nowMs)
+                  : `Tap to start${item.duration ? ` your ${unlockDurationLabel(item.duration)}` : ""}`}
               </Text>
             </View>
           </Pressable>

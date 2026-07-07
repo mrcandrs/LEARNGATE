@@ -82,6 +82,28 @@ export async function resolveAppUnlock(
   };
 }
 
+/** Start the clock on a fixed-length pass (1m/5m/30m) when the child opens the app. */
+export async function activateAppUnlock(
+  childId: string,
+  packageName: string
+): Promise<{ ok: boolean; activated?: boolean; unlock_until?: string }> {
+  if (!supabase) {
+    return { ok: false };
+  }
+
+  const { data, error } = await supabase.rpc("fn_activate_app_unlock", {
+    p_child_id: childId,
+    p_package_name: packageName,
+  });
+
+  if (error) {
+    console.warn("[LearnGate] activate unlock failed:", error.message);
+    return { ok: false };
+  }
+
+  return (data ?? { ok: false }) as { ok: boolean; activated?: boolean; unlock_until?: string };
+}
+
 export async function fetchChildTempUnlocks(childId: string): Promise<TempUnlockRow[]> {
   if (!supabase) {
     return [];
@@ -97,6 +119,36 @@ export async function fetchChildTempUnlocks(childId: string): Promise<TempUnlock
   }
 
   return Array.isArray(data) ? (data as TempUnlockRow[]) : [];
+}
+
+export type ChildActiveUnlock = {
+  child_id: string;
+  package_name: string;
+  unlock_until: string;
+  duration: UnlockDuration | null;
+  started_at: string | null;
+  activated_at: string | null;
+};
+
+/** Parent-side: active (not-yet-expired) star unlocks across the given children. */
+export async function fetchActiveUnlocksForChildren(childIds: string[]): Promise<ChildActiveUnlock[]> {
+  if (!supabase || childIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("child_app_temp_unlocks")
+    .select("child_id, package_name, unlock_until, duration, started_at, activated_at")
+    .in("child_id", childIds)
+    .gt("unlock_until", new Date().toISOString())
+    .order("unlock_until", { ascending: true });
+
+  if (error) {
+    console.warn("[LearnGate] active unlocks load failed:", error.message);
+    return [];
+  }
+
+  return (data as ChildActiveUnlock[]) ?? [];
 }
 
 export async function fetchPendingUnlockRequests(childIds: string[]): Promise<AppUnlockRequestRow[]> {

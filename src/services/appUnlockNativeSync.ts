@@ -31,16 +31,26 @@ export async function onChildUnlockApprovedPush(data?: Record<string, unknown>):
     const unlockUntil = typeof data.unlock_until === "string" ? data.unlock_until : null;
     if (pkg && unlockUntil) {
       const duration =
-        data.duration === "30m" || data.duration === "rest_of_day" || data.duration === "week"
+        data.duration === "1m" ||
+        data.duration === "5m" ||
+        data.duration === "30m" ||
+        data.duration === "rest_of_day" ||
+        data.duration === "week"
           ? (data.duration as UnlockDuration)
           : null;
       const startedAt = typeof data.started_at === "string" ? data.started_at : null;
-      await mergeUnlockRowToNative({
-        package_name: pkg,
-        unlock_until: unlockUntil,
-        duration,
-        started_at: startedAt,
-      });
+      // Only pre-open the app for passes that are already running (anchored durations set started_at
+      // at approval). Fixed passes (1m/5m/30m) start when the child opens the app, so leave them
+      // blocked here — otherwise approval alone would let the app through and burn the pass.
+      if (startedAt) {
+        await mergeUnlockRowToNative({
+          package_name: pkg,
+          unlock_until: unlockUntil,
+          duration,
+          started_at: startedAt,
+          activated_at: startedAt,
+        });
+      }
     }
   }
 

@@ -2,7 +2,10 @@ package com.pipsjacob.learngate
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import java.lang.ref.WeakReference
 
@@ -16,6 +19,9 @@ class LearnGateAccessibilityService : AccessibilityService() {
   private var lastKickPkg: String? = null
   private var lastKickAtElapsed: Long = 0L
   private var activeUnlockPkg: String? = null
+
+  private val expiryHandler = Handler(Looper.getMainLooper())
+  private var expiryRunnable: Runnable? = null
 
   override fun onServiceConnected() {
     super.onServiceConnected()
@@ -42,14 +48,12 @@ class LearnGateAccessibilityService : AccessibilityService() {
 
     val self = packageName
     if (pkg == self) {
-      activeUnlockPkg = null
-      UnlockTimerOverlay.hide(this)
+      clearActiveUnlock()
       return
     }
 
     if (pkg == "com.android.settings") {
-      activeUnlockPkg = null
-      UnlockTimerOverlay.hide(this)
+      clearActiveUnlock()
       return
     }
 
@@ -58,38 +62,96 @@ class LearnGateAccessibilityService : AccessibilityService() {
     }
 
     if (hasActiveUnlock(pkg)) {
+      Log.d(TAG, "allow $pkg (active unlock) — no bounce")
       showUnlockOverlay(pkg)
       return
     }
 
     if (activeUnlockPkg != null && pkg != activeUnlockPkg) {
-      activeUnlockPkg = null
-      UnlockTimerOverlay.hide(this)
-      UnlockTimerOverlay.disarm(applicationContext)
+      clearActiveUnlock()
     }
 
     if (ChildScreenLockPolicyStore.isLocked(applicationContext)) {
+      Log.d(TAG, "BOUNCE $pkg — screen lock active (no active unlock)")
       UnlockTimerOverlay.hide(this)
       redirectToLearnGate(pkg, markBlockedApp = false)
       return
     }
 
     val blocked = AppBlockPolicyStore.getBlockedPackages(applicationContext)
-    if (!blocked.contains(pkg)) return
+    if (!blocked.contains(pkg)) {
+      Log.d(TAG, "allow $pkg — not in block list")
+      return
+    }
 
-    activeUnlockPkg = null
-    UnlockTimerOverlay.hide(this)
+    Log.d(TAG, "BOUNCE $pkg — in block list, no active unlock. blocked=$blocked")
+    clearActiveUnlock()
     redirectToLearnGate(pkg, markBlockedApp = true)
   }
 
   private fun hasActiveUnlock(pkg: String): Boolean {
-    val until = TempAllowPolicyStore.getUntilMs(applicationContext, pkg) ?: return false
-    return until > System.currentTimeMillis()
+    val now = System.currentTimeMillis()
+    val until = TempAllowPolicyStore.getUntilMs(applicationContext, pkg)
+    if (until != null && until > now) return true
+    // Backup: the launch/sync path also commits the unlock to the overlay "armed" prefs. If the
+    // allow list read ever comes back empty for a beat, this prevents a false bounce.
+    return UnlockTimerOverlay.armedUntilFor(applicationContext, pkg) > now
   }
 
   private fun showUnlockOverlay(pkg: String) {
     activeUnlockPkg = pkg
     UnlockTimerOverlay.showForPackage(this, pkg)
+    scheduleExpiryEnforcement(pkg)
+  }
+
+  private fun clearActiveUnlock() {
+    activeUnlockPkg = null
+    UnlockTimerOverlay.hide(this)
+    // Intentionally do NOT cancel the expiry timer: even if the child navigates away first, we
+    // still want to re-block the app the instant its pass ends so it can't be reopened for free
+    // during the brief window before the next JS re-sync.
+  }
+
+  /**
+   * The accessibility service only reacts to foreground changes, so a temp unlock that expires
+   * while the child is still inside the app would go unnoticed. Schedule a check for the exact
+   * moment the pass ends to re-block and pull the child back to LearnGate.
+   */
+  private fun scheduleExpiryEnforcement(pkg: String) {
+    cancelExpiryEnforcement()
+    val until = TempAllowPolicyStore.getUntilMs(applicationContext, pkg) ?: return
+    val delay = (until - System.currentTimeMillis()).coerceAtLeast(0L) + 750L
+    val runnable = Runnable { enforceExpiry(pkg) }
+    expiryRunnable = runnable
+    expiryHandler.postDelayed(runnable, delay)
+  }
+
+  private fun cancelExpiryEnforcement() {
+    expiryRunnable?.let { expiryHandler.removeCallbacks(it) }
+    expiryRunnable = null
+  }
+
+  private fun enforceExpiry(pkg: String) {
+    // Pass was extended (e.g. re-approved) — keep watching the new end time.
+    if (hasActiveUnlock(pkg)) {
+      scheduleExpiryEnforcement(pkg)
+      return
+    }
+
+    expiryRunnable = null
+    UnlockTimerOverlay.disarm(applicationContext)
+
+    // The enforcement list excludes actively-unlocked apps, so this package was removed while the
+    // pass was live. A temp unlock only ever exists for a parent-blocked app, so re-add it now to
+    // guarantee it is blocked again immediately — even before the next JS sync.
+    AppBlockPolicyStore.addBlockedPackage(applicationContext, pkg)
+
+    // Only bounce the child out if they're still sitting inside the app that just expired.
+    if (activeUnlockPkg == pkg) {
+      activeUnlockPkg = null
+      UnlockTimerOverlay.hide(this)
+      redirectToLearnGate(pkg, markBlockedApp = true)
+    }
   }
 
   private fun isIgnorableForegroundPackage(pkg: String): Boolean {
@@ -137,11 +199,13 @@ class LearnGateAccessibilityService : AccessibilityService() {
 
   override fun onDestroy() {
     instance = null
+    cancelExpiryEnforcement()
     UnlockTimerOverlay.hide(this)
     super.onDestroy()
   }
 
   companion object {
+    private const val TAG = "LearnGateBlocker"
     private var instance: WeakReference<LearnGateAccessibilityService>? = null
 
     fun notifyUnlockedAppLaunched(context: android.content.Context, packageName: String, label: String?, untilMs: Long) {

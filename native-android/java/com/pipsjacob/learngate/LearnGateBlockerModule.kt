@@ -77,6 +77,59 @@ class LearnGateBlockerModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Apply block list + temp allows in one call. Allows are written (committed) BEFORE the block
+   * list so there is never a window where a package is blocked but its active unlock has not been
+   * persisted yet (which would bounce the child out of an unlocked app).
+   */
+  @ReactMethod
+  fun applyBlockPolicy(blockedPackages: ReadableArray, allows: ReadableArray, promise: Promise) {
+    try {
+      val allowList = ArrayList<TempAllowPolicyStore.TempAllowEntry>()
+      for (i in 0 until allows.size()) {
+        if (allows.isNull(i)) continue
+        val map: ReadableMap = allows.getMap(i) ?: continue
+        val pkg = if (map.hasKey("package_name")) map.getString("package_name") else null
+        val label = if (map.hasKey("app_label")) map.getString("app_label") else null
+        val untilMs =
+          when {
+            map.hasKey("unlock_until_ms") -> {
+              val raw = map.getDouble("unlock_until_ms")
+              if (raw.isNaN() || raw <= 0.0) 0L else raw.toLong()
+            }
+            else -> 0L
+          }
+        if (pkg != null && pkg.isNotBlank() && untilMs > 0L) {
+          allowList.add(TempAllowPolicyStore.TempAllowEntry(pkg, untilMs, label))
+        }
+      }
+      // Merge (never wipe live allows that a stale caller happened to omit).
+      TempAllowPolicyStore.mergeAllows(reactApplicationContext, allowList)
+      for (entry in allowList) {
+        UnlockTimerOverlay.arm(
+          reactApplicationContext,
+          entry.packageName,
+          entry.label ?: "App",
+          entry.untilMs
+        )
+      }
+
+      val blockList = ArrayList<String>()
+      for (i in 0 until blockedPackages.size()) {
+        if (!blockedPackages.isNull(i)) {
+          val s = blockedPackages.getString(i)
+          if (s != null && s.isNotBlank()) {
+            blockList.add(s)
+          }
+        }
+      }
+      AppBlockPolicyStore.setBlockedPackages(reactApplicationContext, blockList)
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("BLOCKER_POLICY", e.message, e)
+    }
+  }
+
   @ReactMethod
   fun setTemporaryAllows(entries: ReadableArray, promise: Promise) {
     try {
@@ -98,7 +151,7 @@ class LearnGateBlockerModule(reactContext: ReactApplicationContext) :
           list.add(TempAllowPolicyStore.TempAllowEntry(pkg, untilMs, label))
         }
       }
-      TempAllowPolicyStore.setAllows(reactApplicationContext, list)
+      TempAllowPolicyStore.mergeAllows(reactApplicationContext, list)
       for (entry in list) {
         UnlockTimerOverlay.arm(
           reactApplicationContext,

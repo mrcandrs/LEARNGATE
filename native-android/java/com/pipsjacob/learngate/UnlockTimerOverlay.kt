@@ -179,6 +179,17 @@ object UnlockTimerOverlay {
     return overlayRoot != null && shownPkg == packageName
   }
 
+  /**
+   * Second, independent record of the active unlock (committed at launch/sync). Used as a backup by
+   * the accessibility service so a momentary empty read of the allow list can't bounce the child.
+   */
+  fun armedUntilFor(context: Context, packageName: String): Long {
+    if (packageName.isBlank()) return 0L
+    val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    if (prefs.getString(KEY_PKG, null) != packageName) return 0L
+    return prefs.getLong(KEY_UNTIL, 0L)
+  }
+
   private fun readArmedLabel(context: Context, packageName: String): String? {
     val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     return if (prefs.getString(KEY_PKG, null) == packageName) {

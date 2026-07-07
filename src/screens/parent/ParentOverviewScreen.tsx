@@ -13,6 +13,7 @@ import { ParentInsightsSummaryCard, type ParentChildInsight } from "@/components
 import { StarHistoryCard } from "@/components/StarHistoryCard";
 import { ParentLiveMonitoringCard } from "@/components/parent/ParentLiveMonitoringCard";
 import { ParentAppUnlockRequestsCard } from "@/components/parent/ParentAppUnlockRequestsCard";
+import { ParentActiveUnlocksCard } from "@/components/parent/ParentActiveUnlocksCard";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { useAuth } from "@/store/AuthContext";
 import { useAppColors } from "@/theme/useAppColors";
@@ -560,6 +561,18 @@ export function ParentOverviewScreen() {
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <ParentHeroAffirmationCard />
 
+      {managedChildren.length > 0 ? (
+        <ParentAppUnlockRequestsCard
+          childIds={managedChildren.map((c) => c.id)}
+          highlighted={highlightUnlockRequests}
+          onResolved={() => void loadDashboard(true)}
+        />
+      ) : null}
+
+      {managedChildren.length > 0 ? (
+        <ParentActiveUnlocksCard children={managedChildren.map((c) => ({ id: c.id, name: c.name }))} />
+      ) : null}
+
       {pushTokenReady === false ? (
         <Card style={[styles.pushBanner, { borderColor: c.warning }]}>
           <Card.Content>
@@ -605,14 +618,6 @@ export function ParentOverviewScreen() {
           onOpenMenu={() => setMonitorMenuVisible(true)}
           onDismissMenu={() => setMonitorMenuVisible(false)}
           onSelectChild={onSelectChild}
-        />
-      ) : null}
-
-      {managedChildren.length > 0 ? (
-        <ParentAppUnlockRequestsCard
-          childIds={managedChildren.map((c) => c.id)}
-          highlighted={highlightUnlockRequests}
-          onResolved={() => void loadDashboard(true)}
         />
       ) : null}
 
