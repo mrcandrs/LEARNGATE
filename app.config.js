@@ -17,6 +17,7 @@ module.exports = ({ config }) => {
       ...(config.plugins ?? []),
       ["./plugins/withGoogleMapsAndroid.js", { apiKey: googleMapsApiKey }],
       "./plugins/withLearnGateNative.js",
+      "./plugins/withExercisePoseStream.js",
     ],
     android: {
       ...config.android,

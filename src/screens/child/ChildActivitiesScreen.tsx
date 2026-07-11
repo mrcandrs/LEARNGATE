@@ -133,7 +133,7 @@ export function ChildActivitiesScreen() {
                   Movement Activity
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  Physical exercises from the LearnGate movement activity module.
+                  AI pose tracking counts squats, lunges, and jumping jacks from your camera.
                 </Text>
               </View>
             </View>
@@ -151,7 +151,7 @@ export function ChildActivitiesScreen() {
                 >
                   <View style={[styles.moveCard, { backgroundColor: c.card, borderColor: c.border }]}>
                     <View style={styles.moveBadge}>
-                      <Text style={styles.moveBadgeText}>0 out of {ex.defaultReps}</Text>
+                      <Text style={styles.moveBadgeText}>{ex.defaultReps} reps · +{ex.defaultPoints} stars</Text>
                     </View>
                     <View style={styles.moveBody}>
                       <Text style={styles.moveEmoji}>{ex.emoji}</Text>

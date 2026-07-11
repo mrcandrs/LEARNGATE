@@ -1,49 +1,82 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Menu, Text } from "react-native-paper";
+import { Text, useTheme } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
-import { EXERCISES, getExerciseById, normalizeExerciseId, type ExerciseId } from "@/data/exercises";
+import { getExerciseById, normalizeExerciseId, type ExerciseId } from "@/data/exercises";
 import { useExerciseRepDetector } from "@/hooks/useExerciseRepDetector";
+import { ExerciseMascotDemo } from "@/components/exercise/ExerciseMascotDemo";
+import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCamera";
+import { MASCOT_NAME } from "@/constants/mascot";
+import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
+import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
+import { childTabBarHiddenStyle, childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
+import { isFullBodyExercise } from "@/services/exerciseFrameBounds";
 import { supabase } from "@/services/supabase";
 import { useChildProfile } from "@/hooks/useChildProfile";
+import { Camera as VisionCamera } from "react-native-vision-camera";
+import { isStreamPoseAvailable } from "@/services/exercisePoseNative";
+import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { formatAppError } from "@/utils/errors";
 
 type Props = NativeStackScreenProps<ChildActivitiesStackParamList, "ExerciseSession">;
-
-const LEARNGATE_LOGO = require("../../../assets/icon.png");
+type SessionPhase = "demo" | "workout" | "completed";
 
 export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const c = useAppColors();
-  const styles = useMemo(() => createStyles(c), [c]);
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(c, insets), [c, insets]);
   const taskId = route.params.taskId;
   const initialId = normalizeExerciseId(route.params.exerciseId);
-  const [selectedId, setSelectedId] = useState<ExerciseId>(initialId);
+  const [selectedId] = useState<ExerciseId>(initialId);
   const exercise = useMemo(() => getExerciseById(selectedId), [selectedId]);
+  const isLegWorkout = isFullBodyExercise(selectedId);
   const { child, refresh: refreshProfile } = useChildProfile();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const [phase, setPhase] = useState<"intro" | "session">("intro");
-  const [cameraOn, setCameraOn] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [phase, setPhase] = useState<SessionPhase>("demo");
+  const [demoFinished, setDemoFinished] = useState(false);
+  const [demoRunId, setDemoRunId] = useState(0);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [startingCamera, setStartingCamera] = useState(false);
   const [targetReps, setTargetReps] = useState(exercise.defaultReps);
   const [points, setPoints] = useState(exercise.defaultPoints);
   const [completed, setCompleted] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const exitSession = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate("ActivitiesMain");
+  }, [navigation]);
+
+  const cameraOn = phase === "workout";
 
   const onRepDetected = useCallback(() => {
     setCompleted((n) => Math.min(targetReps, n + 1));
   }, [targetReps]);
 
-  const { moveStatus } = useExerciseRepDetector({
-    enabled: cameraOn && phase === "session",
+  const {
+    moveStatus,
+    detectionMode,
+    isEmulator,
+    useLegacyCamera,
+    formQuality,
+    formMessage,
+    feedStreamPose,
+  } = useExerciseRepDetector({
+    enabled: cameraOn && cameraReady,
     exerciseId: selectedId,
     cameraRef,
     onRep: onRepDetected,
@@ -64,7 +97,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       if (data.description) {
         try {
           const parsed = JSON.parse(data.description);
-          if (parsed?.exerciseId) setSelectedId(normalizeExerciseId(parsed.exerciseId));
           const reps = Number(parsed?.targetReps);
           if (!Number.isNaN(reps) && reps > 0) setTargetReps(reps);
         } catch {
@@ -77,24 +109,10 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
 
   const remaining = Math.max(0, targetReps - completed);
   const done = remaining === 0;
+  const completedTransitionRef = useRef(false);
+  const awardStartedRef = useRef(false);
 
-  const ensurePermission = async () => {
-    if (permission?.granted) return true;
-    const res = await requestPermission();
-    return Boolean(res.granted);
-  };
-
-  const startCamera = async () => {
-    const ok = await ensurePermission();
-    if (ok) {
-      setCameraOn(true);
-      setError(null);
-    } else {
-      setError("Camera permission is required.");
-    }
-  };
-
-  const saveAndFinish = async () => {
+  const awardStars = useCallback(async () => {
     if (!supabase || !child || !done) return;
     setError(null);
     setIsSaving(true);
@@ -128,8 +146,90 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       setError(formatAppError(awardError));
       return;
     }
+
     await refreshProfile(true);
-    navigation.goBack();
+    setToast(`You earned ${points} stars!`);
+    setTimeout(() => exitSession(), 3200);
+  }, [child, completed, done, exitSession, points, refreshProfile, selectedId, targetReps, taskId]);
+
+  useEffect(() => {
+    if (!done || phase !== "workout" || completedTransitionRef.current) return;
+    completedTransitionRef.current = true;
+    const timer = setTimeout(() => {
+      setCameraReady(false);
+      setPhase("completed");
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [done, phase]);
+
+  useEffect(() => {
+    if (phase !== "completed" || awardStartedRef.current) return;
+    awardStartedRef.current = true;
+    const timer = setTimeout(() => {
+      void awardStars();
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [awardStars, phase]);
+
+  useEffect(() => {
+    const parent = navigation.getParent();
+    if (!parent) return;
+
+    if (phase === "workout") {
+      parent.setOptions({ tabBarStyle: childTabBarHiddenStyle });
+    } else {
+      parent.setOptions({ tabBarStyle: childTabBarVisibleStyle(theme.colors.surface) });
+    }
+
+    return () => {
+      parent.setOptions({ tabBarStyle: childTabBarVisibleStyle(theme.colors.surface) });
+    };
+  }, [navigation, phase, theme.colors.surface]);
+
+  const stopWorkout = () => {
+    completedTransitionRef.current = false;
+    awardStartedRef.current = false;
+    setPhase("demo");
+    setDemoFinished(true);
+    setCameraReady(false);
+    setStartingCamera(false);
+  };
+
+  const startDemo = () => {
+    setError(null);
+    setDemoFinished(false);
+    setDemoRunId((n) => n + 1);
+    setPhase("demo");
+  };
+
+  const beginWorkout = async () => {
+    setError(null);
+    setStartingCamera(true);
+    try {
+      if (!permission?.granted) {
+        const res = await requestPermission();
+        if (!res.granted) {
+          setError("Camera permission is required to count reps.");
+          return;
+        }
+      }
+      if (isStreamPoseAvailable()) {
+        const visionStatus = await VisionCamera.getCameraPermissionStatus();
+        if (visionStatus !== "granted") {
+          const visionRes = await VisionCamera.requestCameraPermission();
+          if (visionRes !== "granted") {
+            setError("Camera permission is required to count reps.");
+            return;
+          }
+        }
+      }
+      setCameraReady(false);
+      completedTransitionRef.current = false;
+      awardStartedRef.current = false;
+      setPhase("workout");
+    } finally {
+      setStartingCamera(false);
+    }
   };
 
   const moveLabel =
@@ -138,7 +238,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       : moveStatus === "Move!"
         ? "Move!"
         : moveStatus === "Watching"
-          ? cameraOn
+          ? cameraOn && cameraReady
             ? "Watching"
             : "Stopped"
           : "Stopped";
@@ -151,265 +251,372 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     );
   }
 
-  if (phase === "intro") {
+  if (phase === "completed") {
     return (
-      <View style={[styles.flex, { backgroundColor: c.background }]}>
-        <LinearGradient
-          colors={[...c.heroGradient]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.introHeader}
-        >
-          <Pressable onPress={() => navigation.goBack()} style={styles.backCircle}>
-            <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
-          </Pressable>
-          <Text style={styles.introBrand}>LearnGate</Text>
-          <Image source={LEARNGATE_LOGO} style={styles.introLogo} accessibilityLabel="LearnGate" />
-          <Text variant="headlineMedium" style={styles.introTitle}>
-            Exercise Time!
+      <View style={[styles.workoutRoot, { backgroundColor: c.background }]}>
+        <View style={[styles.completedCard, { backgroundColor: c.card, borderColor: c.border }]}>
+          <MaterialCommunityIcons name="check-circle" size={88} color={c.primary} />
+          <Text variant="headlineSmall" style={{ color: c.primaryDark, fontWeight: "900", textAlign: "center" }}>
+            Workout complete!
           </Text>
-          <Text style={styles.introSub}>Pick an exercise. Let the camera see your full body.</Text>
-        </LinearGradient>
-        <ScrollView
-          style={styles.introScroll}
-          contentContainerStyle={styles.introBody}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={[styles.cameraPlaceholder, { borderColor: c.primary, backgroundColor: c.surfaceTint }]}>
-            <MaterialCommunityIcons name="camera-off" size={48} color={c.primary} />
-            <Text style={[styles.cameraOffTitle, { color: c.primaryDark }]}>Camera is off</Text>
-            <Text style={{ color: c.subtext }}>Tap Start below when you are ready</Text>
-          </View>
-          <Text style={[styles.bodyHint, { color: c.primaryDark }]}>Keep your whole body inside the camera.</Text>
-          <PrimaryButton label="Start" onPress={() => setPhase("session")} />
-        </ScrollView>
+          <Text variant="titleMedium" style={{ color: c.text, fontWeight: "700", textAlign: "center" }}>
+            {exercise.emoji} {exercise.title}
+          </Text>
+          <Text variant="bodyLarge" style={{ color: c.subtext, textAlign: "center" }}>
+            {completed} / {targetReps} reps done
+          </Text>
+          {isSaving ? (
+            <Text style={{ color: c.primary, fontWeight: "700" }}>Awarding your stars…</Text>
+          ) : (
+            <Text style={{ color: c.subtext }}>Great job!</Text>
+          )}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <PrimaryButton label="Back to activities" mode="outlined" onPress={exitSession} />
+        </View>
+        <ParentManageToast
+          visible={toast != null}
+          message={toast ?? ""}
+          variant="success"
+          onHide={() => setToast(null)}
+          durationMs={3000}
+        />
       </View>
     );
   }
 
-  return (
-    <ScrollView style={[styles.flex, { backgroundColor: c.background }]} contentContainerStyle={styles.sessionContent}>
-      <Text style={[styles.bodyHint, { color: c.primaryDark }]}>Keep your whole body inside the camera.</Text>
+  if (phase === "workout") {
+    const cameraBlock = (
+      <View style={[styles.cameraArea, isLegWorkout && styles.cameraAreaFull]}>
+        {permission.granted ? (
+          <ExerciseWorkoutCamera
+            enabled={cameraOn}
+            useLegacyCamera={useLegacyCamera}
+            legacyCameraRef={cameraRef}
+            onStreamPose={feedStreamPose}
+            onCameraReady={() => setCameraReady(true)}
+          />
+        ) : null}
 
-      <View style={[styles.cameraFrame, { borderColor: c.primary }]}>
-        {cameraOn && permission.granted ? (
-          <CameraView ref={cameraRef} style={styles.camera} facing="front" />
-        ) : (
-          <View style={[styles.cameraInner, { backgroundColor: c.surfaceTint }]}>
-            <MaterialCommunityIcons name="camera-off" size={40} color={c.primary} />
-            <Text style={{ color: c.subtext, marginTop: 8 }}>Camera is off</Text>
+        {!cameraReady ? (
+          <View style={styles.cameraOverlay}>
+            <Text style={styles.overlayText}>Opening camera…</Text>
           </View>
-        )}
-      </View>
+        ) : null}
 
-      <View style={styles.repRow}>
-        <View style={[styles.repBigBox, { backgroundColor: c.primary }]}>
-          <Text style={styles.repBigLabel}>Remaining</Text>
-          <Text style={styles.repBigNum}>{String(remaining).padStart(2, "0")}</Text>
-          <Text style={styles.repBigLabel}>reps</Text>
+        {cameraReady ? (
+          <ExerciseFrameGuide
+            quality={formQuality}
+            message={formMessage}
+            exerciseId={selectedId}
+          />
+        ) : null}
+
+        <View style={styles.workoutTopBar}>
+          <Pressable
+            onPress={stopWorkout}
+            style={styles.workoutBack}
+            accessibilityRole="button"
+            accessibilityLabel="Stop workout"
+          >
+            <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
+          </Pressable>
+          <Text style={styles.workoutTitle}>
+            {exercise.emoji} {exercise.title}
+          </Text>
+          <View style={styles.workoutTopSpacer} />
         </View>
-        <View style={styles.repSide}>
-          <View style={[styles.repSmallBox, { borderColor: c.border, backgroundColor: c.card }]}>
-            <Text style={{ color: c.subtext }}>Done</Text>
-            <Text style={[styles.repSmallVal, { color: c.text }]}>{completed}</Text>
-          </View>
-          <View style={[styles.repSmallBox, { borderColor: c.border, backgroundColor: c.card }]}>
-            <Text style={{ color: c.subtext }}>Move</Text>
-            <Text style={[styles.repSmallVal, { color: moveStatus === "Rep!" ? c.primary : c.text }]}>{moveLabel}</Text>
-          </View>
-        </View>
-      </View>
 
-      <View style={[styles.controlCard, { backgroundColor: c.card }]}>
-        <Text style={[styles.controlLabel, { color: c.primaryDark }]}>Choose exercise</Text>
-        <Menu
-          visible={menuOpen}
-          onDismiss={() => setMenuOpen(false)}
-          anchor={
-            <Pressable
-              style={[styles.picker, { borderColor: c.border }]}
-              onPress={() => !cameraOn && setMenuOpen(true)}
-              disabled={cameraOn}
-            >
-              <Text style={{ color: c.text }}>
-                {exercise.emoji} {exercise.title}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={22} color={c.subtext} />
-            </Pressable>
-          }
-        >
-          {EXERCISES.map((ex) => (
-            <Menu.Item
-              key={ex.id}
-              onPress={() => {
-                setSelectedId(ex.id);
-                setMenuOpen(false);
-              }}
-              title={`${ex.emoji} ${ex.title}`}
+        {cameraReady && isLegWorkout ? (
+          <View style={[styles.hudWrap, { top: insets.top + 52, paddingHorizontal: 12 }]}>
+            <ExerciseWorkoutHud
+              remaining={remaining}
+              completed={completed}
+              moveStatus={moveStatus}
+              onStop={stopWorkout}
+              done={done}
             />
-          ))}
-        </Menu>
+          </View>
+        ) : null}
+      </View>
+    );
 
-        <Text variant="bodySmall" style={{ color: c.subtext }}>
-          {exercise.instruction}
-        </Text>
+    if (isLegWorkout) {
+      return (
+        <View style={[styles.workoutRoot, styles.workoutRootFull, { backgroundColor: "#000000" }]}>
+          {cameraBlock}
+          {error ? (
+            <View style={styles.workoutErrorFloat}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+        </View>
+      );
+    }
 
-        {!taskId ? (
-          <>
-            <Text style={[styles.controlLabel, { color: c.primaryDark }]}>Target reps</Text>
+    return (
+      <View style={[styles.workoutRoot, { backgroundColor: "#000000" }]}>
+        {cameraBlock}
+
+        <View style={[styles.workoutBottom, { backgroundColor: c.card }]}>
+          <View style={styles.repRowCompact}>
+            <View style={[styles.repBigBox, { backgroundColor: c.primary }]}>
+              <Text style={styles.repBigLabel}>Remaining</Text>
+              <Text style={styles.repBigNum}>{String(remaining).padStart(2, "0")}</Text>
+            </View>
+            <View style={styles.repSideCompact}>
+              <Text style={{ color: c.subtext, fontSize: 13 }}>Completed: {completed}</Text>
+              <Text style={{ color: moveStatus === "Rep!" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
+                {moveLabel}
+              </Text>
+              {formQuality === "too_dark" ? (
+                <Text style={{ color: "#EF4444", fontSize: 11, fontWeight: "700" }}>
+                  Need more light
+                </Text>
+              ) : (
+                <Text style={{ color: c.subtext, fontSize: 11 }}>
+                  {detectionMode === "stream" ? "Live AI" : detectionMode === "pose" ? "Pose AI" : "Motion"}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {done && !isSaving ? (
+            <Text style={{ color: c.primary, fontWeight: "800", textAlign: "center", fontSize: 15 }}>
+              All reps done!
+            </Text>
+          ) : null}
+
+          <View style={styles.btnRow}>
+            <View style={styles.flexBtn}>
+              <PrimaryButton label="Stop" mode="outlined" onPress={stopWorkout} disabled={done} />
+            </View>
+          </View>
+
+          {isEmulator && __DEV__ ? (
+            <PrimaryButton
+              label="Test +1 rep (emulator)"
+              mode="outlined"
+              onPress={() => setCompleted((n) => Math.min(targetReps, n + 1))}
+            />
+          ) : null}
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </View>
+      </View>
+    );
+  }
+
+  if (phase === "demo") {
+    return (
+      <ScrollView style={[styles.flex, { backgroundColor: c.background }]} contentContainerStyle={styles.sessionContent}>
+        <View style={styles.sessionTopRow}>
+          <Pressable onPress={exitSession} style={styles.sessionBack} accessibilityRole="button">
+            <MaterialCommunityIcons name="chevron-left" size={26} color={c.primaryDark} />
+          </Pressable>
+          <Text variant="titleMedium" style={{ color: c.primaryDark, fontWeight: "800", flex: 1 }}>
+            {exercise.emoji} {exercise.title}
+          </Text>
+        </View>
+
+        <View style={[styles.exerciseSummary, { backgroundColor: c.card, borderColor: c.border }]}>
+          <Text variant="bodySmall" style={{ color: c.subtext }}>
+            {taskId ? `Assigned task · ${targetReps} reps` : `Practice · goal ${targetReps} reps`}
+          </Text>
+          {!taskId ? (
             <View style={styles.stepperRow}>
               <Pressable
                 style={[styles.stepBtn, { backgroundColor: c.primary }]}
                 onPress={() => setTargetReps((n) => Math.max(1, n - 1))}
-                disabled={cameraOn}
+                disabled={!demoFinished}
               >
                 <Text style={styles.stepBtnText}>−</Text>
               </Pressable>
-              <Text style={[styles.stepValue, { color: c.text }]}>{targetReps}</Text>
+              <Text style={[styles.stepValue, { color: c.text }]}>{targetReps} reps</Text>
               <Pressable
                 style={[styles.stepBtn, { backgroundColor: c.primary }]}
                 onPress={() => setTargetReps((n) => Math.min(50, n + 1))}
-                disabled={cameraOn}
+                disabled={!demoFinished}
               >
                 <Text style={styles.stepBtnText}>+</Text>
               </Pressable>
             </View>
-          </>
+          ) : null}
+        </View>
+
+        {!demoFinished ? (
+          <ExerciseMascotDemo
+            key={`${selectedId}-${demoRunId}`}
+            exerciseId={selectedId}
+            exerciseTitle={exercise.title}
+            onComplete={() => setDemoFinished(true)}
+          />
         ) : (
-          <Text style={{ color: c.text, fontWeight: "700" }}>Goal: {targetReps} reps</Text>
+          <View style={[styles.controlCard, { backgroundColor: c.card }]}>
+            <Text variant="bodyMedium" style={{ color: c.text, textAlign: "center", fontWeight: "700" }}>
+              Nice! Now it's your turn.
+            </Text>
+            <Text variant="bodySmall" style={{ color: c.subtext, textAlign: "center" }}>
+              Stand inside the person shape on screen. Green = ready, red = move closer or add light.
+            </Text>
+          </View>
         )}
 
-        <View style={styles.btnRow}>
-          <View style={styles.flexBtn}>
-            <PrimaryButton label="Start Camera" onPress={() => void startCamera()} disabled={cameraOn} />
-          </View>
-          <View style={styles.flexBtn}>
+        <View style={[styles.controlCard, { backgroundColor: c.card }]}>
+          {!demoFinished ? (
+            <PrimaryButton label={`${MASCOT_NAME} is demonstrating…`} disabled />
+          ) : (
             <PrimaryButton
-              label="Reset"
-              mode="outlined"
-              onPress={() => {
-                setCompleted(0);
-                setCameraOn(false);
-              }}
+              label={startingCamera ? "Starting…" : "Your turn — open camera"}
+              onPress={() => void beginWorkout()}
+              disabled={startingCamera}
             />
-          </View>
+          )}
+          <PrimaryButton label="Watch again" mode="outlined" onPress={startDemo} disabled={!demoFinished} />
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
+      </ScrollView>
+    );
+  }
 
-        {cameraOn ? (
-          <PrimaryButton label="Stop Camera" mode="outlined" onPress={() => setCameraOn(false)} />
-        ) : null}
-
-        <PrimaryButton
-          label={isSaving ? "Saving…" : done ? `Finish (+${points})` : `Complete ${targetReps} reps to finish`}
-          onPress={() => void saveAndFinish()}
-          disabled={!done || isSaving}
-        />
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.statusRow}>
-          <Text style={[styles.statusPill, { backgroundColor: c.mutedSurface, color: c.subtext }]}>
-            Camera: {cameraOn ? "on" : "stopped"}
-          </Text>
-          <Text style={[styles.statusPill, { backgroundColor: c.mutedSurface, color: c.subtext }]}>
-            Detection: {cameraOn ? "active" : "off"}
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
-  );
+  return null;
 }
 
-function createStyles(c: ReturnType<typeof useAppColors>) {
+function createStyles(c: ReturnType<typeof useAppColors>, insets: { top: number; bottom: number }) {
   return StyleSheet.create({
     flex: { flex: 1 },
     centered: { flex: 1, alignItems: "center", justifyContent: "center" },
-    introHeader: {
-      paddingTop: 48,
-      paddingBottom: 28,
-      paddingHorizontal: 20,
+    sessionContent: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
+    sessionTopRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+    sessionBack: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: "center",
-      borderBottomLeftRadius: radii.lg,
-      borderBottomRightRadius: radii.lg,
+      justifyContent: "center",
     },
-    backCircle: {
+    exerciseSummary: {
+      borderRadius: radii.md,
+      borderWidth: 1,
+      padding: 12,
+      gap: 4,
+      ...shadows.card,
+    },
+    emulatorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      padding: 10,
+      borderRadius: radii.md,
+      borderWidth: 1,
+    },
+    colorLegend: {
+      padding: 12,
+      borderRadius: radii.md,
+      borderWidth: 1,
+    },
+    controlCard: { borderRadius: radii.lg, padding: 16, gap: 12, ...shadows.card },
+    stepperRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 8 },
+    stepBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+    stepBtnText: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" },
+    stepValue: { fontSize: 16, fontWeight: "800", minWidth: 72, textAlign: "center" },
+    btnRow: { flexDirection: "row", gap: 10 },
+    flexBtn: { flex: 1 },
+    errorText: { color: "#B91C1C", textAlign: "center" },
+    workoutRoot: { flex: 1 },
+    workoutRootFull: { paddingBottom: 0 },
+    cameraArea: { flex: 1, position: "relative" },
+    cameraAreaFull: { flex: 1 },
+    hudWrap: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+    },
+    workoutErrorFloat: {
       position: "absolute",
       left: 16,
-      top: 48,
+      right: 16,
+      bottom: 24,
+      backgroundColor: "rgba(255,255,255,0.95)",
+      borderRadius: radii.md,
+      padding: 12,
+    },
+    cameraOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    overlayText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
+    scanDim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.12)",
+    },
+    scanShield: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(12, 22, 16, 0.88)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    scanShieldText: {
+      color: "#C5E84D",
+      fontWeight: "800",
+      fontSize: 16,
+    },
+    workoutTopBar: {
+      position: "absolute",
+      top: insets.top + 8,
+      left: 12,
+      right: 12,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    workoutBack: {
       width: 40,
       height: 40,
       borderRadius: 20,
-      backgroundColor: "rgba(255,255,255,0.25)",
+      backgroundColor: "rgba(0,0,0,0.45)",
       alignItems: "center",
       justifyContent: "center",
     },
-    introBrand: { color: "rgba(255,255,255,0.9)", fontWeight: "700", marginBottom: 8 },
-    introLogo: { width: 88, height: 88, borderRadius: 20 },
-    introTitle: { color: "#FFFFFF", fontWeight: "800", textAlign: "center", marginTop: 8 },
-    introSub: { color: "rgba(255,255,255,0.92)", textAlign: "center", marginTop: 8 },
-    introScroll: { flex: 1 },
-    introBody: { flexGrow: 1, padding: 16, paddingBottom: 32, gap: 14 },
-    cameraPlaceholder: {
-      flex: 1,
-      minHeight: 280,
-      borderRadius: radii.lg,
-      borderWidth: 3,
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
+    workoutTitle: { flex: 1, textAlign: "center", color: "#FFFFFF", fontWeight: "800", fontSize: 17 },
+    workoutTopSpacer: { width: 40 },
+    badgeWrap: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 12,
     },
-    cameraOffTitle: { fontWeight: "800", fontSize: 18 },
-    bodyHint: { fontWeight: "800", textAlign: "center", marginVertical: 8 },
-    sessionContent: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
-    cameraFrame: {
-      height: 220,
-      borderRadius: radii.lg,
-      borderWidth: 3,
-      overflow: "hidden",
+    workoutBottom: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: Math.max(insets.bottom, 12),
+      gap: 10,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
       ...shadows.card,
     },
-    camera: { flex: 1 },
-    cameraInner: { flex: 1, alignItems: "center", justifyContent: "center" },
-    repRow: { flexDirection: "row", gap: 10 },
+    repRowCompact: { flexDirection: "row", gap: 10, alignItems: "center" },
     repBigBox: {
-      flex: 1,
+      width: 88,
       borderRadius: radii.md,
-      padding: 14,
+      paddingVertical: 10,
       alignItems: "center",
       justifyContent: "center",
-      minHeight: 120,
     },
-    repBigLabel: { color: "rgba(255,255,255,0.9)", fontWeight: "600" },
-    repBigNum: { color: "#FFFFFF", fontSize: 36, fontWeight: "900" },
-    repSide: { flex: 1, gap: 10 },
-    repSmallBox: {
+    repBigLabel: { color: "rgba(255,255,255,0.9)", fontWeight: "600", fontSize: 12 },
+    repBigNum: { color: "#FFFFFF", fontSize: 32, fontWeight: "900" },
+    repSideCompact: { flex: 1, gap: 2 },
+    completedCard: {
       flex: 1,
-      borderRadius: radii.md,
+      margin: 20,
+      marginTop: 48,
+      borderRadius: radii.lg,
       borderWidth: 1,
-      padding: 12,
+      padding: 28,
+      alignItems: "center",
       justifyContent: "center",
+      gap: 14,
       ...shadows.card,
     },
-    repSmallVal: { fontSize: 22, fontWeight: "800", marginTop: 4 },
-    controlCard: { borderRadius: radii.lg, padding: 16, gap: 12, ...shadows.card },
-    controlLabel: { fontWeight: "700" },
-    picker: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      borderWidth: 1,
-      borderRadius: radii.md,
-      padding: 12,
-    },
-    stepperRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 16 },
-    stepBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-    stepBtnText: { color: "#FFFFFF", fontSize: 22, fontWeight: "700" },
-    stepValue: { fontSize: 22, fontWeight: "800", minWidth: 40, textAlign: "center" },
-    btnRow: { flexDirection: "row", gap: 10 },
-    flexBtn: { flex: 1 },
-    statusRow: { flexDirection: "row", justifyContent: "center", gap: 8, flexWrap: "wrap" },
-    statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radii.pill, fontSize: 12 },
-    errorText: { color: "#B91C1C", textAlign: "center" },
   });
 }

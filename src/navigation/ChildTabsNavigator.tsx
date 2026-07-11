@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Text } from "react-native-paper";
 import { ChildHomeStackNavigator } from "@/navigation/ChildHomeStackNavigator";
 import { ChildActivitiesStackNavigator } from "@/navigation/ChildActivitiesStackNavigator";
+import { childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
 import { ChildTabParamList } from "@/types/navigation";
 import { useChildLocationTracking } from "@/hooks/useChildLocationTracking";
 import { useAuth } from "@/store/AuthContext";
@@ -58,14 +59,7 @@ export function ChildTabsNavigator() {
         tabBarShowLabel: false,
         tabBarStyle: lock.isLocked
           ? { display: "none", height: 0 }
-          : {
-              backgroundColor: theme.colors.surface,
-              borderTopWidth: 0,
-              height: 72,
-              paddingTop: 8,
-              paddingBottom: 10,
-              elevation: 12,
-            },
+          : childTabBarVisibleStyle(theme.colors.surface),
         tabBarButton: lock.isLocked
           ? (props) => (
               <Pressable

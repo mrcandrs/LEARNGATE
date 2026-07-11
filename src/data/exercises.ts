@@ -21,8 +21,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 20,
     color: "#8B5CF6",
-    instruction: "Jump inside the frame. The camera counts each jumping jack automatically.",
-    cardDescription: "Jumping jacks inside the camera frame.",
+    instruction: "Face the camera — show shoulders, arms, and hips. AI counts when arms go up and legs go out.",
+    cardDescription: "Jumping jacks — pose-tracked reps.",
   },
   {
     id: "squats",
@@ -32,8 +32,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#F59E0B",
-    instruction: "Do a squat inside the frame. The camera counts each squat automatically.",
-    cardDescription: "Squats with your whole body visible.",
+    instruction: "Step back from the camera — show shoulders, hips, and knees. Squat down fully, then stand tall.",
+    cardDescription: "Squats — pose-tracked reps.",
   },
   {
     id: "lunges",
@@ -43,8 +43,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#14B8A6",
-    instruction: "Do a lunge inside the frame. The camera counts each lunge automatically.",
-    cardDescription: "Alternating lunges in the camera frame.",
+    instruction: "Step back — show both legs from hips to knees. Step forward into a lunge, then stand back up.",
+    cardDescription: "Lunges — pose-tracked reps.",
   },
 ];
 
