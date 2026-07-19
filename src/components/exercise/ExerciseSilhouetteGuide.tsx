@@ -18,8 +18,8 @@ type Props = {
  */
 export function ExerciseSilhouetteGuide({ quality, message }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const stroke = formQualityColor(quality === "none" ? "partial" : quality);
-  const fill = silhouetteFillColor(quality === "none" ? "partial" : quality);
+  const stroke = formQualityColor(quality === "none" ? "red" : quality);
+  const fill = silhouetteFillColor(quality === "none" ? "red" : quality);
 
   const w = size.width;
   const h = size.height;
@@ -31,7 +31,7 @@ export function ExerciseSilhouetteGuide({ quality, message }: Props) {
   const silhouettePath = buildPortraitSilhouette(cx, bodyTop, bodyW, bodyH);
 
   const statusMessage =
-    quality === "too_far" || quality === "partial" || quality === "too_dark"
+    quality === "red"
       ? message || "Stand inside the area"
       : message;
 

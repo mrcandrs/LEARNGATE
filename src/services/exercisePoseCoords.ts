@@ -55,24 +55,24 @@ function bodyCenterNormalized(
   frameWidth: number,
   frameHeight: number,
 ): { cx: number; cy: number } | null {
-  const normalized = normalizePoseLandmarks(landmarks, frameWidth, frameHeight);
+  // Landmarks from the stream path are already normalizePoseLandmarks()'d — do not transform twice.
   const { width: pw, height: ph } = portraitDims(frameWidth, frameHeight);
 
-  const ls = normalized.find((l) => l.type === 11 && l.inFrameLikelihood >= 0.2);
-  const rs = normalized.find((l) => l.type === 12 && l.inFrameLikelihood >= 0.2);
-  const lh = normalized.find((l) => l.type === 23 && l.inFrameLikelihood >= 0.2);
-  const rh = normalized.find((l) => l.type === 24 && l.inFrameLikelihood >= 0.2);
-  const nose = normalized.find((l) => l.type === 0 && l.inFrameLikelihood >= 0.2);
+  const ls = landmarks.find((l) => l.type === 11 && l.inFrameLikelihood >= 0.2);
+  const rs = landmarks.find((l) => l.type === 12 && l.inFrameLikelihood >= 0.2);
+  const lh = landmarks.find((l) => l.type === 23 && l.inFrameLikelihood >= 0.2);
+  const rh = landmarks.find((l) => l.type === 24 && l.inFrameLikelihood >= 0.2);
+  const nose = landmarks.find((l) => l.type === 0 && l.inFrameLikelihood >= 0.2);
 
   const points = [ls, rs, lh, rh, nose].filter(Boolean) as PoseLandmark[];
   if (points.length < 2) return null;
 
-  const normalizedSpace = landmarksUseNormalizedCoords(normalized);
+  const normalizedSpace = landmarksUseNormalizedCoords(landmarks);
   const cx =
-    points.reduce((s, p) => s + (normalizedSpace ? p.x : toNormX(p.x, pw, normalized)), 0) /
+    points.reduce((s, p) => s + (normalizedSpace ? p.x : toNormX(p.x, pw, landmarks)), 0) /
     points.length;
   const cy =
-    points.reduce((s, p) => s + (normalizedSpace ? p.y : toNormY(p.y, ph, normalized)), 0) /
+    points.reduce((s, p) => s + (normalizedSpace ? p.y : toNormY(p.y, ph, landmarks)), 0) /
     points.length;
   return { cx, cy };
 }

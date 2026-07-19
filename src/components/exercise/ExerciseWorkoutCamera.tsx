@@ -66,7 +66,7 @@ export function ExerciseWorkoutCamera({
       poseDetectionOptions={{
         performanceMode: "accurate",
         detectorMode: "stream",
-        minLandmarkConfidence: 0.32,
+        minLandmarkConfidence: 0.3,
       }}
       poseDetectionCallback={handlePoseCallback}
     />

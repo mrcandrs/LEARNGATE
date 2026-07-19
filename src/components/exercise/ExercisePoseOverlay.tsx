@@ -32,8 +32,7 @@ export function ExercisePoseOverlay({
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
   const color = formQualityColor(quality);
-  const showSkeleton =
-    quality !== "none" && quality !== "too_far" && Boolean(landmarks?.length);
+  const showSkeleton = quality === "green" && Boolean(landmarks?.length);
   const viewWidth = layout.width;
   const viewHeight = layout.height;
 
@@ -100,7 +99,7 @@ export function ExercisePoseOverlay({
         </Svg>
       ) : null}
 
-      {quality === "too_far" ? <View style={[styles.edgeGlow, { borderColor: color }]} /> : null}
+      {quality === "red" ? <View style={[styles.edgeGlow, { borderColor: color }]} /> : null}
     </View>
   );
 }

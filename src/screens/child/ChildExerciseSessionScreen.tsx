@@ -16,12 +16,13 @@ import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCame
 import { MASCOT_NAME } from "@/constants/mascot";
 import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
 import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
+import { ExerciseRepFlash } from "@/components/exercise/ExerciseRepFlash";
 import { childTabBarHiddenStyle, childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
 import { isFullBodyExercise } from "@/services/exerciseFrameBounds";
 import { supabase } from "@/services/supabase";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { Camera as VisionCamera } from "react-native-vision-camera";
-import { isStreamPoseAvailable } from "@/services/exercisePoseNative";
+import { isStreamPoseAvailable, EXERCISE_AI_BUILD } from "@/services/exercisePoseNative";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { formatAppError } from "@/utils/errors";
 
@@ -334,9 +335,18 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               moveStatus={moveStatus}
               onStop={stopWorkout}
               done={done}
+              engineLabel={
+                detectionMode === "stream"
+                  ? `Pose AI · ${EXERCISE_AI_BUILD}`
+                  : detectionMode === "motion"
+                    ? "⚠ Motion (old path)"
+                    : `Pose · ${EXERCISE_AI_BUILD}`
+              }
             />
           </View>
         ) : null}
+
+        <ExerciseRepFlash triggerKey={completed} label="+1" />
       </View>
     );
 
@@ -368,15 +378,13 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               <Text style={{ color: moveStatus === "Rep!" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
                 {moveLabel}
               </Text>
-              {formQuality === "too_dark" ? (
-                <Text style={{ color: "#EF4444", fontSize: 11, fontWeight: "700" }}>
-                  Need more light
-                </Text>
-              ) : (
-                <Text style={{ color: c.subtext, fontSize: 11 }}>
-                  {detectionMode === "stream" ? "Live AI" : detectionMode === "pose" ? "Pose AI" : "Motion"}
-                </Text>
-              )}
+              <Text style={{ color: c.subtext, fontSize: 11 }}>
+                {detectionMode === "stream"
+                  ? "Pose AI · jacks-v5"
+                  : detectionMode === "pose"
+                    ? "Pose AI (still) · jacks-v5"
+                    : "⚠ Motion fallback (old)"}
+              </Text>
             </View>
           </View>
 

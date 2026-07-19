@@ -18,8 +18,8 @@ type Props = {
 /** Border + one status line. Taller frame for squats/lunges. */
 export function ExerciseFrameGuide({ quality, message, exerciseId }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const stroke = formQualityColor(quality === "none" ? "partial" : quality);
-  const tint = frameTintColor(quality === "none" ? "partial" : quality);
+  const stroke = formQualityColor(quality === "none" ? "red" : quality);
+  const tint = frameTintColor(quality === "none" ? "red" : quality);
   const { marginX, marginY } = exerciseFrameMargins(exerciseId);
 
   const w = size.width;

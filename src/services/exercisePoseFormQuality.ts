@@ -7,17 +7,21 @@ import {
 } from "@/services/exercisePoseCoords";
 import { evaluateLegGate } from "@/services/exercisePoseLegGate";
 import type { PoseDetectionHint } from "@/services/exercisePoseRepDetection";
-import { hasExercisePoseBody, needsLegsInFrame } from "@/services/exercisePoseRepDetection";
+import { EXERCISE_AI_BUILD } from "@/services/exercisePoseNative";
 
-const MIN_CONFIDENCE = 0.24;
+const MIN_CONFIDENCE = 0.22;
 
-export type PoseFormQuality = "none" | "too_dark" | "too_far" | "partial" | "good" | "active";
+export type PoseFormQuality = "none" | "red" | "green";
 
 export type PoseFormFeedback = {
   quality: PoseFormQuality;
   message: string;
 };
 
+/**
+ * Green = correct exercise movement in progress or rep counted.
+ * Red = not doing that movement yet / not framed for this exercise.
+ */
 export function evaluatePoseFormQuality(
   landmarks: PoseLandmark[] | null,
   moveStatus: MoveStatus,
@@ -25,87 +29,61 @@ export function evaluatePoseFormQuality(
   frameWidth = 720,
   frameHeight = 1280,
 ): PoseFormFeedback {
+  if (moveStatus === "Rep!" || moveStatus === "Move!") {
+    return { quality: "green", message: "" };
+  }
+
   if (!landmarks?.length) {
-    return { quality: "too_far", message: "Stand inside the border" };
+    return { quality: "red", message: "Stand inside the border" };
   }
 
   if (averagePoseConfidence(landmarks) < MIN_CONFIDENCE) {
-    return { quality: "too_dark", message: "Turn on more light" };
+    return { quality: "red", message: "Turn on more light" };
   }
 
-  if (!hasExercisePoseBody(landmarks, exerciseId)) {
-    return {
-      quality: "partial",
-      message: needsLegsInFrame(exerciseId)
-        ? "Step back — show head to knees"
-        : "Show your shoulders and arms",
-    };
-  }
-
-  if (needsLegsInFrame(exerciseId)) {
-    const gate = evaluateLegGate(landmarks, exerciseId!, frameWidth, frameHeight);
-    if (!gate.ok) {
-      return { quality: "partial", message: gate.message };
-    }
+  const gate = evaluateLegGate(landmarks, exerciseId ?? "squats", frameWidth, frameHeight);
+  if (!gate.ok) {
+    return { quality: "red", message: gate.message };
   }
 
   if (!isBodyInFrame(landmarks, frameWidth, frameHeight, exerciseId)) {
-    return { quality: "partial", message: "Move inside the border" };
+    return { quality: "red", message: "Move so your body is inside the border" };
   }
 
-  if (moveStatus === "Rep!" || moveStatus === "Move!") {
-    return { quality: "active", message: "" };
-  }
-
-  return { quality: "good", message: "" };
+  return { quality: "red", message: "" };
 }
 
-/** One line on screen — no duplicate badges. */
 export function workoutStatusLine(
   form: PoseFormFeedback,
   moveStatus: MoveStatus,
   hint: PoseDetectionHint | null,
 ): string {
-  if (moveStatus === "Rep!") return "Great rep! +1";
-  if (hint === "Hold still — calibrating…") return hint;
-  if (form.quality === "too_dark" || form.quality === "too_far" || form.quality === "partial") {
-    return form.message;
-  }
+  if (moveStatus === "Rep!") return hint || "Great rep! +1";
   if (moveStatus === "Move!" && hint) return hint;
-  if (form.quality === "active" && hint) return hint;
-  if (form.quality === "good") return "Ready — start moving!";
+  if (form.quality === "red" && form.message) return form.message;
+  if (form.quality === "red") {
+    return hint || `Ready — do the exercise (${EXERCISE_AI_BUILD})`;
+  }
   return form.message || "Stand inside the border";
 }
 
 export function formQualityColor(quality: PoseFormQuality): string {
   switch (quality) {
-    case "too_dark":
-    case "too_far":
-      return "#EF4444";
-    case "partial":
-      return "#F97316";
-    case "good":
+    case "green":
       return "#22C55E";
-    case "active":
-      return "#4ADE80";
+    case "red":
     default:
-      return "#94A3B8";
+      return "#EF4444";
   }
 }
 
 export function frameTintColor(quality: PoseFormQuality): string {
   switch (quality) {
-    case "too_dark":
-    case "too_far":
-      return "rgba(239, 68, 68, 0.22)";
-    case "partial":
-      return "rgba(249, 115, 22, 0.18)";
-    case "good":
-      return "rgba(34, 197, 94, 0.14)";
-    case "active":
-      return "rgba(74, 222, 128, 0.2)";
+    case "green":
+      return "rgba(34, 197, 94, 0.22)";
+    case "red":
     default:
-      return "rgba(148, 163, 184, 0.12)";
+      return "rgba(239, 68, 68, 0.22)";
   }
 }
 

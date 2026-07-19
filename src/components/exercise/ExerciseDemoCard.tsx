@@ -66,16 +66,7 @@ export function ExerciseFormBadge({ quality, message, hint }: BadgeProps) {
   if (quality === "none") return null;
 
   const color = formQualityColor(quality);
-  const icon =
-    quality === "too_dark"
-      ? "lightbulb-alert-outline"
-      : quality === "too_far"
-        ? "account-off-outline"
-        : quality === "partial"
-          ? "arrow-expand-all"
-          : quality === "active"
-            ? "check-circle-outline"
-            : "account-check-outline";
+  const icon = quality === "green" ? "check-circle-outline" : "alert-circle-outline";
 
   return (
     <View style={[styles.badge, { backgroundColor: "rgba(0,0,0,0.55)", borderColor: color }]}>

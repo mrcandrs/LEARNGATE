@@ -3,6 +3,21 @@ import { Platform } from "react-native";
 import { PoseDetection } from "@mefitzgerald/expo-pose-detection";
 import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
 
+/** Bump when exercise AI logic changes — shown on workout HUD so you know JS loaded. */
+export const EXERCISE_AI_BUILD = "jacks-v5";
+
+function hasNativeStreamModules(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("react-native-vision-camera");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("react-native-esanusi-sensor-pose");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Safe read — expo-device may be missing until the next native rebuild. */
 function runningOnPhysicalDevice(): boolean {
   if (Platform.OS !== "android") return false;
@@ -12,11 +27,11 @@ function runningOnPhysicalDevice(): boolean {
     if (typeof Device.isDevice === "boolean") {
       return Device.isDevice;
     }
-    return false;
   } catch {
-    // Native module not linked yet — use motion fallback (safe on emulators).
-    return false;
+    // fall through
   }
+  // If stream native modules are linked, prefer live Pose AI over motion blur.
+  return hasNativeStreamModules();
 }
 
 /**
@@ -27,9 +42,9 @@ export function isPoseDetectionAvailable(): boolean {
   return runningOnPhysicalDevice();
 }
 
-/** Live ML Kit stream via VisionCamera (Kids360-style) on physical Android. */
+/** Live ML Kit stream via VisionCamera (Kids360 / panelists-style) on physical Android. */
 export function isStreamPoseAvailable(): boolean {
-  return runningOnPhysicalDevice();
+  return Platform.OS === "android" && hasNativeStreamModules() && runningOnPhysicalDevice();
 }
 
 export function isExerciseEmulator(): boolean {
@@ -46,7 +61,6 @@ export async function detectPoseFromImageUri(uri: string): Promise<PoseLandmark[
   } catch {
     return null;
   } finally {
-    // Still captures pile up on disk and memory if we never delete them.
     void deleteAsync(uri, { idempotent: true }).catch(() => undefined);
   }
 }

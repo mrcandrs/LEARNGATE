@@ -1,87 +1,48 @@
+/**
+ * Half-body-friendly rep counters for LearnGate (front camera).
+ *
+ * - Jacks: arm open/close (wrists) — feet not required
+ * - Squats: hip drop + thigh bend — ankles not required
+ * - Lunges: knee asymmetry — ankles not required
+ */
 import type { ExerciseId } from "@/data/exercises";
 import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
 import type { MoveStatus } from "@/services/exerciseRepDetection";
 import {
+  LM,
+  avg,
+  bothKneeAngles,
+  bothThighAngles,
+  distance,
   evaluateLegGate,
-  hipDropRatio,
-  kneeFlexionAngles,
-  legExtensionRatios,
-  snapshotTorso,
-  thighBendProxies,
+  hipMidY,
+  kneeMidY,
+  pick,
+  shoulderMidY,
 } from "@/services/exercisePoseLegGate";
 
-const MIN_LIKELIHOOD = 0.25;
-const REP_COOLDOWN_MS = 1000;
-const DEPTH_HOLD_FRAMES = 3;
-const REST_HOLD_FRAMES = 2;
-const READY_FRAMES = 5;
-const LEG_STABLE_FRAMES = 5;
-const LEG_FAIL_RESET = 10;
-
-const LM = {
-  LEFT_SHOULDER: 11,
-  RIGHT_SHOULDER: 12,
-  LEFT_ELBOW: 13,
-  RIGHT_ELBOW: 14,
-  LEFT_WRIST: 15,
-  RIGHT_WRIST: 16,
-  LEFT_KNEE: 25,
-  RIGHT_KNEE: 26,
-} as const;
+const REP_COOLDOWN_MS = 550;
 
 export type PoseDetectionHint =
   | null
   | "Stand inside the frame"
-  | "Step back — show your legs"
-  | "Step back — both knees must be on screen"
-  | "Hold still — calibrating…"
-  | "Turn on more lights"
-  | "Lower into squat"
-  | "Push back up"
-  | "Step into lunge"
-  | "Push back to standing"
-  | "Jump — arms up and out"
-  | "Return to start position";
-
-class MetricEma {
-  private value: number | null = null;
-
-  constructor(private readonly alpha = 0.4) {}
-
-  reset() {
-    this.value = null;
-  }
-
-  push(sample: number): number {
-    this.value =
-      this.value == null ? sample : this.alpha * sample + (1 - this.alpha) * this.value;
-    return this.value;
-  }
-}
-
-function landmark(landmarks: PoseLandmark[], type: number): PoseLandmark | null {
-  const lm = landmarks.find((l) => l.type === type);
-  if (!lm || lm.inFrameLikelihood < MIN_LIKELIHOOD) return null;
-  return lm;
-}
+  | "Show your shoulders in the border"
+  | "Show both arms / hands"
+  | "Step back a bit — show your hips"
+  | "Step back — show at least one knee"
+  | "Step back — show both knees for lunges"
+  | "Open arms up and out"
+  | "Good! Now bring arms down"
+  | "Jumping jack counted!"
+  | "Bend down into a squat"
+  | "Good! Now stand up"
+  | "Squat counted!"
+  | "Step into a lunge"
+  | "Lunge counted!"
+  | "Turn on more lights";
 
 export function hasExercisePoseBody(landmarks: PoseLandmark[], exerciseId?: ExerciseId): boolean {
-  const ls = landmark(landmarks, LM.LEFT_SHOULDER);
-  const rs = landmark(landmarks, LM.RIGHT_SHOULDER);
-  const le = landmark(landmarks, LM.LEFT_ELBOW);
-  const re = landmark(landmarks, LM.RIGHT_ELBOW);
-  const lw = landmark(landmarks, LM.LEFT_WRIST);
-  const rw = landmark(landmarks, LM.RIGHT_WRIST);
-  const lh = landmark(landmarks, 23);
-  const rh = landmark(landmarks, 24);
-  const lk = landmark(landmarks, LM.LEFT_KNEE);
-  const rk = landmark(landmarks, LM.RIGHT_KNEE);
-
-  if (exerciseId === "jumping_jacks") {
-    return Boolean((ls || rs) && (lw || rw || le || re));
-  }
-
-  return Boolean((ls || rs) && (lh || rh || lk || rk));
+  return evaluateLegGate(landmarks, exerciseId ?? "squats").ok;
 }
 
 export function needsLegsInFrame(exerciseId?: ExerciseId): boolean {
@@ -89,26 +50,14 @@ export function needsLegsInFrame(exerciseId?: ExerciseId): boolean {
 }
 
 export class PoseExerciseRepDetector {
-  private phase: "rest" | "peak" = "rest";
+  private repState: "ready" | "open" | "closed" | "down" | "up" = "ready";
   private lastRepAt = 0;
   private moveStatus: MoveStatus = "Stopped";
   private hint: PoseDetectionHint = null;
-  private readyFrames = 0;
-  private legStableFrames = 0;
-  private legFailStreak = 0;
-  private repArmed = false;
-  private depthFrames = 0;
-  private restFrames = 0;
-  private depthAchieved = false;
   private baselineHipY = 0;
-  private baselineKneeY = 0;
-  private baselineLeftLeg = 0;
-  private baselineRightLeg = 0;
-  private baselineKneeSpreadY = 0;
-  private torsoLen = 0.1;
-  private readonly hipDropEma = new MetricEma();
-  private readonly kneeBendEma = new MetricEma();
-  private readonly lungeSpreadEma = new MetricEma();
+  private baselineTorso = 1;
+  private calibrated = false;
+  private gateOkFrames = 0;
 
   constructor(
     private exerciseId: ExerciseId,
@@ -116,26 +65,14 @@ export class PoseExerciseRepDetector {
   ) {}
 
   reset() {
-    this.phase = "rest";
+    this.repState = "ready";
     this.lastRepAt = 0;
     this.moveStatus = "Stopped";
     this.hint = null;
-    this.readyFrames = 0;
-    this.legStableFrames = 0;
-    this.legFailStreak = 0;
-    this.repArmed = false;
-    this.depthFrames = 0;
-    this.restFrames = 0;
-    this.depthAchieved = false;
     this.baselineHipY = 0;
-    this.baselineKneeY = 0;
-    this.baselineLeftLeg = 0;
-    this.baselineRightLeg = 0;
-    this.baselineKneeSpreadY = 0;
-    this.torsoLen = 0.1;
-    this.hipDropEma.reset();
-    this.kneeBendEma.reset();
-    this.lungeSpreadEma.reset();
+    this.baselineTorso = 1;
+    this.calibrated = false;
+    this.gateOkFrames = 0;
   }
 
   setExerciseId(exerciseId: ExerciseId) {
@@ -151,236 +88,193 @@ export class PoseExerciseRepDetector {
     return this.hint;
   }
 
-  feed(landmarks: PoseLandmark[], frameWidth = 720, frameHeight = 1280): MoveStatus {
-    if (needsLegsInFrame(this.exerciseId)) {
-      const gate = evaluateLegGate(landmarks, this.exerciseId, frameWidth, frameHeight);
-      if (!gate.ok) {
-        this.legFailStreak += 1;
-        if (this.legFailStreak >= LEG_FAIL_RESET) {
-          this.resetCalibration();
-        }
-        this.moveStatus = "Watching";
-        this.hint = gate.message as PoseDetectionHint;
-        return this.moveStatus;
-      }
-      this.legFailStreak = 0;
-      this.legStableFrames += 1;
-      if (this.legStableFrames < LEG_STABLE_FRAMES) {
-        this.moveStatus = "Watching";
-        this.hint = "Hold still — calibrating…";
-        return this.moveStatus;
-      }
-    } else if (!hasExercisePoseBody(landmarks, this.exerciseId)) {
-      this.resetCalibration();
+  feed(landmarks: PoseLandmark[], _frameWidth = 720, _frameHeight = 1280): MoveStatus {
+    const gate = evaluateLegGate(landmarks, this.exerciseId);
+    if (!gate.ok) {
+      this.gateOkFrames = 0;
+      this.calibrated = false;
       this.moveStatus = "Watching";
-      this.hint = "Stand inside the frame";
+      this.hint = (gate.message as PoseDetectionHint) || "Stand inside the frame";
       return this.moveStatus;
     }
 
-    this.readyFrames += 1;
-    if (!this.repArmed) {
-      if (this.readyFrames < READY_FRAMES) {
-        this.moveStatus = "Watching";
-        this.hint = "Hold still — calibrating…";
-        return this.moveStatus;
-      }
-      this.repArmed = true;
+    this.gateOkFrames += 1;
+    if (!this.calibrated && this.gateOkFrames >= 4) {
       this.calibrate(landmarks);
+      this.calibrated = true;
     }
 
     switch (this.exerciseId) {
       case "jumping_jacks":
-        return this.feedJumpingJack(landmarks);
+        return this.processJumpingJack(landmarks);
       case "squats":
-        return this.feedSquat(landmarks);
+        return this.processSquat(landmarks);
       case "lunges":
-        return this.feedLunge(landmarks);
+        return this.processLunge(landmarks);
     }
-  }
-
-  private resetCalibration() {
-    this.readyFrames = 0;
-    this.legStableFrames = 0;
-    this.repArmed = false;
-    this.phase = "rest";
-    this.depthFrames = 0;
-    this.restFrames = 0;
-    this.depthAchieved = false;
-    this.hipDropEma.reset();
-    this.kneeBendEma.reset();
-    this.lungeSpreadEma.reset();
   }
 
   private calibrate(landmarks: PoseLandmark[]) {
-    const torso = snapshotTorso(landmarks);
-    if (torso) {
-      this.baselineHipY = torso.hipY;
-      this.baselineKneeY = torso.kneeY ?? torso.hipY;
-      this.torsoLen = torso.torsoLen;
-    }
-
-    const legs = legExtensionRatios(landmarks, this.torsoLen);
-    if (legs) {
-      this.baselineLeftLeg = legs.left;
-      this.baselineRightLeg = legs.right;
-    }
-
-    const lk = landmark(landmarks, LM.LEFT_KNEE);
-    const rk = landmark(landmarks, LM.RIGHT_KNEE);
-    if (lk && rk) {
-      this.baselineKneeSpreadY = Math.abs(lk.y - rk.y);
-    }
+    const hip = hipMidY(landmarks);
+    const shoulder = shoulderMidY(landmarks);
+    if (hip == null || shoulder == null) return;
+    this.baselineHipY = hip;
+    this.baselineTorso = Math.max(Math.abs(hip - shoulder), 1e-3);
   }
 
-  private bestKneeBend(landmarks: PoseLandmark[]): number | null {
-    const flexion = kneeFlexionAngles(landmarks);
-    const proxies = thighBendProxies(landmarks);
-    const all = [...flexion, ...proxies];
-    if (!all.length) return null;
-    return Math.min(...all);
-  }
-
-  private feedSquat(landmarks: PoseLandmark[]): MoveStatus {
-    const dropRaw = hipDropRatio(landmarks, this.baselineHipY, this.torsoLen);
-    const bendRaw = this.bestKneeBend(landmarks);
+  private recordRep(hint: PoseDetectionHint) {
     const now = Date.now();
-
-    const drop = dropRaw != null ? this.hipDropEma.push(dropRaw) : null;
-    const bend = bendRaw != null ? this.kneeBendEma.push(bendRaw) : null;
-
-    let atDepth = false;
-    let atRest = false;
-
-    if (drop != null && bend != null) {
-      atDepth = drop > 0.065 || bend >= 38;
-      atRest = drop < 0.028 && bend < 18;
-    } else if (drop != null) {
-      atDepth = drop > 0.075;
-      atRest = drop < 0.028;
-    } else if (bend != null) {
-      atDepth = bend >= 42;
-      atRest = bend < 16;
-    }
-
-    return this.cycleRep(atDepth, atRest, now, "Lower into squat", "Push back up");
+    if (now - this.lastRepAt < REP_COOLDOWN_MS) return;
+    this.lastRepAt = now;
+    this.onRep();
+    this.moveStatus = "Rep!";
+    this.hint = hint;
   }
 
-  private feedLunge(landmarks: PoseLandmark[]): MoveStatus {
-    const legs = legExtensionRatios(landmarks, this.torsoLen);
-    const lk = landmark(landmarks, LM.LEFT_KNEE);
-    const rk = landmark(landmarks, LM.RIGHT_KNEE);
-    if (!legs || !lk || !rk) {
-      this.moveStatus = "Watching";
-      this.hint = "Step back — both knees must be on screen";
-      return this.moveStatus;
-    }
-
-    const spreadRaw = Math.abs(lk.y - rk.y) / this.torsoLen;
-    const spread = this.lungeSpreadEma.push(spreadRaw);
-    const leftDelta = legs.left - this.baselineLeftLeg;
-    const rightDelta = legs.right - this.baselineRightLeg;
-    const asymmetry = Math.abs(leftDelta - rightDelta);
-    const bend = this.bestKneeBend(landmarks);
-    const now = Date.now();
-
-    let atDepth = false;
-    let atRest = false;
-
-    if (bend != null) {
-      const flexion = kneeFlexionAngles(landmarks);
-      const deep = flexion.length ? Math.min(...flexion) : bend;
-      atDepth = (deep <= 112 && spread > 0.04) || asymmetry > 0.07;
-      atRest = (deep >= 150 || bend < 20) && spread < 0.025 && asymmetry < 0.03;
-    } else {
-      atDepth = spread > 0.055 || asymmetry > 0.08;
-      atRest = spread < 0.022 && asymmetry < 0.025;
-    }
-
-    return this.cycleRep(atDepth, atRest, now, "Step into lunge", "Push back to standing");
-  }
-
-  private feedJumpingJack(landmarks: PoseLandmark[]): MoveStatus {
-    const ls = landmark(landmarks, LM.LEFT_SHOULDER);
-    const rs = landmark(landmarks, LM.RIGHT_SHOULDER);
-    const lw = landmark(landmarks, LM.LEFT_WRIST) ?? landmark(landmarks, LM.LEFT_ELBOW);
-    const rw = landmark(landmarks, LM.RIGHT_WRIST) ?? landmark(landmarks, LM.RIGHT_ELBOW);
+  /** Arms-focused jumping jack — looser open/close so real jacks count. */
+  private processJumpingJack(landmarks: PoseLandmark[]): MoveStatus {
+    const ls = pick(landmarks, LM.LEFT_SHOULDER);
+    const rs = pick(landmarks, LM.RIGHT_SHOULDER);
+    const lw = pick(landmarks, LM.LEFT_WRIST) ?? pick(landmarks, LM.LEFT_ELBOW);
+    const rw = pick(landmarks, LM.RIGHT_WRIST) ?? pick(landmarks, LM.RIGHT_ELBOW);
     if (!ls || !rs || !lw || !rw) {
       this.moveStatus = "Watching";
-      this.hint = "Show your arms in the frame";
+      this.hint = "Show both arms / hands";
       return this.moveStatus;
     }
 
-    const shoulderY = (ls.y + rs.y) / 2;
-    const shoulderWidth = Math.max(Math.abs(rs.x - ls.x), 1e-4);
-    const wristY = (lw.y + rw.y) / 2;
-    const spread = Math.abs(rw.x - lw.x);
-    const now = Date.now();
+    const shoulderY = avg(ls.y, rs.y);
+    const shoulderW = Math.max(distance(ls, rs), 1e-3);
+    const wristY = avg(lw.y, rw.y);
+    const wristSpread = distance(lw, rw);
 
-    const atPeak =
-      wristY < shoulderY - shoulderWidth * 0.14 || spread > shoulderWidth * 1.3;
-    const atRest =
-      wristY > shoulderY - shoulderWidth * 0.05 && spread < shoulderWidth * 1.1;
+    // Peak: arms clearly above shoulders OR clearly wider than shoulders
+    const armsUp = wristY < shoulderY - shoulderW * 0.02;
+    const armsWide = wristSpread > shoulderW * 1.2;
+    const atPeak = armsUp || armsWide;
 
-    return this.cycleRep(atPeak, atRest, now, "Jump — arms up and out", "Return to start position");
+    // Return: arms no longer at peak, and either coming down or closing in
+    const armsComingDown = wristY > shoulderY - shoulderW * 0.12;
+    const armsClosing = wristSpread < shoulderW * 1.32;
+    const atRest = !atPeak && armsComingDown && armsClosing;
+
+    if (atPeak) {
+      this.repState = "open";
+      this.moveStatus = "Move!";
+      this.hint = "Good! Now bring arms down";
+      return this.moveStatus;
+    }
+
+    if (this.repState === "open" && atRest) {
+      this.repState = "closed";
+      this.recordRep("Jumping jack counted!");
+      return this.moveStatus;
+    }
+
+    // Stay in "waiting to close" while transitioning down from open
+    if (this.repState === "open") {
+      this.moveStatus = "Move!";
+      this.hint = "Good! Now bring arms down";
+      return this.moveStatus;
+    }
+
+    this.moveStatus = "Watching";
+    this.hint = "Open arms up and out";
+    return this.moveStatus;
   }
 
-  private cycleRep(
-    atDepth: boolean,
-    atRest: boolean,
-    now: number,
-    peakHint: PoseDetectionHint,
-    restHint: PoseDetectionHint,
-  ): MoveStatus {
-    if (atDepth && atRest) {
+  /** Hip-drop + thigh bend squat (works without feet). */
+  private processSquat(landmarks: PoseLandmark[]): MoveStatus {
+    const hip = hipMidY(landmarks);
+    if (hip == null) {
       this.moveStatus = "Watching";
-      this.hint = peakHint;
+      this.hint = "Step back a bit — show your hips";
       return this.moveStatus;
     }
 
-    if (this.phase === "rest") {
-      if (atDepth) {
-        this.depthFrames += 1;
-        this.restFrames = 0;
-        if (this.depthFrames >= DEPTH_HOLD_FRAMES) {
-          this.phase = "peak";
-          this.depthAchieved = true;
-          this.depthFrames = 0;
-          this.moveStatus = "Move!";
-          this.hint = restHint;
-        } else {
-          this.moveStatus = "Move!";
-          this.hint = peakHint;
-        }
-      } else {
-        this.depthFrames = 0;
-        this.moveStatus = "Watching";
-        this.hint = peakHint;
-      }
-      return this.moveStatus;
-    }
+    const hipDrop =
+      this.calibrated && this.baselineTorso > 0
+        ? (hip - this.baselineHipY) / this.baselineTorso
+        : 0;
 
-    if (atRest && this.depthAchieved) {
-      this.restFrames += 1;
-      if (this.restFrames >= REST_HOLD_FRAMES && now - this.lastRepAt >= REP_COOLDOWN_MS) {
-        this.lastRepAt = now;
-        this.phase = "rest";
-        this.depthFrames = 0;
-        this.restFrames = 0;
-        this.depthAchieved = false;
-        this.onRep();
-        this.moveStatus = "Rep!";
-        this.hint = peakHint;
-        return this.moveStatus;
-      }
+    const ankles = bothKneeAngles(landmarks);
+    const thighs = bothThighAngles(landmarks);
+
+    let bentScore = 0; // higher = more squat-like
+    if (ankles) {
+      const knee = avg(ankles.left, ankles.right);
+      // panelists: deep < 125, stand > 155 → map to score
+      bentScore = Math.max(bentScore, (160 - knee) / 40);
+    }
+    if (thighs) {
+      const thigh = avg(thighs.left, thighs.right);
+      // standing thigh ~165–180, squat often ~100–140
+      bentScore = Math.max(bentScore, (165 - thigh) / 45);
+    }
+    bentScore = Math.max(bentScore, hipDrop / 0.12);
+
+    const atDepth = bentScore >= 0.55 || hipDrop > 0.07;
+    const atRest = bentScore < 0.25 && hipDrop < 0.03;
+
+    if (atDepth) {
+      this.repState = "down";
       this.moveStatus = "Move!";
-      this.hint = restHint;
+      this.hint = "Good! Now stand up";
       return this.moveStatus;
     }
 
-    this.restFrames = 0;
-    if (atDepth) this.depthAchieved = true;
-    this.moveStatus = "Move!";
-    this.hint = restHint;
+    if (this.repState === "down" && atRest) {
+      this.repState = "up";
+      this.recordRep("Squat counted!");
+      return this.moveStatus;
+    }
+
+    this.moveStatus = "Watching";
+    this.hint = "Bend down into a squat";
+    return this.moveStatus;
+  }
+
+  /** Front-camera lunge via knee height / angle asymmetry. */
+  private processLunge(landmarks: PoseLandmark[]): MoveStatus {
+    const lk = pick(landmarks, LM.LEFT_KNEE);
+    const rk = pick(landmarks, LM.RIGHT_KNEE);
+    const hip = hipMidY(landmarks);
+    const kneeY = kneeMidY(landmarks);
+    if (!lk || !rk || hip == null) {
+      this.moveStatus = "Watching";
+      this.hint = "Step back — show both knees for lunges";
+      return this.moveStatus;
+    }
+
+    const ankles = bothKneeAngles(landmarks);
+    const thighs = bothThighAngles(landmarks);
+    const kneeSpread = Math.abs(lk.y - rk.y);
+    const scale = this.baselineTorso > 0 ? this.baselineTorso : Math.max(Math.abs(lk.y - hip), 1e-3);
+    const spreadRatio = kneeSpread / scale;
+
+    let deepDiff = 0;
+    if (ankles) deepDiff = Math.abs(ankles.left - ankles.right);
+    else if (thighs) deepDiff = Math.abs(thighs.left - thighs.right);
+
+    const lowered = kneeY != null ? hip > kneeY - scale * 0.35 : true;
+    const atDepth = (spreadRatio > 0.08 || deepDiff > 18) && lowered;
+    const atRest = spreadRatio < 0.04 && deepDiff < 12;
+
+    if (atDepth) {
+      this.repState = "down";
+      this.moveStatus = "Move!";
+      this.hint = "Good! Now stand up";
+      return this.moveStatus;
+    }
+
+    if (this.repState === "down" && atRest) {
+      this.repState = "up";
+      this.recordRep("Lunge counted!");
+      return this.moveStatus;
+    }
+
+    this.moveStatus = "Watching";
+    this.hint = "Step into a lunge";
     return this.moveStatus;
   }
 }

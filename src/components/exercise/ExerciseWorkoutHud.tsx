@@ -9,10 +9,19 @@ type Props = {
   moveStatus: MoveStatus;
   onStop: () => void;
   done: boolean;
+  /** Shown so testers know the new Pose AI build is loaded. */
+  engineLabel?: string;
 };
 
 /** Compact floating HUD — keeps the camera viewport tall for leg exercises. */
-export function ExerciseWorkoutHud({ remaining, completed, moveStatus, onStop, done }: Props) {
+export function ExerciseWorkoutHud({
+  remaining,
+  completed,
+  moveStatus,
+  onStop,
+  done,
+  engineLabel,
+}: Props) {
   const moveLabel =
     moveStatus === "Rep!"
       ? "Rep!"
@@ -31,6 +40,7 @@ export function ExerciseWorkoutHud({ remaining, completed, moveStatus, onStop, d
       <View style={styles.centerPill}>
         <Text style={styles.centerDone}>{completed} done</Text>
         <Text style={styles.centerStatus}>{moveLabel}</Text>
+        {engineLabel ? <Text style={styles.engineLabel}>{engineLabel}</Text> : null}
       </View>
       <Pressable
         onPress={onStop}
@@ -72,6 +82,7 @@ const styles = StyleSheet.create({
   },
   centerDone: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "600" },
   centerStatus: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  engineLabel: { color: "rgba(255,255,255,0.65)", fontSize: 9, fontWeight: "600", marginTop: 2 },
   stopBtn: {
     flexDirection: "row",
     alignItems: "center",

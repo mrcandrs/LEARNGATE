@@ -126,8 +126,7 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
         poseFailuresRef.current += 1;
         lastLandmarksRef.current = null;
         if (poseFailuresRef.current >= 30 && modeRef.current === "stream") {
-          modeRef.current = "pose";
-          setDetectionMode("pose");
+          // Keep stream mode — do not silent-fallback to still-photo / motion (old path).
           poseDetectorRef.current?.reset();
         }
         setPoseOverlay(null);
@@ -167,6 +166,12 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
   );
 
   const switchToMotion = useCallback(() => {
+    // Never drop to blur/motion on a real device — that bypasses panelists Pose AI.
+    if (!isExerciseEmulator()) {
+      setFormQuality("red");
+      setFormMessage("Pose AI paused — step back into the frame");
+      return;
+    }
     if (modeRef.current === "motion") return;
     modeRef.current = "motion";
     setDetectionMode("motion");
@@ -174,8 +179,8 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
     smootherRef.current.reset();
     setPoseOverlay(null);
     lastLandmarksRef.current = null;
-    setFormQuality("partial");
-    setFormMessage("Using motion mode — step back so we can see you move");
+    setFormQuality("red");
+    setFormMessage("Emulator motion mode — move in front of camera");
   }, []);
 
   useEffect(() => {
@@ -267,11 +272,11 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
               const status = motionDetectorRef.current?.feedFrame(photo.base64) ?? "Watching";
               setStatusIfChanged(status);
               setHintIfChanged(null);
-              setFormQuality(status === "Move!" || status === "Rep!" ? "active" : "partial");
+              setFormQuality(status === "Move!" || status === "Rep!" ? "green" : "red");
               setFormMessage(
                 isExerciseEmulator()
                   ? "Emulator motion mode — move in front of camera"
-                  : "Motion tracking — show shoulders and hips",
+                  : "Pose AI unavailable — rebuild the native app",
               );
             }
           }

@@ -10,7 +10,7 @@ type Props = {
 /** Dashed outline — upper-body framing (shoulders + hips). */
 export function ExerciseBodyGuide({ quality }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const color = formQualityColor(quality === "none" ? "partial" : quality);
+  const color = formQualityColor(quality === "none" ? "red" : quality);
 
   const padX = size.width * 0.14;
   const padY = size.height * 0.1;
