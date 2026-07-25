@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { unstable_batchedUpdates } from "react-native";
 import type { CameraView } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { deleteAsync } from "expo-file-system/legacy";
@@ -12,7 +13,13 @@ import {
   isStreamPoseAvailable,
 } from "@/services/exercisePoseNative";
 import { streamPoseToLandmarks } from "@/services/exercisePoseLandmarks";
-import { normalizePoseLandmarks } from "@/services/exercisePoseCoords";
+import {
+  normalizePoseLandmarks,
+  mirrorPoseLandmarks,
+  mlKitContentSize,
+  resetPoseCoordOrientation,
+  type FrameOrientation,
+} from "@/services/exercisePoseCoords";
 import {
   PoseExerciseRepDetector,
   type PoseDetectionHint,
@@ -29,15 +36,18 @@ const LEGACY_POSE_GAP_MS = 1100;
 const MOTION_FRAME_GAP_MS = 900;
 const EMULATOR_MOTION_FRAME_GAP_MS = 2000;
 const CAMERA_WARMUP_MS = 500;
-/** Throttle overlay React updates — detection + smoothing run every frame. */
-const OVERLAY_UI_MS = 33;
+/** Skeleton overlay refresh — ~30fps keeps joints glued without flooding React. */
+const SQUAT_SKELETON_UI_MS = 33;
+/** Ignore a second onRep within this window (same squat / duplicate frames). */
+const REP_UI_DEBOUNCE_MS = 500;
 
 export type ExerciseDetectionMode = "stream" | "pose" | "motion";
 
 export type PoseOverlayState = {
+  /** Selfie-mirrored landmarks in ML Kit upright content space. */
   landmarks: PoseLandmark[];
-  frameWidth: number;
-  frameHeight: number;
+  contentWidth: number;
+  contentHeight: number;
 };
 
 type Options = {
@@ -52,7 +62,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function triggerRepFeedback() {
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
 }
 
 export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }: Options) {
@@ -70,106 +80,137 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
   const poseDetectorRef = useRef<PoseExerciseRepDetector | null>(null);
   const smootherRef = useRef(new PoseLandmarkSmoother());
   const modeRef = useRef<ExerciseDetectionMode>(streamMode ? "stream" : "motion");
+  const lastRepAtRef = useRef(0);
   const onRepRef = useRef(onRep);
   const poseFailuresRef = useRef(0);
   const lastStatusRef = useRef<MoveStatus>("Stopped");
   const lastHintRef = useRef<PoseDetectionHint>(null);
+  const lastQualityRef = useRef<PoseFormQuality>("none");
+  const lastMessageRef = useRef("");
   const lastLandmarksRef = useRef<PoseLandmark[] | null>(null);
-  const lastOverlayUiAtRef = useRef(0);
+  const lastSkeletonUiAtRef = useRef(0);
+  const showSquatSkeleton = exerciseId === "squats";
   onRepRef.current = onRep;
 
-  const setStatusIfChanged = useCallback((status: MoveStatus) => {
-    if (lastStatusRef.current === status) return;
-    lastStatusRef.current = status;
-    setMoveStatus(status);
-  }, []);
-
-  const setHintIfChanged = useCallback((hint: PoseDetectionHint) => {
-    if (lastHintRef.current === hint) return;
-    lastHintRef.current = hint;
-    setPoseHint(hint);
-  }, []);
-
-  const updateFormFeedback = useCallback(
+  const publishHud = useCallback(
     (
-      landmarks: PoseLandmark[] | null,
       status: MoveStatus,
       hint: PoseDetectionHint | null,
-      frameWidth: number,
-      frameHeight: number,
+      quality: PoseFormQuality,
+      message: string,
     ) => {
-      const form = evaluatePoseFormQuality(
-        landmarks,
-        status,
-        exerciseId,
-        frameWidth,
-        frameHeight,
-      );
-      setFormQuality(form.quality);
-      setFormMessage(workoutStatusLine(form, status, hint));
+      if (
+        status === lastStatusRef.current &&
+        hint === lastHintRef.current &&
+        quality === lastQualityRef.current &&
+        message === lastMessageRef.current
+      ) {
+        return;
+      }
+
+      lastStatusRef.current = status;
+      lastHintRef.current = hint;
+      lastQualityRef.current = quality;
+      lastMessageRef.current = message;
+
+      // One React commit — constant setState spam was freezing the camera preview.
+      unstable_batchedUpdates(() => {
+        setMoveStatus(status);
+        setPoseHint(hint);
+        setFormQuality(quality);
+        setFormMessage(message);
+      });
     },
-    [exerciseId],
+    [],
   );
 
   const handleRep = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRepAtRef.current < REP_UI_DEBOUNCE_MS) return;
+    lastRepAtRef.current = now;
     triggerRepFeedback();
     onRepRef.current();
-    setStatusIfChanged("Rep!");
-    setTimeout(() => {
-      if (lastStatusRef.current === "Rep!") setStatusIfChanged("Watching");
-    }, 700);
-  }, [setStatusIfChanged]);
+  }, []);
 
   const processLandmarks = useCallback(
-    (raw: PoseLandmark[] | null, frameWidth: number, frameHeight: number) => {
+    (
+      raw: PoseLandmark[] | null,
+      frameWidth: number,
+      frameHeight: number,
+      orientation: FrameOrientation = "portrait",
+    ) => {
       if (!raw?.length) {
         poseFailuresRef.current += 1;
         lastLandmarksRef.current = null;
         if (poseFailuresRef.current >= 30 && modeRef.current === "stream") {
-          // Keep stream mode — do not silent-fallback to still-photo / motion (old path).
           poseDetectorRef.current?.reset();
         }
-        setPoseOverlay(null);
-        setStatusIfChanged("Watching");
-        setHintIfChanged("Stand inside the frame");
-        updateFormFeedback(null, "Watching", "Stand inside the frame", frameWidth, frameHeight);
+        if (showSquatSkeleton) setPoseOverlay(null);
+        publishHud("Watching", "Stand in the border", "red", "Stand in the border");
         return;
       }
 
       poseFailuresRef.current = 0;
-      const normalized =
-        modeRef.current === "stream"
-          ? normalizePoseLandmarks(raw, frameWidth, frameHeight)
-          : raw;
-      const status =
-        poseDetectorRef.current?.feed(normalized, frameWidth, frameHeight) ?? "Watching";
+
+      const { width: contentW } = mlKitContentSize(frameWidth, frameHeight, orientation);
+      const mirrored = mirrorPoseLandmarks(raw, contentW);
+      const oriented = normalizePoseLandmarks(mirrored, frameWidth, frameHeight, orientation);
+      const normalized = oriented.landmarks;
+
+      const status = poseDetectorRef.current?.feed(normalized) ?? "Watching";
       const hint = poseDetectorRef.current?.getHint() ?? null;
       lastLandmarksRef.current = normalized;
 
+      const form = evaluatePoseFormQuality(
+        normalized,
+        status,
+        exerciseId,
+        oriented.width,
+        oriented.height,
+      );
+      const quality = form.quality;
+      const formMessageLine = workoutStatusLine(form, status, hint, exerciseId);
+
       const now = Date.now();
-      if (now - lastOverlayUiAtRef.current >= OVERLAY_UI_MS || status === "Rep!") {
-        lastOverlayUiAtRef.current = now;
-        setStatusIfChanged(status);
-        setHintIfChanged(hint);
-        updateFormFeedback(normalized, status, hint, frameWidth, frameHeight);
+      const skeletonDue =
+        showSquatSkeleton && now - lastSkeletonUiAtRef.current >= SQUAT_SKELETON_UI_MS;
+
+      if (skeletonDue) {
+        lastSkeletonUiAtRef.current = now;
+        unstable_batchedUpdates(() => {
+          setPoseOverlay({
+            landmarks: normalized,
+            contentWidth: oriented.width,
+            contentHeight: oriented.height,
+          });
+          publishHud(status, hint, quality, formMessageLine);
+        });
+      } else {
+        publishHud(status, hint, quality, formMessageLine);
       }
     },
-    [setHintIfChanged, setStatusIfChanged, updateFormFeedback],
+    [exerciseId, publishHud, showSquatSkeleton],
   );
 
   const feedStreamPose = useCallback(
-    (pose: StreamPose | null, frame: { width: number; height: number }) => {
+    (
+      pose: StreamPose | null,
+      frame: { width: number; height: number; orientation?: FrameOrientation },
+    ) => {
       if (!enabled || modeRef.current !== "stream") return;
-      processLandmarks(streamPoseToLandmarks(pose), frame.width, frame.height);
+      processLandmarks(
+        streamPoseToLandmarks(pose),
+        frame.width,
+        frame.height,
+        frame.orientation ?? "portrait",
+      );
     },
     [enabled, processLandmarks],
   );
 
   const switchToMotion = useCallback(() => {
-    // Never drop to blur/motion on a real device — that bypasses panelists Pose AI.
     if (!isExerciseEmulator()) {
-      setFormQuality("red");
-      setFormMessage("Pose AI paused — step back into the frame");
+      publishHud("Watching", null, "red", "Pose AI paused — step back into the frame");
       return;
     }
     if (modeRef.current === "motion") return;
@@ -177,17 +218,20 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
     setDetectionMode("motion");
     poseDetectorRef.current?.reset();
     smootherRef.current.reset();
+    resetPoseCoordOrientation();
     setPoseOverlay(null);
     lastLandmarksRef.current = null;
-    setFormQuality("red");
-    setFormMessage("Emulator motion mode — move in front of camera");
-  }, []);
+    publishHud("Watching", null, "red", "Emulator motion mode — move in front of camera");
+  }, [publishHud]);
 
   useEffect(() => {
     motionDetectorRef.current = new ExerciseRepDetector(exerciseId, handleRep);
     poseDetectorRef.current = new PoseExerciseRepDetector(exerciseId, handleRep);
     poseFailuresRef.current = 0;
     smootherRef.current.reset();
+    resetPoseCoordOrientation();
+    setPoseOverlay(null);
+    lastSkeletonUiAtRef.current = 0;
     modeRef.current = streamMode ? "stream" : isExerciseEmulator() ? "motion" : "pose";
     setDetectionMode(modeRef.current);
     return () => {
@@ -201,27 +245,29 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
       motionDetectorRef.current?.reset();
       poseDetectorRef.current?.reset();
       smootherRef.current.reset();
+      resetPoseCoordOrientation();
       lastStatusRef.current = "Stopped";
       lastHintRef.current = null;
+      lastQualityRef.current = "none";
+      lastMessageRef.current = "";
       lastLandmarksRef.current = null;
-      lastOverlayUiAtRef.current = 0;
-      setMoveStatus("Stopped");
-      setPoseHint(null);
-      setPoseOverlay(null);
-      setFormQuality("none");
-      setFormMessage("");
+      unstable_batchedUpdates(() => {
+        setMoveStatus("Stopped");
+        setPoseHint(null);
+        setPoseOverlay(null);
+        setFormQuality("none");
+        setFormMessage("");
+      });
       return;
     }
 
     if (detectionMode === "stream") {
-      setStatusIfChanged("Watching");
-      setHintIfChanged(null);
+      publishHud("Watching", null, "red", "");
       return;
     }
 
     let cancelled = false;
-    setStatusIfChanged("Watching");
-    setHintIfChanged(null);
+    publishHud("Watching", null, "red", "");
 
     const runLoop = async () => {
       await sleep(CAMERA_WARMUP_MS);
@@ -270,10 +316,10 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
             }
             if (photo.base64) {
               const status = motionDetectorRef.current?.feedFrame(photo.base64) ?? "Watching";
-              setStatusIfChanged(status);
-              setHintIfChanged(null);
-              setFormQuality(status === "Move!" || status === "Rep!" ? "green" : "red");
-              setFormMessage(
+              publishHud(
+                status,
+                null,
+                status === "Move!" || status === "Rep!" ? "green" : "red",
                 isExerciseEmulator()
                   ? "Emulator motion mode — move in front of camera"
                   : "Pose AI unavailable — rebuild the native app",
@@ -296,16 +342,7 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
       motionDetectorRef.current?.reset();
       poseDetectorRef.current?.reset();
     };
-  }, [
-    cameraRef,
-    detectionMode,
-    enabled,
-    exerciseId,
-    processLandmarks,
-    setHintIfChanged,
-    setStatusIfChanged,
-    switchToMotion,
-  ]);
+  }, [cameraRef, detectionMode, enabled, exerciseId, processLandmarks, publishHud, switchToMotion]);
 
   return {
     moveStatus,

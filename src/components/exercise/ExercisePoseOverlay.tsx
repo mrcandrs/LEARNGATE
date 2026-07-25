@@ -1,84 +1,93 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Line } from "react-native-svg";
-import { POSE_CONNECTIONS, type PoseLandmark } from "@mefitzgerald/expo-pose-detection";
-import { mapLandmarkToView } from "@/services/exercisePoseCoords";
+import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
+import { mapLandmarkToPreview } from "@/services/exercisePoseCoords";
+import {
+  FULL_BODY_CONNECTIONS,
+  FULL_BODY_JOINTS,
+  SQUAT_KEY_JOINTS,
+} from "@/services/exercisePoseLandmarks";
 import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseFormQuality";
 
-const MIN_LIKELIHOOD = 0.35;
+const MIN_LIKELIHOOD = 0.12;
 
 type Props = {
+  /** Landmarks in ML Kit upright + selfie-mirrored content space. */
   landmarks: PoseLandmark[] | null;
-  frameWidth: number;
-  frameHeight: number;
+  contentWidth: number;
+  contentHeight: number;
   quality: PoseFormQuality;
-  /** Stream pose already mirrors X — set false to avoid double-flip. */
-  mirrored?: boolean;
-  /** Use portrait rotation + Y-flip for live stream frames. */
-  streamMapping?: boolean;
-  /** Landmarks already passed through normalizePoseLandmarks (live stream). */
-  normalizedCoords?: boolean;
 };
 
-export function ExercisePoseOverlay({
+/**
+ * Full-body skeleton overlay. Squats key joints (shoulders/hips/knees) are drawn larger.
+ */
+export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
   landmarks,
-  frameWidth,
-  frameHeight,
+  contentWidth,
+  contentHeight,
   quality,
-  mirrored = false,
-  streamMapping = false,
-  normalizedCoords = false,
 }: Props) {
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
-  const color = formQualityColor(quality);
-  const showSkeleton = quality === "green" && Boolean(landmarks?.length);
+  const color = formQualityColor(quality === "none" ? "red" : quality);
   const viewWidth = layout.width;
   const viewHeight = layout.height;
+  const showSkeleton = Boolean(landmarks?.length) && quality !== "none";
 
   const { lines, dots } = useMemo(() => {
-    if (!showSkeleton || !landmarks || viewWidth <= 0 || viewHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) {
-      return { lines: [] as { x1: number; y1: number; x2: number; y2: number }[], dots: [] as { x: number; y: number }[] };
+    if (!showSkeleton || !landmarks || viewWidth <= 0 || viewHeight <= 0) {
+      return {
+        lines: [] as { x1: number; y1: number; x2: number; y2: number }[],
+        dots: [] as { x: number; y: number; key: number; keyJoint: boolean }[],
+      };
     }
 
     const byType = new Map<number, { x: number; y: number }>();
     for (const lm of landmarks) {
       if (lm.inFrameLikelihood < MIN_LIKELIHOOD) continue;
-      const pt = mapLandmarkToView(
+      const pt = mapLandmarkToPreview(
         lm,
-        frameWidth,
-        frameHeight,
+        contentWidth,
+        contentHeight,
         viewWidth,
         viewHeight,
-        mirrored,
-        normalizedCoords,
-        streamMapping,
+        landmarks,
       );
       if (pt) byType.set(lm.type, pt);
     }
 
-    const lineSegments = POSE_CONNECTIONS.flatMap(([a, b]) => {
+    const lines = FULL_BODY_CONNECTIONS.flatMap(([a, b]) => {
       const p1 = byType.get(a);
       const p2 = byType.get(b);
       if (!p1 || !p2) return [];
       return [{ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y }];
     });
 
-    return { lines: lineSegments, dots: [...byType.values()] };
-  }, [showSkeleton, landmarks, frameWidth, frameHeight, viewWidth, viewHeight, mirrored, normalizedCoords, streamMapping]);
+    const dots = FULL_BODY_JOINTS.map((type) => {
+      const p = byType.get(type);
+      if (!p) return null;
+      return { ...p, key: type, keyJoint: SQUAT_KEY_JOINTS.has(type) };
+    }).filter(Boolean) as { x: number; y: number; key: number; keyJoint: boolean }[];
 
-  if (quality === "none") return null;
+    return { lines, dots };
+  }, [showSkeleton, landmarks, contentWidth, contentHeight, viewWidth, viewHeight]);
+
+  if (!showSkeleton) return null;
 
   return (
     <View
       style={StyleSheet.absoluteFill}
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
-        setLayout({ width, height });
+        setLayout((prev) =>
+          prev.width === width && prev.height === height ? prev : { width, height },
+        );
       }}
       pointerEvents="none"
     >
-      {showSkeleton && viewWidth > 0 && viewHeight > 0 ? (
+      {viewWidth > 0 && viewHeight > 0 ? (
         <Svg width={viewWidth} height={viewHeight} style={styles.svg}>
           {lines.map((l, i) => (
             <Line
@@ -88,28 +97,29 @@ export function ExercisePoseOverlay({
               x2={l.x2}
               y2={l.y2}
               stroke={color}
-              strokeWidth={4}
+              strokeWidth={3.5}
               strokeLinecap="round"
               opacity={0.9}
             />
           ))}
-          {dots.map((d, i) => (
-            <Circle key={`d-${i}`} cx={d.x} cy={d.y} r={5} fill={color} opacity={0.95} />
+          {dots.map((d) => (
+            <Circle
+              key={`d-${d.key}`}
+              cx={d.x}
+              cy={d.y}
+              r={d.keyJoint ? 8 : 5}
+              fill={color}
+              opacity={1}
+            />
           ))}
         </Svg>
       ) : null}
-
-      {quality === "red" ? <View style={[styles.edgeGlow, { borderColor: color }]} /> : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   svg: {
     ...StyleSheet.absoluteFillObject,
-  },
-  edgeGlow: {
-    ...StyleSheet.absoluteFillObject,
-    borderWidth: 4,
   },
 });

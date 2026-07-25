@@ -18,40 +18,51 @@ export const BLAZE_POSE = {
   RIGHT_ANKLE: 28,
 } as const;
 
+/**
+ * Full body skeleton bones (BlazePose-style) for the overlay.
+ * Only segments whose endpoints are present get drawn.
+ */
+export const FULL_BODY_CONNECTIONS: Array<[number, number]> = [
+  // Head → torso
+  [0, 11],
+  [0, 12],
+  // Shoulders + arms
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [12, 14],
+  [14, 16],
+  // Torso
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  // Legs
+  [23, 25],
+  [25, 27],
+  [24, 26],
+  [26, 28],
+];
+
+/** Joints drawn as dots on the full skeleton. */
+export const FULL_BODY_JOINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28] as const;
+
+/** Squats need these — highlighted larger on the overlay. */
+export const SQUAT_KEY_JOINTS = new Set([11, 12, 23, 24, 25, 26]);
+
 const STREAM_TO_BLAZE: Array<{ key: keyof StreamPose; type: number }> = [
   { key: "nose", type: 0 },
-  { key: "leftEyeInner", type: 1 },
-  { key: "leftEye", type: 2 },
-  { key: "leftEyeOuter", type: 3 },
-  { key: "rightEyeInner", type: 4 },
-  { key: "rightEye", type: 5 },
-  { key: "rightEyeOuter", type: 6 },
-  { key: "leftEar", type: 7 },
-  { key: "rightEar", type: 8 },
-  { key: "leftMouth", type: 9 },
-  { key: "rightMouth", type: 10 },
   { key: "leftShoulder", type: 11 },
   { key: "rightShoulder", type: 12 },
   { key: "leftElbow", type: 13 },
   { key: "rightElbow", type: 14 },
   { key: "leftWrist", type: 15 },
   { key: "rightWrist", type: 16 },
-  { key: "leftPinky", type: 17 },
-  { key: "rightPinky", type: 18 },
-  { key: "leftIndex", type: 19 },
-  { key: "rightIndex", type: 20 },
-  { key: "leftThumb", type: 21 },
-  { key: "rightThumb", type: 22 },
   { key: "leftHip", type: 23 },
   { key: "rightHip", type: 24 },
   { key: "leftKnee", type: 25 },
   { key: "rightKnee", type: 26 },
   { key: "leftAnkle", type: 27 },
   { key: "rightAnkle", type: 28 },
-  { key: "leftHeel", type: 29 },
-  { key: "rightHeel", type: 30 },
-  { key: "leftFootIndex", type: 31 },
-  { key: "rightFootIndex", type: 32 },
 ];
 
 /** Convert ML Kit stream pose (named landmarks) into BlazePose-indexed array. */

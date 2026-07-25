@@ -27,6 +27,7 @@ export function ChildActivitiesStackNavigator() {
       <Stack.Screen
         name="ExerciseSession"
         component={ChildExerciseSessionScreen}
+        getId={({ params }) => `${params.taskId ?? "practice"}:${params.exerciseId}`}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

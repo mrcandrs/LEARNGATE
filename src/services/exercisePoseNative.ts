@@ -4,7 +4,7 @@ import { PoseDetection } from "@mefitzgerald/expo-pose-detection";
 import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
 
 /** Bump when exercise AI logic changes — shown on workout HUD so you know JS loaded. */
-export const EXERCISE_AI_BUILD = "jacks-v5";
+export const EXERCISE_AI_BUILD = "status-copy-v28";
 
 function hasNativeStreamModules(): boolean {
   try {

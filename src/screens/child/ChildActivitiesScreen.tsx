@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useFocusEffect } from "@react-navigation/native";
+import { CommonActions, useFocusEffect } from "@react-navigation/native";
 import { Pressable, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -53,6 +53,36 @@ export function ChildActivitiesScreen() {
       }
       navigation.setParams({ segment: undefined, navKey: undefined });
     }, [navigation, route.params?.navKey, route.params?.segment])
+  );
+
+  const openGame = useCallback(
+    (gameId: (typeof ageGames)[number]["id"], title: string) => {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [
+            { name: "ActivitiesMain", params: { segment: "games" } },
+            { name: "GamePlay", params: { gameId, title } },
+          ],
+        }),
+      );
+    },
+    [navigation],
+  );
+
+  const openExercise = useCallback(
+    (exerciseId: (typeof EXERCISES)[number]["id"], title: string) => {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [
+            { name: "ActivitiesMain", params: { segment: "movement" } },
+            { name: "ExerciseSession", params: { exerciseId, title } },
+          ],
+        }),
+      );
+    },
+    [navigation],
   );
 
   return (
@@ -115,7 +145,7 @@ export function ChildActivitiesScreen() {
                 <Pressable
                   key={game.id}
                   style={({ pressed }) => [styles.gridItem, styles.gridItemFill, pressed && styles.pressed]}
-                  onPress={() => navigation.navigate("GamePlay", { gameId: game.id, title: game.title })}
+                  onPress={() => openGame(game.id, game.title)}
                 >
                   <ChildGameCard game={game} />
                 </Pressable>
@@ -142,12 +172,7 @@ export function ChildActivitiesScreen() {
                 <Pressable
                   key={ex.id}
                   style={({ pressed }) => [styles.gridItem, styles.gridItemFill, pressed && styles.pressed]}
-                  onPress={() =>
-                    navigation.navigate("ExerciseSession", {
-                      exerciseId: ex.id,
-                      title: ex.title,
-                    })
-                  }
+                  onPress={() => openExercise(ex.id, ex.title)}
                 >
                   <View style={[styles.moveCard, { backgroundColor: c.card, borderColor: c.border }]}>
                     <View style={styles.moveBadge}>

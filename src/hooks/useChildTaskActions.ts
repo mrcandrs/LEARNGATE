@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import type { NavigationProp } from "@react-navigation/native";
+import { CommonActions, type NavigationProp } from "@react-navigation/native";
 
 import { supabase } from "@/services/supabase";
 
@@ -9,6 +9,7 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { pickTaskPhotoFromCamera, uploadTaskEvidencePhoto } from "@/services/taskEvidence";
 
 import { formatAppError } from "@/utils/errors";
+import { isLikelyOfflineError, OFFLINE_MSG } from "@/services/offlineMessages";
 
 import { normalizeExerciseId } from "@/data/exercises";
 
@@ -76,7 +77,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
       if (updateError) {
 
-        setError(formatAppError(updateError));
+        setError(isLikelyOfflineError(updateError) ? OFFLINE_MSG.action : formatAppError(updateError));
 
         return;
 
@@ -98,7 +99,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
       if (awardError) {
 
-        setError(formatAppError(awardError));
+        setError(isLikelyOfflineError(awardError) ? OFFLINE_MSG.action : formatAppError(awardError));
 
         return;
 
@@ -152,7 +153,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
       choreSuccessRef.current = null;
 
-      setError(formatAppError(e));
+      setError(isLikelyOfflineError(e) ? OFFLINE_MSG.action : formatAppError(e));
 
     }
 
@@ -236,7 +237,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
       if (insertError) {
 
-        setError(formatAppError(insertError));
+        setError(isLikelyOfflineError(insertError) ? OFFLINE_MSG.action : formatAppError(insertError));
 
         return;
 
@@ -250,7 +251,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
       if (taskUpdateError) {
 
-        setError(formatAppError(taskUpdateError));
+        setError(isLikelyOfflineError(taskUpdateError) ? OFFLINE_MSG.action : formatAppError(taskUpdateError));
 
         return;
 
@@ -284,7 +285,7 @@ export function useChildTaskActions(tabNav: TabNav) {
 
     } catch (e) {
 
-      setError(formatAppError(e));
+      setError(isLikelyOfflineError(e) ? OFFLINE_MSG.action : formatAppError(e));
 
     } finally {
 
@@ -324,13 +325,23 @@ export function useChildTaskActions(tabNav: TabNav) {
 
         }
 
-        tabNav.navigate("Activities", {
-
-          screen: "GamePlay",
-
-          params: { gameId, title: task.title, taskId: task.id },
-
-        });
+        tabNav.dispatch(
+          CommonActions.navigate({
+            name: "Activities",
+            params: {
+              state: {
+                routes: [
+                  { name: "ActivitiesMain", params: { segment: "games", navKey: Date.now() } },
+                  {
+                    name: "GamePlay",
+                    params: { gameId, title: task.title, taskId: task.id },
+                  },
+                ],
+                index: 1,
+              },
+            },
+          }),
+        );
 
         return;
 
@@ -358,13 +369,26 @@ export function useChildTaskActions(tabNav: TabNav) {
 
         }
 
-        tabNav.navigate("Activities", {
-
-          screen: "ExerciseSession",
-
-          params: { taskId: task.id, exerciseId, title: task.title },
-
-        });
+        tabNav.dispatch(
+          CommonActions.navigate({
+            name: "Activities",
+            params: {
+              state: {
+                routes: [
+                  {
+                    name: "ActivitiesMain",
+                    params: { segment: "movement", navKey: Date.now() },
+                  },
+                  {
+                    name: "ExerciseSession",
+                    params: { taskId: task.id, exerciseId, title: task.title },
+                  },
+                ],
+                index: 1,
+              },
+            },
+          }),
+        );
 
         return;
 

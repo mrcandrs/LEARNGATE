@@ -3,7 +3,7 @@
  *
  * Half-body needs:
  * - Jumping jack: shoulders + wrists (arms)
- * - Squat: shoulders + hips + knees (hip drop / thigh bend)
+ * - Squat: shoulders + hips (hip motion — knees not required)
  * - Lunge: hips + both knees (asymmetry)
  *
  * Ankles help when visible but are NOT required.
@@ -81,26 +81,38 @@ export function evaluateLegGate(
 
   if (exerciseId === "jumping_jacks") {
     if (!(ls || rs)) {
-      return { ok: false, message: "Show your shoulders in the border" };
+      return { ok: false, message: "Show your shoulders" };
     }
     if (!(lw && rw)) {
-      return { ok: false, message: "Show both arms / hands" };
+      return { ok: false, message: "Show both arms" };
     }
     return { ok: true, message: "" };
   }
 
-  // Squats & lunges — torso + knees; ankles optional
+  // Squats — shoulders + hips (one side OK if the other flickers).
+  if (exerciseId === "squats") {
+    const sL = pick(landmarks, LM.LEFT_SHOULDER, 0.08);
+    const sR = pick(landmarks, LM.RIGHT_SHOULDER, 0.08);
+    const hL = pick(landmarks, LM.LEFT_HIP, 0.08);
+    const hR = pick(landmarks, LM.RIGHT_HIP, 0.08);
+    if (!(sL || sR)) {
+      return { ok: false, message: "Show your shoulders" };
+    }
+    if (!(hL || hR)) {
+      return { ok: false, message: "Step back — show your hips" };
+    }
+    return { ok: true, message: "" };
+  }
+
+  // Lunges — both knees
   if (!(ls || rs)) {
-    return { ok: false, message: "Show your shoulders in the border" };
+    return { ok: false, message: "Show your shoulders" };
   }
   if (!(lh || rh)) {
-    return { ok: false, message: "Step back a bit — show your hips" };
+    return { ok: false, message: "Step back — show your hips" };
   }
-  if (!(lk || rk)) {
-    return { ok: false, message: "Step back — show at least one knee" };
-  }
-  if (exerciseId === "lunges" && !(lk && rk)) {
-    return { ok: false, message: "Step back — show both knees for lunges" };
+  if (!(lk && rk)) {
+    return { ok: false, message: "Step back — show both knees" };
   }
   return { ok: true, message: "" };
 }
@@ -148,18 +160,18 @@ export function bothThighAngles(landmarks: PoseLandmark[]): { left: number; righ
   return null;
 }
 
-export function hipMidY(landmarks: PoseLandmark[]): number | null {
-  const lh = pick(landmarks, LM.LEFT_HIP);
-  const rh = pick(landmarks, LM.RIGHT_HIP);
+export function hipMidY(landmarks: PoseLandmark[], min = MIN_VISIBILITY): number | null {
+  const lh = pick(landmarks, LM.LEFT_HIP, min);
+  const rh = pick(landmarks, LM.RIGHT_HIP, min);
   if (lh && rh) return avg(lh.y, rh.y);
   if (lh) return lh.y;
   if (rh) return rh.y;
   return null;
 }
 
-export function shoulderMidY(landmarks: PoseLandmark[]): number | null {
-  const ls = pick(landmarks, LM.LEFT_SHOULDER);
-  const rs = pick(landmarks, LM.RIGHT_SHOULDER);
+export function shoulderMidY(landmarks: PoseLandmark[], min = MIN_VISIBILITY): number | null {
+  const ls = pick(landmarks, LM.LEFT_SHOULDER, min);
+  const rs = pick(landmarks, LM.RIGHT_SHOULDER, min);
   if (ls && rs) return avg(ls.y, rs.y);
   if (ls) return ls.y;
   if (rs) return rs.y;

@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet } from "react-native";
 import { CameraView } from "expo-camera";
 import { Camera as PoseStreamCamera } from "react-native-esanusi-sensor-pose";
 import type { Pose as StreamPose } from "react-native-esanusi-sensor-pose";
-import { useCameraDevice } from "react-native-vision-camera";
+import { useCameraDevice, useCameraFormat } from "react-native-vision-camera";
 import { isStreamPoseAvailable } from "@/services/exercisePoseNative";
+import type { FrameOrientation } from "@/services/exercisePoseCoords";
 
 type StreamFrame = {
   width: number;
   height: number;
+  orientation?: FrameOrientation;
 };
 
 type Props = {
@@ -20,8 +22,8 @@ type Props = {
 };
 
 /**
- * Physical device: VisionCamera + ML Kit stream mode (Kids360-style live pose).
- * Emulator: expo-camera preview only — motion/pose loop handled elsewhere.
+ * Mirror the preview with isMirrored, but do NOT use library mirrorX —
+ * that mirrors with buffer width while ML Kit coords use upright content width.
  */
 export function ExerciseWorkoutCamera({
   enabled,
@@ -31,12 +33,34 @@ export function ExerciseWorkoutCamera({
   onCameraReady,
 }: Props) {
   const device = useCameraDevice("front");
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 720, height: 1280 } },
+    { videoResolution: { width: 1280, height: 720 } },
+    { fps: 30 },
+  ]);
   const onStreamPoseRef = useRef(onStreamPose);
   onStreamPoseRef.current = onStreamPose;
 
-  const handlePoseCallback = useCallback((poses: StreamPose[], frame: StreamFrame) => {
-    onStreamPoseRef.current(poses[0] ?? null, frame);
-  }, []);
+  const handlePoseCallback = useCallback(
+    (poses: StreamPose[], frame: StreamFrame & { orientation?: string }) => {
+      const orientation = (frame.orientation ?? "portrait") as FrameOrientation;
+      onStreamPoseRef.current(poses[0] ?? null, {
+        width: frame.width,
+        height: frame.height,
+        orientation,
+      });
+    },
+    [],
+  );
+
+  const poseDetectionOptions = useMemo(
+    () => ({
+      performanceMode: "fast" as const,
+      detectorMode: "stream" as const,
+      minLandmarkConfidence: 0.2,
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -61,13 +85,12 @@ export function ExerciseWorkoutCamera({
     <PoseStreamCamera
       style={StyleSheet.absoluteFill}
       device={device}
+      format={format}
       isActive={enabled}
-      mirrorX
-      poseDetectionOptions={{
-        performanceMode: "accurate",
-        detectorMode: "stream",
-        minLandmarkConfidence: 0.3,
-      }}
+      isMirrored
+      mirrorX={false}
+      resizeMode="cover"
+      poseDetectionOptions={poseDetectionOptions}
       poseDetectionCallback={handlePoseCallback}
     />
   );

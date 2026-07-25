@@ -22,6 +22,7 @@ import { useChildAchievements } from "@/hooks/useChildAchievements";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { useChildTaskActions } from "@/hooks/useChildTaskActions";
 import { ChorePhotoReviewModal } from "@/components/child/ChorePhotoReviewModal";
+import { OfflineNoticeBanner } from "@/components/OfflineNoticeBanner";
 import { formatAppError } from "@/utils/errors";
 import { getGamesForChildAge, getRecommendedGamesForChildAge, isGameAllowedForChildAge } from "@/data/childGames";
 import { getAgeBandForChild } from "@/data/childAgeBands";
@@ -29,6 +30,8 @@ import { getChildAge } from "@/utils/childBirthday";
 import { ChildGameCard } from "@/components/child/ChildGameCard";
 import type { ChildHomeStackParamList, ChildTabParamList } from "@/types/navigation";
 import { taskCategoryIcon, taskCategoryTint, taskSubtitle, type TaskRow } from "@/utils/childTaskDisplay";
+import { cacheHomeTasks, readCachedHomeTasks } from "@/services/offlineCache";
+import { OFFLINE_MSG } from "@/services/offlineMessages";
 
 type HomeNav = CompositeNavigationProp<
   NativeStackNavigationProp<ChildHomeStackParamList, "HomeMain">,
@@ -40,13 +43,14 @@ export function ChildHomeScreen() {
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
-  const { child, loading: profileLoading, error: profileError, refresh: refreshProfile } = useChildProfile();
+  const { child, loading: profileLoading, error: profileError, offlineNotice: profileOfflineNotice, refresh: refreshProfile } = useChildProfile();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [starHistory, setStarHistory] = useState<WeeklyStarSnapshot[]>([]);
   const [starHistoryLoading, setStarHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tasksOfflineNotice, setTasksOfflineNotice] = useState<string | null>(null);
   const {
     stats: achievementStats,
     ladderGroups,
@@ -98,6 +102,16 @@ export function ChildHomeScreen() {
         setLoading(true);
       }
       setError(null);
+      setTasksOfflineNotice(null);
+
+      // Instant paint from last successful load.
+      if (!fromPull) {
+        const cached = await readCachedHomeTasks(child.id);
+        if (cached?.length) {
+          setTasks(cached);
+          setLoading(false);
+        }
+      }
 
       const { data: pendingTasks, error: tasksError } = await supabase
         .from("tasks")
@@ -108,12 +122,23 @@ export function ChildHomeScreen() {
         .limit(8);
 
       if (tasksError) {
-        setError(formatAppError(tasksError));
+        const cached = await readCachedHomeTasks(child.id);
+        if (cached) {
+          setTasks(cached);
+          setTasksOfflineNotice(OFFLINE_MSG.homeTasks);
+          setError(null);
+        } else {
+          setTasksOfflineNotice(null);
+          setError(formatAppError(tasksError));
+        }
         setLoading(false);
         setRefreshing(false);
         return;
       }
-      setTasks((pendingTasks as TaskRow[]) ?? []);
+      const rows = (pendingTasks as TaskRow[]) ?? [];
+      setTasks(rows);
+      setTasksOfflineNotice(null);
+      void cacheHomeTasks(child.id, rows);
       setLoading(false);
       setRefreshing(false);
     },
@@ -146,6 +171,7 @@ export function ChildHomeScreen() {
     [childAge]
   );
   const showError = profileError ?? error ?? actionError;
+  const offlineNotice = profileOfflineNotice ?? tasksOfflineNotice;
   const previewTasks = tasks.slice(0, 4);
   return (
     <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
@@ -161,6 +187,7 @@ export function ChildHomeScreen() {
 
       <View style={styles.pad}>
         {profileLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
+        {offlineNotice ? <OfflineNoticeBanner message={offlineNotice} /> : null}
         {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
 
         <ActiveAppUnlocksCard child={child} />

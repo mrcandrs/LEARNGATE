@@ -11,6 +11,7 @@ import { useAppColors } from "@/theme/useAppColors";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
+import { isLikelyOfflineError, OFFLINE_MSG } from "@/services/offlineMessages";
 import { useAudioGuidance } from "@/store/AudioGuidanceContext";
 import { BONUS_PLAY_DIFFICULTY_LEVEL, getGameSettings } from "@/data/gameDifficulty";
 import { getAgeBandForChild } from "@/data/childAgeBands";
@@ -552,7 +553,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
       });
       setIsSavingReward(false);
       if (error) {
-        setSaveError(formatAppError(error));
+        setSaveError(isLikelyOfflineError(error) ? OFFLINE_MSG.award : formatAppError(error));
         awardInFlightRef.current = false;
         return;
       }
@@ -580,7 +581,11 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
       if (taskError || !task) {
         setIsSavingReward(false);
-        setSaveError(formatAppError(taskError ?? new Error("Could not load learning task.")));
+        setSaveError(
+          isLikelyOfflineError(taskError)
+            ? OFFLINE_MSG.award
+            : formatAppError(taskError ?? new Error("Could not load learning task.")),
+        );
         taskCompleteInFlightRef.current = false;
         return;
       }
@@ -592,7 +597,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
           .eq("id", taskId);
         if (updateError) {
           setIsSavingReward(false);
-          setSaveError(formatAppError(updateError));
+          setSaveError(isLikelyOfflineError(updateError) ? OFFLINE_MSG.award : formatAppError(updateError));
           taskCompleteInFlightRef.current = false;
           return;
         }
@@ -605,7 +610,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
         });
         if (awardError) {
           setIsSavingReward(false);
-          setSaveError(formatAppError(awardError));
+          setSaveError(isLikelyOfflineError(awardError) ? OFFLINE_MSG.award : formatAppError(awardError));
           taskCompleteInFlightRef.current = false;
           return;
         }

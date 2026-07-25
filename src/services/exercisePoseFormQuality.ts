@@ -1,15 +1,15 @@
 import type { ExerciseId } from "@/data/exercises";
 import type { MoveStatus } from "@/services/exerciseRepDetection";
 import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
-import {
-  averagePoseConfidence,
-  isBodyInFrame,
-} from "@/services/exercisePoseCoords";
+import { averagePoseConfidence } from "@/services/exercisePoseCoords";
 import { evaluateLegGate } from "@/services/exercisePoseLegGate";
-import type { PoseDetectionHint } from "@/services/exercisePoseRepDetection";
-import { EXERCISE_AI_BUILD } from "@/services/exercisePoseNative";
+import {
+  GO_HINT,
+  READY_HINT,
+  type PoseDetectionHint,
+} from "@/services/exercisePoseRepDetection";
 
-const MIN_CONFIDENCE = 0.22;
+const MIN_CONFIDENCE = 0.2;
 
 export type PoseFormQuality = "none" | "red" | "green";
 
@@ -19,52 +19,60 @@ export type PoseFormFeedback = {
 };
 
 /**
- * Green = correct exercise movement in progress or rep counted.
- * Red = not doing that movement yet / not framed for this exercise.
+ * Traffic light for kids:
+ * - GREEN = finish the move (or just scored)
+ * - RED   = start the move / fix framing
  */
 export function evaluatePoseFormQuality(
   landmarks: PoseLandmark[] | null,
   moveStatus: MoveStatus,
   exerciseId?: ExerciseId,
-  frameWidth = 720,
-  frameHeight = 1280,
+  _frameWidth = 720,
+  _frameHeight = 1280,
 ): PoseFormFeedback {
-  if (moveStatus === "Rep!" || moveStatus === "Move!") {
-    return { quality: "green", message: "" };
+  const id = exerciseId ?? "squats";
+
+  if (moveStatus === "Rep!") {
+    return { quality: "green", message: "+1 Nice!" };
+  }
+  if (moveStatus === "Move!") {
+    return { quality: "green", message: GO_HINT[id] };
   }
 
   if (!landmarks?.length) {
-    return { quality: "red", message: "Stand inside the border" };
+    return { quality: "red", message: "Stand in the border" };
   }
 
   if (averagePoseConfidence(landmarks) < MIN_CONFIDENCE) {
-    return { quality: "red", message: "Turn on more light" };
+    return { quality: "red", message: "Need more light" };
   }
 
-  const gate = evaluateLegGate(landmarks, exerciseId ?? "squats", frameWidth, frameHeight);
+  const gate = evaluateLegGate(landmarks, id);
   if (!gate.ok) {
     return { quality: "red", message: gate.message };
   }
 
-  if (!isBodyInFrame(landmarks, frameWidth, frameHeight, exerciseId)) {
-    return { quality: "red", message: "Move so your body is inside the border" };
-  }
-
-  return { quality: "red", message: "" };
+  return { quality: "red", message: READY_HINT[id] };
 }
 
+/** One kid-facing line for the frame + HUD (never "Watching" / "Move!"). */
 export function workoutStatusLine(
   form: PoseFormFeedback,
   moveStatus: MoveStatus,
   hint: PoseDetectionHint | null,
+  exerciseId?: ExerciseId,
 ): string {
-  if (moveStatus === "Rep!") return hint || "Great rep! +1";
-  if (moveStatus === "Move!" && hint) return hint;
-  if (form.quality === "red" && form.message) return form.message;
-  if (form.quality === "red") {
-    return hint || `Ready — do the exercise (${EXERCISE_AI_BUILD})`;
+  const id = exerciseId ?? "squats";
+
+  if (moveStatus === "Rep!") {
+    if (hint && hint.startsWith("+1")) return hint;
+    return "+1 Nice!";
   }
-  return form.message || "Stand inside the border";
+  if (moveStatus === "Move!") {
+    return hint || GO_HINT[id];
+  }
+  if (form.message) return form.message;
+  return hint || READY_HINT[id];
 }
 
 export function formQualityColor(quality: PoseFormQuality): string {

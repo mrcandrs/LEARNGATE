@@ -1,44 +1,103 @@
 import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
-import { exerciseFrameBoundsNormalized } from "@/services/exerciseFrameBounds";
-import type { ExerciseId } from "@/data/exercises";
 import {
   landmarksUseNormalizedCoords,
-  portraitDims,
   toNormX,
   toNormY,
 } from "@/services/exercisePoseCoordSpace";
 
-/** If head is below hips in data, flip Y so detection matches portrait preview. */
-function ensureUprightY(landmarks: PoseLandmark[]): PoseLandmark[] {
-  const nose = landmarks.find((l) => l.type === 0);
-  const lh = landmarks.find((l) => l.type === 23);
-  const rh = landmarks.find((l) => l.type === 24);
-  const hipY = lh && rh ? (lh.y + rh.y) / 2 : lh?.y ?? rh?.y;
-  if (!nose || hipY == null) return landmarks;
+export type OrientedPose = {
+  landmarks: PoseLandmark[];
+  width: number;
+  height: number;
+};
 
-  if (nose.y < hipY) return landmarks;
-
-  const ys = landmarks.map((l) => l.y);
-  const mid = (Math.min(...ys) + Math.max(...ys)) / 2;
-  return landmarks.map((l) => ({ ...l, y: 2 * mid - l.y }));
-}
+export type FrameOrientation =
+  | "portrait"
+  | "portrait-upside-down"
+  | "landscape-left"
+  | "landscape-right";
 
 /**
- * Map stream buffer coords → portrait space (head up, y grows downward).
+ * Sticky upright decision.
+ * Default flip=true for this VisionCamera+ML Kit path (unflipped draws upside-down).
+ * Locked after a clear head+hips frame — never re-flips when you step close.
  */
+let uprightDecided = false;
+let needYFlip = true;
+
+export function resetPoseCoordOrientation() {
+  uprightDecided = false;
+  needYFlip = true;
+}
+
+export function mlKitContentSize(
+  frameWidth: number,
+  frameHeight: number,
+  orientation: FrameOrientation,
+): { width: number; height: number } {
+  if (orientation === "landscape-left" || orientation === "landscape-right") {
+    return { width: frameHeight, height: frameWidth };
+  }
+  return { width: frameWidth, height: frameHeight };
+}
+
+export function mirrorPoseLandmarks(
+  landmarks: PoseLandmark[],
+  contentWidth: number,
+): PoseLandmark[] {
+  const normalized = landmarksUseNormalizedCoords(landmarks);
+  return landmarks.map((lm) => ({
+    ...lm,
+    x: normalized ? 1 - lm.x : contentWidth - lm.x,
+  }));
+}
+
+/** Flip against the image height — NOT the body midpoint (midpoint warp missed the joints). */
+function flipYLandmarks(landmarks: PoseLandmark[], contentHeight: number): PoseLandmark[] {
+  const normalized = landmarksUseNormalizedCoords(landmarks);
+  return landmarks.map((lm) => ({
+    ...lm,
+    y: normalized ? 1 - lm.y : contentHeight - lm.y,
+  }));
+}
+
+function pickVisible(
+  landmarks: PoseLandmark[],
+  type: number,
+  min = 0.35,
+): PoseLandmark | null {
+  const lm = landmarks.find((l) => l.type === type);
+  if (!lm || lm.inFrameLikelihood < min) return null;
+  return lm;
+}
+
+function maybeDecideUpright(landmarks: PoseLandmark[]) {
+  if (uprightDecided) return;
+
+  const nose = pickVisible(landmarks, 0, 0.4);
+  const ls = pickVisible(landmarks, 11, 0.4);
+  const rs = pickVisible(landmarks, 12, 0.4);
+  const lh = pickVisible(landmarks, 23, 0.4);
+  const rh = pickVisible(landmarks, 24, 0.4);
+  if (!nose || !lh || !rh) return;
+  if (!ls && !rs) return;
+
+  needYFlip = nose.y > (lh.y + rh.y) / 2;
+  uprightDecided = true;
+}
+
 export function normalizePoseLandmarks(
   landmarks: PoseLandmark[],
   frameWidth: number,
   frameHeight: number,
-): PoseLandmark[] {
-  const mapped = landmarks.map((lm) => {
-    if (frameWidth > frameHeight) {
-      return { ...lm, x: lm.y, y: frameWidth - lm.x };
-    }
-    return lm;
-  });
+  orientation: FrameOrientation = "portrait",
+): OrientedPose {
+  const { width, height } = mlKitContentSize(frameWidth, frameHeight, orientation);
 
-  return ensureUprightY(mapped);
+  maybeDecideUpright(landmarks);
+
+  const out = needYFlip ? flipYLandmarks(landmarks, height) : landmarks;
+  return { landmarks: out, width, height };
 }
 
 export function averagePoseConfidence(landmarks: PoseLandmark[] | null): number {
@@ -50,48 +109,62 @@ export function averagePoseConfidence(landmarks: PoseLandmark[] | null): number 
   return sample.reduce((sum, lm) => sum + lm.inFrameLikelihood, 0) / sample.length;
 }
 
-function bodyCenterNormalized(
-  landmarks: PoseLandmark[],
-  frameWidth: number,
-  frameHeight: number,
-): { cx: number; cy: number } | null {
-  // Landmarks from the stream path are already normalizePoseLandmarks()'d — do not transform twice.
-  const { width: pw, height: ph } = portraitDims(frameWidth, frameHeight);
+/** Map landmark → preview with resizeMode "cover". */
+export function mapLandmarkToPreview(
+  lm: PoseLandmark,
+  contentWidth: number,
+  contentHeight: number,
+  viewWidth: number,
+  viewHeight: number,
+  allLandmarks?: PoseLandmark[],
+): { x: number; y: number } | null {
+  if (contentWidth <= 0 || contentHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) return null;
 
-  const ls = landmarks.find((l) => l.type === 11 && l.inFrameLikelihood >= 0.2);
-  const rs = landmarks.find((l) => l.type === 12 && l.inFrameLikelihood >= 0.2);
-  const lh = landmarks.find((l) => l.type === 23 && l.inFrameLikelihood >= 0.2);
-  const rh = landmarks.find((l) => l.type === 24 && l.inFrameLikelihood >= 0.2);
-  const nose = landmarks.find((l) => l.type === 0 && l.inFrameLikelihood >= 0.2);
+  const sample = allLandmarks?.length ? allLandmarks : [lm];
+  const nx = toNormX(lm.x, contentWidth, sample);
+  const ny = toNormY(lm.y, contentHeight, sample);
+  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return null;
 
-  const points = [ls, rs, lh, rh, nose].filter(Boolean) as PoseLandmark[];
-  if (points.length < 2) return null;
+  const scale = Math.max(viewWidth / contentWidth, viewHeight / contentHeight);
+  const drawnW = contentWidth * scale;
+  const drawnH = contentHeight * scale;
+  const offX = (viewWidth - drawnW) / 2;
+  const offY = (viewHeight - drawnH) / 2;
 
-  const normalizedSpace = landmarksUseNormalizedCoords(landmarks);
-  const cx =
-    points.reduce((s, p) => s + (normalizedSpace ? p.x : toNormX(p.x, pw, landmarks)), 0) /
-    points.length;
-  const cy =
-    points.reduce((s, p) => s + (normalizedSpace ? p.y : toNormY(p.y, ph, landmarks)), 0) /
-    points.length;
-  return { cx, cy };
+  return {
+    x: nx * drawnW + offX,
+    y: ny * drawnH + offY,
+  };
 }
 
-/** Is the detected body roughly inside the on-screen frame? */
+export function mapLandmarkToView(
+  lm: PoseLandmark,
+  frameWidth: number,
+  frameHeight: number,
+  viewWidth: number,
+  viewHeight: number,
+  _mirrored = false,
+  allLandmarks?: PoseLandmark[],
+): { x: number; y: number } | null {
+  return mapLandmarkToPreview(lm, frameWidth, frameHeight, viewWidth, viewHeight, allLandmarks);
+}
+
 export function isBodyInFrame(
   landmarks: PoseLandmark[],
   frameWidth: number,
   frameHeight: number,
-  exerciseId?: ExerciseId,
+  _exerciseId?: string,
 ): boolean {
-  const center = bodyCenterNormalized(landmarks, frameWidth, frameHeight);
-  if (!center) return false;
-
-  const bounds = exerciseFrameBoundsNormalized(exerciseId);
-  return (
-    center.cx >= bounds.left &&
-    center.cx <= bounds.right &&
-    center.cy >= bounds.top &&
-    center.cy <= bounds.bottom
+  if (!landmarks.length || frameWidth <= 0 || frameHeight <= 0) return false;
+  const sample = landmarks;
+  const pts = landmarks.filter(
+    (l) => [0, 11, 12, 23, 24].includes(l.type) && l.inFrameLikelihood >= 0.2,
   );
+  if (pts.length < 2) return false;
+  const norm = landmarksUseNormalizedCoords(sample);
+  const cx =
+    pts.reduce((s, p) => s + (norm ? p.x : toNormX(p.x, frameWidth, sample)), 0) / pts.length;
+  const cy =
+    pts.reduce((s, p) => s + (norm ? p.y : toNormY(p.y, frameHeight, sample)), 0) / pts.length;
+  return cx > 0.05 && cx < 0.95 && cy > 0.05 && cy < 0.95;
 }

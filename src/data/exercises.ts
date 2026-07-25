@@ -21,9 +21,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 20,
     color: "#8B5CF6",
-    instruction:
-      "Stay in the border. Raise arms up/out, then bring them down — shoulders and arms must be visible.",
-    cardDescription: "Jumping jacks — arm pose tracking.",
+    instruction: "Red = arms up. Green = bring arms down. +1 when you finish.",
+    cardDescription: "Jumping jacks — red start, green finish.",
   },
   {
     id: "squats",
@@ -33,9 +32,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#F59E0B",
-    instruction:
-      "Show shoulders, hips, and knees in the border. Squat down, then stand up.",
-    cardDescription: "Squats — half-body pose tracking.",
+    instruction: "Step back so hips show. Red = squat down. Green = stand up.",
+    cardDescription: "Squats — Kids360-style torso tracking.",
   },
   {
     id: "lunges",
@@ -45,9 +43,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#14B8A6",
-    instruction:
-      "Show both knees in the border. Step into a lunge, then stand back up.",
-    cardDescription: "Lunges — half-body pose tracking.",
+    instruction: "Step back so both knees show. Red = lunge. Green = stand up.",
+    cardDescription: "Lunges — Kids360-style knee tracking.",
   },
 ];
 

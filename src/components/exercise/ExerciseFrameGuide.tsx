@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import type { ExerciseId } from "@/data/exercises";
@@ -16,7 +16,11 @@ type Props = {
 };
 
 /** Border + one status line. Taller frame for squats/lunges. */
-export function ExerciseFrameGuide({ quality, message, exerciseId }: Props) {
+export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
+  quality,
+  message,
+  exerciseId,
+}: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const stroke = formQualityColor(quality === "none" ? "red" : quality);
   const tint = frameTintColor(quality === "none" ? "red" : quality);
@@ -35,7 +39,9 @@ export function ExerciseFrameGuide({ quality, message, exerciseId }: Props) {
       pointerEvents="none"
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
-        setSize({ width, height });
+        setSize((prev) =>
+          prev.width === width && prev.height === height ? prev : { width, height },
+        );
       }}
     >
       {w > 0 && h > 0 ? (
@@ -87,7 +93,7 @@ export function ExerciseFrameGuide({ quality, message, exerciseId }: Props) {
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   frame: {

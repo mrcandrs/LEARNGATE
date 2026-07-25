@@ -24,6 +24,9 @@ import { formatAppError } from "@/utils/errors";
 import type { ChildTabParamList } from "@/types/navigation";
 import type { ChildTaskCategory, TaskRow } from "@/utils/childTaskDisplay";
 import type { TaskAuditRow } from "@/services/taskAuditTrail";
+import { cacheChildTasks, readCachedChildTasks } from "@/services/offlineCache";
+import { OFFLINE_MSG } from "@/services/offlineMessages";
+import { OfflineNoticeBanner } from "@/components/OfflineNoticeBanner";
 
 type CompletedFilter = "all" | ChildTaskCategory;
 type CompletedSort = "newest" | "oldest" | "points" | "title";
@@ -33,11 +36,12 @@ export function ChildTasksScreen() {
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
-  const { child, error: profileError } = useChildProfile();
+  const { child, error: profileError, offlineNotice: profileOfflineNotice } = useChildProfile();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tasksOfflineNotice, setTasksOfflineNotice] = useState<string | null>(null);
 
   const [completedSearch, setCompletedSearch] = useState("");
   const [completedFilter, setCompletedFilter] = useState<CompletedFilter>("all");
@@ -55,6 +59,15 @@ export function ChildTasksScreen() {
       if (fromPull) setRefreshing(true);
       else setIsLoading(true);
       setError(null);
+      setTasksOfflineNotice(null);
+
+      if (!fromPull) {
+        const cached = await readCachedChildTasks(child.id);
+        if (cached?.length) {
+          setTasks(cached);
+          setIsLoading(false);
+        }
+      }
 
       const { data, error: tasksError } = await supabase
         .from("tasks")
@@ -66,9 +79,20 @@ export function ChildTasksScreen() {
         .order("created_at", { ascending: true });
 
       if (tasksError) {
-        setError(formatAppError(tasksError));
+        const cached = await readCachedChildTasks(child.id);
+        if (cached) {
+          setTasks(cached);
+          setTasksOfflineNotice(OFFLINE_MSG.tasks);
+          setError(null);
+        } else {
+          setTasksOfflineNotice(null);
+          setError(formatAppError(tasksError));
+        }
       } else {
-        setTasks((data as TaskRow[]) ?? []);
+        const rows = (data as TaskRow[]) ?? [];
+        setTasks(rows);
+        setTasksOfflineNotice(null);
+        void cacheChildTasks(child.id, rows);
       }
       setIsLoading(false);
       setRefreshing(false);
@@ -129,6 +153,7 @@ export function ChildTasksScreen() {
   }, [completedTasks, completedSearch, completedFilter, completedSort]);
 
   const showError = profileError ?? error ?? actionError;
+  const offlineNotice = profileOfflineNotice ?? tasksOfflineNotice;
 
   const sortLabel =
     completedSort === "newest"
@@ -211,6 +236,7 @@ export function ChildTasksScreen() {
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <View style={styles.pad}>
+        {offlineNotice ? <OfflineNoticeBanner message={offlineNotice} /> : null}
         {showError ? <Text style={styles.errorText}>{showError}</Text> : null}
         {isLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
 

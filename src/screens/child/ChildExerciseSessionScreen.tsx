@@ -9,12 +9,13 @@ import type { ChildActivitiesStackParamList } from "@/types/navigation";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
-import { getExerciseById, normalizeExerciseId, type ExerciseId } from "@/data/exercises";
+import { getExerciseById, normalizeExerciseId } from "@/data/exercises";
 import { useExerciseRepDetector } from "@/hooks/useExerciseRepDetector";
 import { ExerciseMascotDemo } from "@/components/exercise/ExerciseMascotDemo";
 import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCamera";
 import { MASCOT_NAME } from "@/constants/mascot";
 import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
+import { ExercisePoseOverlay } from "@/components/exercise/ExercisePoseOverlay";
 import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
 import { ExerciseRepFlash } from "@/components/exercise/ExerciseRepFlash";
 import { childTabBarHiddenStyle, childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
@@ -25,6 +26,7 @@ import { Camera as VisionCamera } from "react-native-vision-camera";
 import { isStreamPoseAvailable, EXERCISE_AI_BUILD } from "@/services/exercisePoseNative";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { formatAppError } from "@/utils/errors";
+import { isLikelyOfflineError, OFFLINE_MSG } from "@/services/offlineMessages";
 
 type Props = NativeStackScreenProps<ChildActivitiesStackParamList, "ExerciseSession">;
 type SessionPhase = "demo" | "workout" | "completed";
@@ -35,8 +37,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(c, insets), [c, insets]);
   const taskId = route.params.taskId;
-  const initialId = normalizeExerciseId(route.params.exerciseId);
-  const [selectedId] = useState<ExerciseId>(initialId);
+  const selectedId = normalizeExerciseId(route.params.exerciseId);
   const exercise = useMemo(() => getExerciseById(selectedId), [selectedId]);
   const isLegWorkout = isFullBodyExercise(selectedId);
   const { child, refresh: refreshProfile } = useChildProfile();
@@ -53,16 +54,58 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const completedTransitionRef = useRef(false);
+  const awardStartedRef = useRef(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const exitSession = useCallback(() => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-      return;
+    if (exitTimerRef.current) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
     }
-    navigation.navigate("ActivitiesMain");
-  }, [navigation]);
+    navigation.navigate("ActivitiesMain", { segment: "movement", navKey: Date.now() });
+    if (taskId) {
+      navigation.getParent()?.navigate("Home", {
+        screen: "TasksList",
+        params: { navKey: Date.now() },
+      });
+    }
+  }, [navigation, taskId]);
+
+  const practiceAgain = useCallback(() => {
+    if (exitTimerRef.current) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    }
+    completedTransitionRef.current = false;
+    awardStartedRef.current = false;
+    setCompleted(0);
+    setPhase("demo");
+    setDemoFinished(false);
+    setDemoRunId((n) => n + 1);
+    setCameraReady(false);
+    setStartingCamera(false);
+    setToast(null);
+    setError(null);
+  }, []);
 
   const cameraOn = phase === "workout";
+
+  const handleCameraReady = useCallback(() => {
+    setCameraReady(true);
+  }, []);
 
   const onRepDetected = useCallback(() => {
     setCompleted((n) => Math.min(targetReps, n + 1));
@@ -75,6 +118,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     useLegacyCamera,
     formQuality,
     formMessage,
+    poseOverlay,
     feedStreamPose,
   } = useExerciseRepDetector({
     enabled: cameraOn && cameraReady,
@@ -88,6 +132,20 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     setPoints(exercise.defaultPoints);
     setCompleted(0);
   }, [selectedId, exercise.defaultReps, exercise.defaultPoints]);
+
+  // Reset in-session state when a different exercise/task opens on this screen.
+  useEffect(() => {
+    setPhase("demo");
+    setDemoFinished(false);
+    setDemoRunId((n) => n + 1);
+    setCameraReady(false);
+    setStartingCamera(false);
+    setCompleted(0);
+    setError(null);
+    setToast(null);
+    completedTransitionRef.current = false;
+    awardStartedRef.current = false;
+  }, [selectedId, taskId]);
 
   useEffect(() => {
     async function loadTask() {
@@ -110,8 +168,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
 
   const remaining = Math.max(0, targetReps - completed);
   const done = remaining === 0;
-  const completedTransitionRef = useRef(false);
-  const awardStartedRef = useRef(false);
 
   const awardStars = useCallback(async () => {
     if (!supabase || !child || !done) return;
@@ -125,7 +181,9 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         .eq("id", taskId);
       if (updateError) {
         setIsSaving(false);
-        setError(formatAppError(updateError));
+        setError(
+          isLikelyOfflineError(updateError) ? OFFLINE_MSG.award : formatAppError(updateError),
+        );
         return;
       }
     }
@@ -144,13 +202,20 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
 
     setIsSaving(false);
     if (awardError) {
-      setError(formatAppError(awardError));
+      setError(isLikelyOfflineError(awardError) ? OFFLINE_MSG.award : formatAppError(awardError));
       return;
     }
 
     await refreshProfile(true);
+    if (!mountedRef.current) return;
     setToast(`You earned ${points} stars!`);
-    setTimeout(() => exitSession(), 3200);
+    // Practice: stay on complete screen (Practice again / Back).
+    // Assigned task: return to tasks after a short celebration.
+    if (taskId) {
+      exitTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) exitSession();
+      }, 3200);
+    }
   }, [child, completed, done, exitSession, points, refreshProfile, selectedId, targetReps, taskId]);
 
   useEffect(() => {
@@ -175,26 +240,31 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   useEffect(() => {
     const parent = navigation.getParent();
     if (!parent) return;
-
-    if (phase === "workout") {
-      parent.setOptions({ tabBarStyle: childTabBarHiddenStyle });
-    } else {
-      parent.setOptions({ tabBarStyle: childTabBarVisibleStyle(theme.colors.surface) });
-    }
-
+    // Hide tabs for the whole session (demo + workout + completed).
+    parent.setOptions({ tabBarStyle: childTabBarHiddenStyle });
     return () => {
       parent.setOptions({ tabBarStyle: childTabBarVisibleStyle(theme.colors.surface) });
     };
-  }, [navigation, phase, theme.colors.surface]);
+  }, [navigation, theme.colors.surface]);
 
-  const stopWorkout = () => {
+  const stopWorkout = useCallback(() => {
     completedTransitionRef.current = false;
     awardStartedRef.current = false;
     setPhase("demo");
     setDemoFinished(true);
     setCameraReady(false);
     setStartingCamera(false);
-  };
+  }, []);
+
+  // Android / gesture back during workout → stop camera, don't pop the stack.
+  useEffect(() => {
+    const unsub = navigation.addListener("beforeRemove", (e) => {
+      if (phase !== "workout") return;
+      e.preventDefault();
+      stopWorkout();
+    });
+    return unsub;
+  }, [navigation, phase, stopWorkout]);
 
   const startDemo = () => {
     setError(null);
@@ -233,16 +303,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     }
   };
 
-  const moveLabel =
-    moveStatus === "Rep!"
-      ? "Rep!"
-      : moveStatus === "Move!"
-        ? "Move!"
-        : moveStatus === "Watching"
-          ? cameraOn && cameraReady
-            ? "Watching"
-            : "Stopped"
-          : "Stopped";
+  const moveLabel = formMessage || (cameraOn && cameraReady ? "Get ready!" : "Starting…");
 
   if (!permission) {
     return (
@@ -272,6 +333,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             <Text style={{ color: c.subtext }}>Great job!</Text>
           )}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <PrimaryButton label="Practice again" onPress={practiceAgain} />
           <PrimaryButton label="Back to activities" mode="outlined" onPress={exitSession} />
         </View>
         <ParentManageToast
@@ -294,7 +356,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             useLegacyCamera={useLegacyCamera}
             legacyCameraRef={cameraRef}
             onStreamPose={feedStreamPose}
-            onCameraReady={() => setCameraReady(true)}
+            onCameraReady={handleCameraReady}
           />
         ) : null}
 
@@ -302,6 +364,15 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
           <View style={styles.cameraOverlay}>
             <Text style={styles.overlayText}>Opening camera…</Text>
           </View>
+        ) : null}
+
+        {cameraReady && selectedId === "squats" && poseOverlay ? (
+          <ExercisePoseOverlay
+            landmarks={poseOverlay.landmarks}
+            contentWidth={poseOverlay.contentWidth}
+            contentHeight={poseOverlay.contentHeight}
+            quality={formQuality}
+          />
         ) : null}
 
         {cameraReady ? (
@@ -332,7 +403,8 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             <ExerciseWorkoutHud
               remaining={remaining}
               completed={completed}
-              moveStatus={moveStatus}
+              statusMessage={formMessage || "Get ready!"}
+              quality={formQuality}
               onStop={stopWorkout}
               done={done}
               engineLabel={
@@ -375,14 +447,14 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             </View>
             <View style={styles.repSideCompact}>
               <Text style={{ color: c.subtext, fontSize: 13 }}>Completed: {completed}</Text>
-              <Text style={{ color: moveStatus === "Rep!" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
+              <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
                 {moveLabel}
               </Text>
               <Text style={{ color: c.subtext, fontSize: 11 }}>
                 {detectionMode === "stream"
-                  ? "Pose AI · jacks-v5"
+                  ? `Pose AI · ${EXERCISE_AI_BUILD}`
                   : detectionMode === "pose"
-                    ? "Pose AI (still) · jacks-v5"
+                    ? `Pose AI (still) · ${EXERCISE_AI_BUILD}`
                     : "⚠ Motion fallback (old)"}
               </Text>
             </View>
@@ -464,14 +536,14 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               Nice! Now it's your turn.
             </Text>
             <Text variant="bodySmall" style={{ color: c.subtext, textAlign: "center" }}>
-              Stand inside the person shape on screen. Green = ready, red = move closer or add light.
+              Stand in the border. Red = start the move. Green = finish it. +1 when you complete a rep.
             </Text>
           </View>
         )}
 
         <View style={[styles.controlCard, { backgroundColor: c.card }]}>
           {!demoFinished ? (
-            <PrimaryButton label={`${MASCOT_NAME} is demonstrating…`} disabled />
+            <PrimaryButton label={`${MASCOT_NAME} is demonstrating…`} disabled onPress={() => {}} />
           ) : (
             <PrimaryButton
               label={startingCamera ? "Starting…" : "Your turn — open camera"}

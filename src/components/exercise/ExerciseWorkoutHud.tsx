@@ -1,12 +1,15 @@
+import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import type { MoveStatus } from "@/services/exerciseRepDetection";
+import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseFormQuality";
 
 type Props = {
   remaining: number;
   completed: number;
-  moveStatus: MoveStatus;
+  /** Kid-facing line — same as the frame status (e.g. "Squat down!", "Stand up!"). */
+  statusMessage: string;
+  quality: PoseFormQuality;
   onStop: () => void;
   done: boolean;
   /** Shown so testers know the new Pose AI build is loaded. */
@@ -14,22 +17,16 @@ type Props = {
 };
 
 /** Compact floating HUD — keeps the camera viewport tall for leg exercises. */
-export function ExerciseWorkoutHud({
+export const ExerciseWorkoutHud = memo(function ExerciseWorkoutHud({
   remaining,
   completed,
-  moveStatus,
+  statusMessage,
+  quality,
   onStop,
   done,
   engineLabel,
 }: Props) {
-  const moveLabel =
-    moveStatus === "Rep!"
-      ? "Rep!"
-      : moveStatus === "Move!"
-        ? "Move!"
-        : moveStatus === "Watching"
-          ? "Watching"
-          : "Stopped";
+  const statusColor = formQualityColor(quality === "none" ? "red" : quality);
 
   return (
     <View style={styles.row} pointerEvents="box-none">
@@ -39,7 +36,9 @@ export function ExerciseWorkoutHud({
       </View>
       <View style={styles.centerPill}>
         <Text style={styles.centerDone}>{completed} done</Text>
-        <Text style={styles.centerStatus}>{moveLabel}</Text>
+        <Text style={[styles.centerStatus, { color: statusColor }]} numberOfLines={2}>
+          {statusMessage || "Get ready!"}
+        </Text>
         {engineLabel ? <Text style={styles.engineLabel}>{engineLabel}</Text> : null}
       </View>
       <Pressable
@@ -54,7 +53,7 @@ export function ExerciseWorkoutHud({
       </Pressable>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: {
@@ -81,7 +80,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   centerDone: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "600" },
-  centerStatus: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  centerStatus: { fontSize: 14, fontWeight: "800", textAlign: "center" },
   engineLabel: { color: "rgba(255,255,255,0.65)", fontSize: 9, fontWeight: "600", marginTop: 2 },
   stopBtn: {
     flexDirection: "row",

@@ -15,8 +15,8 @@ export function formatAppError(error: unknown): string {
 
   const msg = raw.toLowerCase();
 
-  if (msg.includes("network") || msg.includes("fetch") || msg.includes("internet") || msg.includes("failed to fetch")) {
-    return "No internet connection. Check your network and try again.";
+  if (msg.includes("network") || msg.includes("fetch") || msg.includes("internet") || msg.includes("failed to fetch") || msg.includes("offline") || msg.includes("timeout") || msg.includes("timed out")) {
+    return "No internet connection. Saved data stays on this device — it'll sync when you're back online.";
   }
   if (msg.includes("jwt") || msg.includes("session") || msg.includes("auth")) {
     return "Your session expired. Please sign in again.";
