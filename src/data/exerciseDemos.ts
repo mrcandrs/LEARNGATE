@@ -15,33 +15,33 @@ export type ExerciseDemo = {
 export const EXERCISE_DEMOS: Record<ExerciseId, ExerciseDemo> = {
   jumping_jacks: {
     id: "jumping_jacks",
-    summary: "Red border = arms up. Green border = bring arms down. +1 when you finish one full jack.",
+    summary: "Raise both arms, then lower them. Each full cycle counts as one rep.",
     steps: [
-      { title: "Start (red)", detail: "Stand in the border with arms down." },
-      { title: "Arms up (green)", detail: "Raise both arms up or out wide — border turns green." },
-      { title: "Arms down (+1)", detail: "Bring arms back down. That is one rep." },
+      { title: "Ready", detail: "Stand in the frame with arms down." },
+      { title: "Raise arms", detail: "Lift both arms up or out wide — the frame turns green." },
+      { title: "Lower arms", detail: "Bring your arms back down for +1." },
     ],
-    tip: "Keep shoulders and arms inside the border.",
+    tip: "Keep your shoulders and arms visible in the frame.",
   },
   squats: {
     id: "squats",
-    summary: "Red border = squat down. Green border = stand up. +1 when you finish.",
+    summary: "Squat down, then stand up. Each full cycle counts as one rep.",
     steps: [
-      { title: "Start (red)", detail: "Stand in the border so shoulders and hips are visible." },
-      { title: "Squat down (green)", detail: "Lower your hips — border turns green." },
-      { title: "Stand up (+1)", detail: "Stand all the way up. That is one rep." },
+      { title: "Ready", detail: "Stand in the frame so shoulders and hips are visible." },
+      { title: "Squat down", detail: "Lower your hips — the frame turns green." },
+      { title: "Stand up", detail: "Stand all the way up for +1." },
     ],
-    tip: "Step back until your hips show in the border.",
+    tip: "Step back until your hips show clearly in the frame.",
   },
-  lunges: {
-    id: "lunges",
-    summary: "Red border = step into a lunge. Green border = stand up. +1 when you finish.",
+  arm_stretching: {
+    id: "arm_stretching",
+    summary: "Pulse your left arm up twice, then your right twice. A small bob between pulses is enough.",
     steps: [
-      { title: "Start (red)", detail: "Stand in the border with both knees visible." },
-      { title: "Lunge (green)", detail: "Step one foot forward and bend — border turns green." },
-      { title: "Stand up (+1)", detail: "Return to standing. That is one rep." },
+      { title: "Ready", detail: "Stand tall with both arms visible in the frame." },
+      { title: "Left ×2", detail: "Reach left up, ease a little, reach again." },
+      { title: "Right ×2", detail: "Same on the right — two pulses = +1." },
     ],
-    tip: "Step back so both knees stay in the border.",
+    tip: "Keep feet planted. Pulse each side twice without dropping your arms all the way.",
   },
 };
 

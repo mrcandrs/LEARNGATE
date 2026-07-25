@@ -9,7 +9,11 @@ export const EXERCISE_FRAME_MARGIN_X_FULL = 0.04;
 export const EXERCISE_FRAME_MARGIN_Y_FULL = 0.008;
 
 export function isFullBodyExercise(exerciseId?: ExerciseId): boolean {
-  return exerciseId === "squats" || exerciseId === "lunges" || exerciseId === "jumping_jacks";
+  return (
+    exerciseId === "squats" ||
+    exerciseId === "arm_stretching" ||
+    exerciseId === "jumping_jacks"
+  );
 }
 
 export function exerciseFrameMargins(exerciseId?: ExerciseId) {

@@ -1,4 +1,4 @@
-import Svg, { Circle, Ellipse, G, Line, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, G, Line, Rect } from "react-native-svg";
 
 const SKIN = "#FFE0B2";
 const SHIRT = "#4CAF50";
@@ -12,18 +12,18 @@ export type FigurePose = {
   footSpread: number;
   squatDepth: number;
   jackOpen: number;
-  lungeStep: number;
-  lungeBend: number;
-  lungeLeadLeg: "left" | "right";
+  /** 0 = arms down, 1 = full overhead side stretch */
+  armStretch: number;
+  /** Which arm reaches up and over */
+  armStretchSide: "left" | "right";
 };
 
 export const NEUTRAL_FIGURE_POSE: FigurePose = {
   footSpread: 0,
   squatDepth: 0,
   jackOpen: 0,
-  lungeStep: 0,
-  lungeBend: 0,
-  lungeLeadLeg: "right",
+  armStretch: 0,
+  armStretchSide: "right",
 };
 
 export type GateyPoseValues = FigurePose;
@@ -196,88 +196,43 @@ function buildStandSkeleton(footSpread: number): FrontSkeleton {
   };
 }
 
-/** Side-profile lunge keyframes (ACE / Nike): stand → step → 90° front knee, back knee down. */
-type ProfileLunge = {
-  head: Pt;
-  chest: Pt;
-  pelvis: Pt;
-  shoulder: Pt;
-  elbow: Pt;
-  hand: Pt;
-  leadHip: Pt;
-  trailHip: Pt;
-  leadKnee: Pt;
-  trailKnee: Pt;
-  leadFoot: Pt;
-  trailFoot: Pt;
-};
+/** Overhead side stretch — one arm reaches up and over while the torso leans. */
+function buildArmStretchSkeleton(amount: number, side: "left" | "right"): FrontSkeleton {
+  const stand = buildStandSkeleton(0.55);
+  if (amount <= 0.001) return stand;
 
-function lerpProfile(a: ProfileLunge, b: ProfileLunge, t: number): ProfileLunge {
-  const k = (key: keyof ProfileLunge) => lerpPt(a[key], b[key], t);
-  return {
-    head: k("head"),
-    chest: k("chest"),
-    pelvis: k("pelvis"),
-    shoulder: k("shoulder"),
-    elbow: k("elbow"),
-    hand: k("hand"),
-    leadHip: k("leadHip"),
-    trailHip: k("trailHip"),
-    leadKnee: k("leadKnee"),
-    trailKnee: k("trailKnee"),
-    leadFoot: k("leadFoot"),
-    trailFoot: k("trailFoot"),
+  const lean = amount * 10;
+  const dir = side === "right" ? 1 : -1;
+  const leanX = -dir * lean;
+
+  const peak: FrontSkeleton = {
+    ...stand,
+    pelvis: { x: CX + leanX * 0.15, y: 108 },
+    chest: { x: CX + leanX * 0.55, y: 78 },
+    head: { x: CX + leanX * 0.85, y: 44 },
+    lShoulder: { x: CX - 16 + leanX * 0.5, y: 80 },
+    rShoulder: { x: CX + 16 + leanX * 0.5, y: 80 },
+    lHip: { x: CX - 10 + leanX * 0.1, y: 108 },
+    rHip: { x: CX + 10 + leanX * 0.1, y: 108 },
+    lElbow: stand.lElbow,
+    rElbow: stand.rElbow,
+    lHand: stand.lHand,
+    rHand: stand.rHand,
   };
-}
 
-const LUNGE_STAND: ProfileLunge = {
-  pelvis: { x: 58, y: 108 },
-  chest: { x: 64, y: 78 },
-  head: { x: 66, y: 44 },
-  shoulder: { x: 62, y: 80 },
-  elbow: { x: 66, y: 102 },
-  hand: { x: 68, y: 122 },
-  leadHip: { x: 60, y: 108 },
-  trailHip: { x: 56, y: 108 },
-  leadKnee: { x: 58, y: 144 },
-  trailKnee: { x: 56, y: 144 },
-  leadFoot: { x: 58, y: GROUND_Y },
-  trailFoot: { x: 56, y: GROUND_Y },
-};
+  if (side === "right") {
+    peak.rElbow = { x: CX + 4 + leanX, y: 52 };
+    peak.rHand = { x: CX - 18 + leanX, y: 28 };
+    peak.lElbow = { x: CX - 24 + leanX * 0.3, y: 112 };
+    peak.lHand = { x: CX - 26 + leanX * 0.3, y: 138 };
+  } else {
+    peak.lElbow = { x: CX - 4 + leanX, y: 52 };
+    peak.lHand = { x: CX + 18 + leanX, y: 28 };
+    peak.rElbow = { x: CX + 24 + leanX * 0.3, y: 112 };
+    peak.rHand = { x: CX + 26 + leanX * 0.3, y: 138 };
+  }
 
-const LUNGE_STEPPED: ProfileLunge = {
-  pelvis: { x: 68, y: 108 },
-  chest: { x: 74, y: 78 },
-  head: { x: 76, y: 44 },
-  shoulder: { x: 72, y: 80 },
-  elbow: { x: 76, y: 102 },
-  hand: { x: 78, y: 122 },
-  leadHip: { x: 70, y: 108 },
-  trailHip: { x: 60, y: 108 },
-  leadKnee: { x: 104, y: 142 },
-  trailKnee: { x: 46, y: 142 },
-  leadFoot: { x: 110, y: GROUND_Y },
-  trailFoot: { x: 42, y: GROUND_Y },
-};
-
-const LUNGE_BOTTOM: ProfileLunge = {
-  pelvis: { x: 70, y: 114 },
-  chest: { x: 76, y: 82 },
-  head: { x: 78, y: 48 },
-  shoulder: { x: 74, y: 84 },
-  elbow: { x: 78, y: 104 },
-  hand: { x: 80, y: 122 },
-  leadHip: { x: 72, y: 114 },
-  trailHip: { x: 62, y: 114 },
-  leadKnee: { x: 96, y: 134 },
-  trailKnee: { x: 44, y: 166 },
-  leadFoot: { x: 110, y: GROUND_Y },
-  trailFoot: { x: 42, y: GROUND_Y },
-};
-
-function buildProfileLunge(step: number, bend: number): ProfileLunge {
-  const afterStep = lerpProfile(LUNGE_STAND, LUNGE_STEPPED, step);
-  return lerpProfile(afterStep, LUNGE_BOTTOM, bend);
+  return lerpSkeleton(stand, peak, amount);
 }
 
 function FrontFigure({ s }: { s: FrontSkeleton }) {
@@ -310,39 +265,6 @@ function FrontFigure({ s }: { s: FrontSkeleton }) {
   );
 }
 
-function ProfileLungeFigure({ p, mirrored }: { p: ProfileLunge; mirrored?: boolean }) {
-  const flip = mirrored ? "scale(-1, 1) translate(-160, 0)" : undefined;
-  return (
-    <G transform={flip}>
-      {/* Trail leg (behind) */}
-      <Limb from={p.trailHip} to={p.trailKnee} width={9} />
-      <Limb from={p.trailKnee} to={p.trailFoot} width={8} />
-      <Ellipse cx={p.trailFoot.x} cy={p.trailFoot.y + 2} rx={10} ry={4} fill={SHOE} opacity={0.85} />
-
-      {/* Torso in profile */}
-      <Path
-        d={`M ${p.pelvis.x} ${p.pelvis.y} L ${p.chest.x} ${p.chest.y - 4} Q ${p.chest.x + 10} ${p.chest.y} ${p.chest.x + 6} ${p.pelvis.y}`}
-        fill={SHIRT}
-        stroke={OUTLINE}
-        strokeWidth={2}
-      />
-
-      {/* Lead leg (front) */}
-      <Limb from={p.leadHip} to={p.leadKnee} width={10} />
-      <Limb from={p.leadKnee} to={p.leadFoot} width={9} />
-      <Ellipse cx={p.leadFoot.x} cy={p.leadFoot.y + 2} rx={11} ry={4} fill={SHOE} />
-
-      {/* Arm */}
-      <Limb from={p.shoulder} to={p.elbow} width={8} />
-      <Limb from={p.elbow} to={p.hand} width={7} />
-
-      <Joint at={p.leadKnee} r={5} />
-      <Joint at={p.trailKnee} r={4} />
-      <Head at={p.head} />
-    </G>
-  );
-}
-
 function Limb({ from, to, width = 9 }: { from: Pt; to: Pt; width?: number }) {
   return (
     <Line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke={OUTLINE} strokeWidth={width} strokeLinecap="round" />
@@ -364,24 +286,21 @@ function Head({ at }: { at: Pt }) {
 }
 
 export function ExerciseDemoFigure({ width, height, pose }: Props) {
-  const isLunge = pose.lungeStep > 0.001 || pose.lungeBend > 0.001;
   const isJack = pose.jackOpen > 0.001;
   const isSquat = pose.squatDepth > 0.001;
+  const isArmStretch = pose.armStretch > 0.001;
 
   return (
     <Svg width={width} height={height} viewBox="0 0 160 200">
       <Line x1={16} y1={GROUND_Y} x2={144} y2={GROUND_Y} stroke="#BDBDBD" strokeWidth={2} strokeLinecap="round" />
       <Ellipse cx={CX} cy={GROUND_Y + 2} rx={52} ry={5} fill="rgba(0,0,0,0.06)" />
 
-      {isLunge ? (
-        <ProfileLungeFigure
-          p={buildProfileLunge(pose.lungeStep, pose.lungeBend)}
-          mirrored={pose.lungeLeadLeg === "left"}
-        />
-      ) : isJack ? (
+      {isJack ? (
         <FrontFigure s={buildJackSkeleton(pose.jackOpen)} />
       ) : isSquat ? (
         <FrontFigure s={buildSquatSkeleton(pose.squatDepth, pose.footSpread)} />
+      ) : isArmStretch ? (
+        <FrontFigure s={buildArmStretchSkeleton(pose.armStretch, pose.armStretchSide)} />
       ) : (
         <FrontFigure s={buildStandSkeleton(pose.footSpread)} />
       )}

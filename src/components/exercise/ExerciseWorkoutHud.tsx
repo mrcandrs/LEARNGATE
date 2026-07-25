@@ -7,12 +7,12 @@ import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseF
 type Props = {
   remaining: number;
   completed: number;
-  /** Kid-facing line — same as the frame status (e.g. "Squat down!", "Stand up!"). */
+  /** Kid-facing coaching line (same as the frame status). */
   statusMessage: string;
   quality: PoseFormQuality;
   onStop: () => void;
   done: boolean;
-  /** Shown so testers know the new Pose AI build is loaded. */
+  /** Optional tracking label (dev builds may include a version stamp). */
   engineLabel?: string;
 };
 

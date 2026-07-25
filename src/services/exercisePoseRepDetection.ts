@@ -26,32 +26,39 @@ const REP_COOLDOWN_MS = 450;
 
 export type PoseDetectionHint =
   | null
-  | "Stand in the border"
+  | "Stand in the frame"
   | "Show your shoulders"
   | "Show both arms"
   | "Step back — show your hips"
-  | "Step back — show a knee"
-  | "Step back — show both knees"
-  | "Arms up!"
-  | "Arms down!"
+  | "Step back from the camera"
+  | "Raise your arms"
+  | "Lower your arms"
   | "+1 Jumping jack!"
-  | "Squat down!"
-  | "Stand up!"
+  | "Squat down"
+  | "Stand up"
   | "+1 Squat!"
-  | "Step into a lunge!"
-  | "+1 Lunge!"
+  | "Left stretch — reach up"
+  | "Left stretch ✓ — pulse again"
+  | "Left stretch — pulse again"
+  | "Left done ✓ — switch to right"
+  | "Right stretch — reach up"
+  | "Right stretch ✓ — pulse again"
+  | "Right stretch — pulse again"
+  | "Use your left arm"
+  | "Use your right arm"
+  | "+1 Arm stretch!"
   | "Need more light";
 
 export const READY_HINT: Record<ExerciseId, PoseDetectionHint> = {
-  jumping_jacks: "Arms up!",
-  squats: "Squat down!",
-  lunges: "Step into a lunge!",
+  jumping_jacks: "Raise your arms",
+  squats: "Squat down",
+  arm_stretching: "Left stretch — reach up",
 };
 
 export const GO_HINT: Record<ExerciseId, PoseDetectionHint> = {
-  jumping_jacks: "Arms down!",
-  squats: "Stand up!",
-  lunges: "Stand up!",
+  jumping_jacks: "Lower your arms",
+  squats: "Stand up",
+  arm_stretching: "Left stretch ✓ — pulse again",
 };
 
 export function hasExercisePoseBody(landmarks: PoseLandmark[], exerciseId?: ExerciseId): boolean {
@@ -59,7 +66,7 @@ export function hasExercisePoseBody(landmarks: PoseLandmark[], exerciseId?: Exer
 }
 
 export function needsLegsInFrame(exerciseId?: ExerciseId): boolean {
-  return exerciseId === "squats" || exerciseId === "lunges";
+  return exerciseId === "squats";
 }
 
 export class PoseExerciseRepDetector {
@@ -71,9 +78,13 @@ export class PoseExerciseRepDetector {
   private peakFrames = 0;
   private returnFrames = 0;
 
-  /** Jacks / lunges standing scale. */
+  /** Standing scale samples (jacks / stretches). */
   private standTorso = 0;
   private standSamples = 0;
+  /** Jumping-jack openness + peak; must fully rest between reps. */
+  private jackOpenEma = 0;
+  private jackPeakOpen = 0;
+  private jackNeedRest = false;
 
   /** Squat hysteresis: standing ↔ bottom (no long time-lock — that felt laggy). */
   private hipEma = 0;
@@ -83,6 +94,16 @@ export class PoseExerciseRepDetector {
   private squatDown = false;
   /** +1 hips-down-in-frame, -1 if device Y is inverted. */
   private squatSign = 1;
+
+  /** Arm stretch: left pulse ×2 → right pulse ×2. Count at each reach peak. */
+  private stretchStep = 0;
+  private stretchWristEma = 0;
+  private stretchPeakY = 0;
+  private stretchValleyY = 0;
+  private stretchHoldFrames = 0;
+  /** after_count → need tiny ease; after_ease → need rise for next count; ready → can score */
+  private stretchPhase: "ready" | "after_count" | "after_ease" = "ready";
+  private stretchTrackSide: "left" | "right" | null = null;
 
   constructor(
     private exerciseId: ExerciseId,
@@ -99,12 +120,16 @@ export class PoseExerciseRepDetector {
     this.returnFrames = 0;
     this.standTorso = 0;
     this.standSamples = 0;
+    this.jackOpenEma = 0;
+    this.jackPeakOpen = 0;
+    this.jackNeedRest = false;
     this.hipEma = 0;
     this.standHipY = 0;
     this.bottomHipY = 0;
     this.standLocked = false;
     this.squatDown = false;
     this.squatSign = 1;
+    this.resetStretchCycle(true);
   }
 
   setExerciseId(exerciseId: ExerciseId) {
@@ -139,8 +164,8 @@ export class PoseExerciseRepDetector {
         return this.jacks(landmarks);
       case "squats":
         return this.squats(landmarks);
-      case "lunges":
-        return this.lunges(landmarks);
+      case "arm_stretching":
+        return this.armStretching(landmarks);
     }
   }
 
@@ -150,19 +175,99 @@ export class PoseExerciseRepDetector {
     this.returnFrames = 0;
     this.standTorso = 0;
     this.standSamples = 0;
+    this.jackOpenEma = 0;
+    this.jackPeakOpen = 0;
+    this.jackNeedRest = false;
     this.hipEma = 0;
     this.standHipY = 0;
     this.bottomHipY = 0;
     this.standLocked = false;
     this.squatDown = false;
     this.squatSign = 1;
+    // Keep stretchStep — brief gate loss shouldn't wipe a half-finished rep.
+    this.stretchWristEma = 0;
+    this.stretchPeakY = 0;
+    this.stretchValleyY = 0;
+    this.stretchHoldFrames = 0;
+    this.stretchPhase = "ready";
+    this.stretchTrackSide = null;
     this.moveStatus = "Watching";
-    this.hint = hint || "Stand in the border";
+    this.hint = hint || "Stand in the frame";
   }
 
-  private recordRep(hint: PoseDetectionHint) {
+  private resetStretchCycle(full: boolean) {
+    if (full) this.stretchStep = 0;
+    this.stretchWristEma = 0;
+    this.stretchPeakY = 0;
+    this.stretchValleyY = 0;
+    this.stretchHoldFrames = 0;
+    this.stretchPhase = "ready";
+    this.stretchTrackSide = null;
+  }
+
+  /** Order: left, left, right, right. */
+  private stretchNeededSide(): "left" | "right" {
+    return this.stretchStep < 2 ? "left" : "right";
+  }
+
+  private stretchReadyHint(): PoseDetectionHint {
+    switch (this.stretchStep) {
+      case 0:
+        return "Left stretch — reach up";
+      case 1:
+        return "Left stretch — pulse again";
+      case 2:
+        return "Right stretch — reach up";
+      default:
+        return "Right stretch — pulse again";
+    }
+  }
+
+  private stretchPulseHint(): PoseDetectionHint {
+    switch (this.stretchStep) {
+      case 1:
+        return "Left stretch ✓ — pulse again";
+      case 2:
+        return "Left done ✓ — switch to right";
+      case 3:
+        return "Right stretch ✓ — pulse again";
+      default:
+        return this.stretchReadyHint();
+    }
+  }
+
+  private recordPulse(): MoveStatus {
+    this.stretchStep += 1;
+    this.stretchPeakY = this.stretchWristEma;
+    this.stretchHoldFrames = 0;
+    this.stretchPhase = "after_count";
+
+    if (this.stretchStep >= 4) {
+      this.resetStretchCycle(true);
+      this.recordRep("+1 Arm stretch!");
+      return this.moveStatus;
+    }
+
+    this.phase = "active";
+    this.moveStatus = "Move!";
+    this.hint = this.stretchPulseHint();
+    return this.moveStatus;
+  }
+
+  private readyWithStretchHint(): MoveStatus {
+    return this.ready(this.stretchReadyHint());
+  }
+
+  private activeWithPulseHint(): MoveStatus {
+    this.phase = "active";
+    this.moveStatus = "Move!";
+    this.hint = this.stretchPulseHint();
+    return this.moveStatus;
+  }
+
+  private recordRep(hint: PoseDetectionHint, cooldownMs = REP_COOLDOWN_MS) {
     const now = Date.now();
-    if (now - this.lastRepAt < REP_COOLDOWN_MS) return false;
+    if (now - this.lastRepAt < cooldownMs) return false;
     this.lastRepAt = now;
     this.squatDown = false;
     this.peakFrames = 0;
@@ -188,44 +293,91 @@ export class PoseExerciseRepDetector {
     return this.moveStatus;
   }
 
-  /** Kids360-style jacks: arms up/wide → arms down. */
+  /**
+   * Jumping jack: arms up/out (green) → arms back down (+1).
+   * Requires a real open, then a clear close, then rest before the next rep
+   * (stops near-camera noise from spamming +1).
+   */
   private jacks(landmarks: PoseLandmark[]): MoveStatus {
-    const ls = pick(landmarks, LM.LEFT_SHOULDER);
-    const rs = pick(landmarks, LM.RIGHT_SHOULDER);
-    const lw = pick(landmarks, LM.LEFT_WRIST) ?? pick(landmarks, LM.LEFT_ELBOW);
-    const rw = pick(landmarks, LM.RIGHT_WRIST) ?? pick(landmarks, LM.RIGHT_ELBOW);
-    if (!ls || !rs || !lw || !rw) return this.ready("Show both arms");
+    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.08);
+    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.08);
+    if (!ls || !rs) return this.ready("Show your shoulders");
+
+    const le = pick(landmarks, LM.LEFT_ELBOW, 0.04);
+    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.04);
+    const lw = pick(landmarks, LM.LEFT_WRIST, 0.04) ?? le;
+    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.04) ?? re;
+    if (!lw || !rw) return this.ready("Show both arms");
 
     const shoulderY = avg(ls.y, rs.y);
     const shoulderW = Math.max(distance(ls, rs), 1e-3);
-    const wristY = avg(lw.y, rw.y);
+
+    // Too close → shoulder span fills the frame and ratios go wild
+    if (landmarksUseNormalizedCoords(landmarks) && shoulderW > 0.38) {
+      this.phase = "ready";
+      this.jackPeakOpen = 0;
+      this.jackNeedRest = true;
+      return this.ready("Step back from the camera");
+    }
+
+    const leftY = Math.min(lw.y, le?.y ?? lw.y);
+    const rightY = Math.min(rw.y, re?.y ?? rw.y);
     const spread = distance(lw, rw);
 
-    const atPeak = wristY < shoulderY - shoulderW * 0.02 || spread > shoulderW * 1.15;
-    const atRest =
-      !atPeak && wristY > shoulderY - shoulderW * 0.1 && spread < shoulderW * 1.28;
+    const leftUp = (shoulderY - leftY) / shoulderW;
+    const rightUp = (shoulderY - rightY) / shoulderW;
+    // Both arms must contribute (stops one-arm / jitter opens)
+    const bothUp = Math.min(leftUp, rightUp);
+    const avgUp = (leftUp + rightUp) * 0.5;
+    const heightScore = Math.max(0, Math.min(1, avgUp / 0.18));
+    const bothUpOk = bothUp > 0.06;
+    const widthScore = Math.max(0, Math.min(1, (spread / shoulderW - 1.05) / 0.55));
+    const open = bothUpOk ? Math.max(heightScore, widthScore * 0.75) : heightScore * 0.5;
 
-    if (atPeak) {
-      this.peakFrames += 1;
-      if (this.peakFrames >= 1) return this.active();
-    } else {
-      this.peakFrames = 0;
-    }
+    this.jackOpenEma = open;
 
-    if (this.phase === "active") {
-      if (atRest) {
-        this.returnFrames += 1;
-        if (this.returnFrames >= 1) {
-          this.recordRep("+1 Jumping jack!");
-          return this.moveStatus;
-        }
+    // After a rep: arms must come down before another open counts
+    if (this.jackNeedRest) {
+      if (open <= 0.14 && bothUp < 0.04) {
+        this.jackNeedRest = false;
+        this.jackPeakOpen = 0;
+        this.phase = "ready";
       } else {
-        this.returnFrames = 0;
+        this.phase = "ready";
+        this.moveStatus = "Watching";
+        this.hint = "Lower your arms";
+        return this.moveStatus;
       }
-      return this.active();
     }
 
-    return this.ready("Arms up!");
+    if (this.phase !== "active") {
+      // Need a clear open — both arms up and/or clearly wide
+      if (open >= 0.35 && bothUpOk) {
+        this.jackPeakOpen = open;
+        this.peakFrames = 1;
+        return this.active();
+      }
+      this.jackPeakOpen = 0;
+      return this.ready("Raise your arms");
+    }
+
+    if (open > this.jackPeakOpen) this.jackPeakOpen = open;
+
+    // Clear close: dropped a lot from peak AND fairly down, or fully down
+    const dropped = this.jackPeakOpen - open >= 0.2;
+    const downEnough = open <= 0.18;
+    const fullyDown = open <= 0.12 && bothUp < 0.03;
+
+    if ((dropped && downEnough) || fullyDown) {
+      this.jackPeakOpen = 0;
+      this.peakFrames = 0;
+      this.jackNeedRest = true;
+      this.jackOpenEma = Math.min(open, 0.1);
+      this.recordRep("+1 Jumping jack!", 350);
+      return this.moveStatus;
+    }
+
+    return this.active();
   }
 
   /**
@@ -278,7 +430,7 @@ export class PoseExerciseRepDetector {
         this.standSamples === 1 ? this.hipEma : 0.8 * this.standHipY + 0.2 * this.hipEma;
       this.standTorso =
         this.standSamples === 1 ? torso : 0.8 * this.standTorso + 0.2 * torso;
-      if (this.standSamples < 5) return this.ready("Squat down!");
+      if (this.standSamples < 5) return this.ready("Squat down");
       this.standLocked = true;
     }
 
@@ -300,7 +452,7 @@ export class PoseExerciseRepDetector {
         this.bottomHipY = this.hipEma;
         return this.active();
       }
-      return this.ready("Squat down!");
+      return this.ready("Squat down");
     }
 
     // In the hole — track deepest point along squat direction.
@@ -325,47 +477,85 @@ export class PoseExerciseRepDetector {
     return this.active();
   }
 
-  /** Kids360-style lunge: knee height / thigh asymmetry. */
-  private lunges(landmarks: PoseLandmark[]): MoveStatus {
-    const lk = pick(landmarks, LM.LEFT_KNEE, 0.12);
-    const rk = pick(landmarks, LM.RIGHT_KNEE, 0.12);
-    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.12);
-    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.12);
-    if (!lk || !rk) return this.ready("Step back — show both knees");
+  /**
+   * Left ×2 then right ×2.
+   *
+   * #1 counts as soon as the arm is overhead (no arms-down needed).
+   * Then a tiny bob (still overhead) re-arms, and reaching up again = #2.
+   */
+  private armStretching(landmarks: PoseLandmark[]): MoveStatus {
+    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.1);
+    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.1);
+    const le = pick(landmarks, LM.LEFT_ELBOW, 0.08);
+    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.08);
+    const lw = pick(landmarks, LM.LEFT_WRIST, 0.08) ?? le;
+    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.08) ?? re;
+    if (!ls || !rs) return this.ready("Show your shoulders");
+    if (!lw || !rw) return this.ready("Show both arms");
 
-    const scale =
-      ls && rs
-        ? Math.max(distance(ls, rs), Math.abs(lk.y - rk.y), 1e-3)
-        : Math.max(Math.abs(lk.y - rk.y), Math.abs(lk.x - rk.x), 1e-3);
+    const needed = this.stretchNeededSide();
+    const leftTipY = Math.min(lw.y, le?.y ?? lw.y);
+    const rightTipY = Math.min(rw.y, re?.y ?? rw.y);
+    const tipY = needed === "left" ? leftTipY : rightTipY;
+    const otherTipY = needed === "left" ? rightTipY : leftTipY;
 
-    const kneeSpread = Math.abs(lk.y - rk.y) / scale;
-    const thighs = bothThighAngles(landmarks);
-    const thighDiff = thighs ? Math.abs(thighs.left - thighs.right) : 0;
-
-    const atDepth = kneeSpread > 0.12 || thighDiff > 18;
-    const atStand = kneeSpread < 0.05 && thighDiff < 12;
-
-    if (atDepth) {
-      this.peakFrames += 1;
-      if (this.peakFrames >= 2) return this.active();
-      return this.ready("Step into a lunge!");
+    if (this.stretchTrackSide !== needed) {
+      this.stretchTrackSide = needed;
+      this.stretchWristEma = tipY;
+      this.stretchPeakY = 0;
+      this.stretchValleyY = 0;
+      this.stretchHoldFrames = 0;
+      this.stretchPhase = "ready";
     }
 
-    this.peakFrames = 0;
+    const shoulderY = avg(ls.y, rs.y);
+    const shoulderW = Math.max(distance(ls, rs), 1e-3);
+    this.stretchWristEma = 0.35 * this.stretchWristEma + 0.65 * tipY;
 
-    if (this.phase === "active") {
-      if (atStand) {
-        this.returnFrames += 1;
-        if (this.returnFrames >= 2) {
-          this.recordRep("+1 Lunge!");
-          return this.moveStatus;
-        }
-      } else {
-        this.returnFrames = 0;
+    const norm = landmarksUseNormalizedCoords(landmarks);
+    const bob = norm ? 0.012 : Math.max(shoulderW * 0.03, 8);
+    const overhead = this.stretchWristEma < shoulderY - (norm ? 0.03 : shoulderW * 0.04);
+
+    const otherOverhead =
+      otherTipY < shoulderY - (norm ? 0.03 : shoulderW * 0.04) &&
+      otherTipY < this.stretchWristEma - (norm ? 0.02 : shoulderW * 0.04);
+    if (otherOverhead && !overhead && this.stretchPhase === "ready") {
+      return this.ready(needed === "left" ? "Use your left arm" : "Use your right arm");
+    }
+
+    // Just scored: need a tiny ease from the peak (can stay well above shoulders)
+    if (this.stretchPhase === "after_count") {
+      if (this.stretchWristEma > this.stretchPeakY + bob) {
+        this.stretchValleyY = this.stretchWristEma;
+        this.stretchPhase = "after_ease";
+        this.stretchHoldFrames = 0;
       }
-      return this.active();
+      return this.activeWithPulseHint();
     }
 
-    return this.ready("Step into a lunge!");
+    // Eased a little: reach up again from that valley
+    if (this.stretchPhase === "after_ease") {
+      if (this.stretchWristEma < this.stretchValleyY - bob) {
+        this.stretchPhase = "ready";
+        this.stretchHoldFrames = 0;
+      } else {
+        return this.readyWithStretchHint();
+      }
+    }
+
+    // ready: count as soon as arm is held overhead
+    if (overhead) {
+      this.stretchHoldFrames += 1;
+      if (this.stretchHoldFrames >= 2) {
+        return this.recordPulse();
+      }
+      this.phase = "active";
+      this.moveStatus = "Move!";
+      this.hint = this.stretchReadyHint();
+      return this.moveStatus;
+    }
+
+    this.stretchHoldFrames = 0;
+    return this.readyWithStretchHint();
   }
 }

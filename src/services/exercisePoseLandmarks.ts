@@ -49,6 +49,18 @@ export const FULL_BODY_JOINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 
 /** Squats need these — highlighted larger on the overlay. */
 export const SQUAT_KEY_JOINTS = new Set([11, 12, 23, 24, 25, 26]);
 
+/** Arm stretching — shoulders, elbows, wrists. */
+export const ARM_STRETCH_KEY_JOINTS = new Set([11, 12, 13, 14, 15, 16]);
+
+/** Jumping jacks — arms + hips for spread. */
+export const JACKS_KEY_JOINTS = new Set([11, 12, 13, 14, 15, 16, 23, 24]);
+
+export function keyJointsForExercise(exerciseId?: string): Set<number> {
+  if (exerciseId === "arm_stretching") return ARM_STRETCH_KEY_JOINTS;
+  if (exerciseId === "jumping_jacks") return JACKS_KEY_JOINTS;
+  return SQUAT_KEY_JOINTS;
+}
+
 const STREAM_TO_BLAZE: Array<{ key: keyof StreamPose; type: number }> = [
   { key: "nose", type: 0 },
   { key: "leftShoulder", type: 11 },

@@ -99,7 +99,7 @@ export function ChildActivitiesScreen() {
         <Text variant="bodyMedium" style={styles.headerSub}>
           {segment === "games"
             ? ageBand.gamesHint
-            : "Play games or complete movement activities."}
+            : "Camera-guided exercises that count your reps automatically."}
         </Text>
         {segment === "games" ? (
           <View style={styles.bannerWrap}>
@@ -163,7 +163,7 @@ export function ChildActivitiesScreen() {
                   Movement Activity
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  AI pose tracking counts squats, lunges, and jumping jacks from your camera.
+                  AI pose tracking counts squats, arm stretches, and jumping jacks from your camera.
                 </Text>
               </View>
             </View>

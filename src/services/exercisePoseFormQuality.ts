@@ -19,7 +19,7 @@ export type PoseFormFeedback = {
 };
 
 /**
- * Traffic light for kids:
+ * Traffic light:
  * - GREEN = finish the move (or just scored)
  * - RED   = start the move / fix framing
  */
@@ -29,18 +29,19 @@ export function evaluatePoseFormQuality(
   exerciseId?: ExerciseId,
   _frameWidth = 720,
   _frameHeight = 1280,
+  liveHint: PoseDetectionHint | null = null,
 ): PoseFormFeedback {
   const id = exerciseId ?? "squats";
 
   if (moveStatus === "Rep!") {
-    return { quality: "green", message: "+1 Nice!" };
+    return { quality: "green", message: liveHint?.startsWith("+1") ? liveHint : "Nice work!" };
   }
   if (moveStatus === "Move!") {
-    return { quality: "green", message: GO_HINT[id] };
+    return { quality: "green", message: liveHint || GO_HINT[id] };
   }
 
   if (!landmarks?.length) {
-    return { quality: "red", message: "Stand in the border" };
+    return { quality: "red", message: "Stand in the frame" };
   }
 
   if (averagePoseConfidence(landmarks) < MIN_CONFIDENCE) {
@@ -52,10 +53,10 @@ export function evaluatePoseFormQuality(
     return { quality: "red", message: gate.message };
   }
 
-  return { quality: "red", message: READY_HINT[id] };
+  return { quality: "red", message: liveHint || READY_HINT[id] };
 }
 
-/** One kid-facing line for the frame + HUD (never "Watching" / "Move!"). */
+/** Kid-facing coaching line for the frame + HUD. */
 export function workoutStatusLine(
   form: PoseFormFeedback,
   moveStatus: MoveStatus,
@@ -66,13 +67,13 @@ export function workoutStatusLine(
 
   if (moveStatus === "Rep!") {
     if (hint && hint.startsWith("+1")) return hint;
-    return "+1 Nice!";
+    return "Nice work!";
   }
   if (moveStatus === "Move!") {
     return hint || GO_HINT[id];
   }
-  if (form.message) return form.message;
-  return hint || READY_HINT[id];
+  if (hint) return hint;
+  return form.message || READY_HINT[id];
 }
 
 export function formQualityColor(quality: PoseFormQuality): string {

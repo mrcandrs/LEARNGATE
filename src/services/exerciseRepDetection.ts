@@ -15,8 +15,8 @@ function configFor(exerciseId: ExerciseId): DetectorConfig {
       return { motionThreshold: 7, calmThreshold: 4, cooldownMs: 900, minActiveMs: 180 };
     case "squats":
       return { motionThreshold: 9, calmThreshold: 5, cooldownMs: 1300, minActiveMs: 280 };
-    case "lunges":
-      return { motionThreshold: 9, calmThreshold: 5, cooldownMs: 1900, minActiveMs: 350 };
+    case "arm_stretching":
+      return { motionThreshold: 8, calmThreshold: 4, cooldownMs: 1600, minActiveMs: 300 };
   }
 }
 

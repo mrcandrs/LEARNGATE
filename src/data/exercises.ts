@@ -1,4 +1,4 @@
-export type ExerciseId = "jumping_jacks" | "squats" | "lunges";
+export type ExerciseId = "jumping_jacks" | "squats" | "arm_stretching";
 
 export type ExerciseDefinition = {
   id: ExerciseId;
@@ -36,22 +36,25 @@ export const EXERCISES: ExerciseDefinition[] = [
     cardDescription: "Squats — Kids360-style torso tracking.",
   },
   {
-    id: "lunges",
-    title: "Lunge",
-    emoji: "🏃",
-    defaultReps: 10,
+    id: "arm_stretching",
+    title: "Arm Stretching",
+    emoji: "🙆",
+    defaultReps: 8,
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#14B8A6",
-    instruction: "Step back so both knees show. Red = lunge. Green = stand up.",
-    cardDescription: "Lunges — Kids360-style knee tracking.",
+    instruction: "Pulse left twice, then right twice. Ease between pulses — no need to drop arms fully.",
+    cardDescription: "Side stretches — 2 left pulses, then 2 right = 1 rep.",
   },
 ];
 
-/** Maps legacy task payloads (e.g. `jumping`) to current exercise ids. */
+/** Maps legacy task payloads (e.g. `jumping`, `lunges`) to current exercise ids. */
 export function normalizeExerciseId(raw: string | undefined): ExerciseId {
-  if (raw === "squats" || raw === "lunges" || raw === "jumping_jacks") {
+  if (raw === "squats" || raw === "arm_stretching" || raw === "jumping_jacks") {
     return raw;
+  }
+  if (raw === "lunges" || raw === "lunge") {
+    return "arm_stretching";
   }
   if (raw === "jumping") {
     return "jumping_jacks";

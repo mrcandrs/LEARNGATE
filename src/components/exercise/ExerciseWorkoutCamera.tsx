@@ -22,8 +22,8 @@ type Props = {
 };
 
 /**
- * Mirror the preview with isMirrored, but do NOT use library mirrorX —
- * that mirrors with buffer width while ML Kit coords use upright content width.
+ * Keep preview unmirrored so it matches ML Kit landmark space.
+ * (Selfie mirror + overlay flip re-broke left/right — leave both off.)
  */
 export function ExerciseWorkoutCamera({
   enabled,
@@ -87,7 +87,7 @@ export function ExerciseWorkoutCamera({
       device={device}
       format={format}
       isActive={enabled}
-      isMirrored
+      isMirrored={false}
       mirrorX={false}
       resizeMode="cover"
       poseDetectionOptions={poseDetectionOptions}

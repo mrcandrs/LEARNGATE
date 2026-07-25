@@ -6,28 +6,37 @@ import { mapLandmarkToPreview } from "@/services/exercisePoseCoords";
 import {
   FULL_BODY_CONNECTIONS,
   FULL_BODY_JOINTS,
-  SQUAT_KEY_JOINTS,
+  keyJointsForExercise,
 } from "@/services/exercisePoseLandmarks";
 import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseFormQuality";
 
 const MIN_LIKELIHOOD = 0.12;
 
+/**
+ * Preview is unmirrored (isMirrored={false}) so landmarks and skeleton share
+ * the same space. Do not flip X — that reintroduces left/right swaps.
+ */
+const SELFIE_MIRROR_SKELETON = false;
+
 type Props = {
-  /** Landmarks in ML Kit upright + selfie-mirrored content space. */
+  /** Landmarks in ML Kit upright content space (camera buffer, not selfie-flipped). */
   landmarks: PoseLandmark[] | null;
   contentWidth: number;
   contentHeight: number;
   quality: PoseFormQuality;
+  /** Highlights exercise-specific joints larger. */
+  exerciseId?: string;
 };
 
 /**
- * Full-body skeleton overlay. Squats key joints (shoulders/hips/knees) are drawn larger.
+ * Full-body skeleton overlay. Key joints for the active exercise are drawn larger.
  */
 export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
   landmarks,
   contentWidth,
   contentHeight,
   quality,
+  exerciseId,
 }: Props) {
   const [layout, setLayout] = useState({ width: 0, height: 0 });
 
@@ -35,6 +44,7 @@ export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
   const viewWidth = layout.width;
   const viewHeight = layout.height;
   const showSkeleton = Boolean(landmarks?.length) && quality !== "none";
+  const keyJoints = keyJointsForExercise(exerciseId);
 
   const { lines, dots } = useMemo(() => {
     if (!showSkeleton || !landmarks || viewWidth <= 0 || viewHeight <= 0) {
@@ -54,6 +64,7 @@ export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
         viewWidth,
         viewHeight,
         landmarks,
+        SELFIE_MIRROR_SKELETON,
       );
       if (pt) byType.set(lm.type, pt);
     }
@@ -68,17 +79,17 @@ export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
     const dots = FULL_BODY_JOINTS.map((type) => {
       const p = byType.get(type);
       if (!p) return null;
-      return { ...p, key: type, keyJoint: SQUAT_KEY_JOINTS.has(type) };
+      return { ...p, key: type, keyJoint: keyJoints.has(type) };
     }).filter(Boolean) as { x: number; y: number; key: number; keyJoint: boolean }[];
 
     return { lines, dots };
-  }, [showSkeleton, landmarks, contentWidth, contentHeight, viewWidth, viewHeight]);
+  }, [showSkeleton, landmarks, contentWidth, contentHeight, viewWidth, viewHeight, keyJoints]);
 
   if (!showSkeleton) return null;
 
   return (
     <View
-      style={StyleSheet.absoluteFill}
+      style={styles.overlay}
       onLayout={(e) => {
         const { width, height } = e.nativeEvent.layout;
         setLayout((prev) =>
@@ -119,6 +130,9 @@ export const ExercisePoseOverlay = memo(function ExercisePoseOverlay({
 });
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   svg: {
     ...StyleSheet.absoluteFillObject,
   },

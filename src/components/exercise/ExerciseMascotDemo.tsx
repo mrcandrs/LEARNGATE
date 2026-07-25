@@ -30,24 +30,20 @@ function ease(t: number): number {
 }
 
 function onlyJack(open: number): FigurePose {
-  return { footSpread: 0, squatDepth: 0, jackOpen: open, lungeStep: 0, lungeBend: 0, lungeLeadLeg: "right" };
+  return { footSpread: 0, squatDepth: 0, jackOpen: open, armStretch: 0, armStretchSide: "right" };
 }
 
 function onlySquat(depth: number): FigurePose {
-  return { footSpread: 1, squatDepth: depth, jackOpen: 0, lungeStep: 0, lungeBend: 0, lungeLeadLeg: "right" };
+  return { footSpread: 1, squatDepth: depth, jackOpen: 0, armStretch: 0, armStretchSide: "right" };
 }
 
-function onlyLunge(step: number, bend: number, leadLeg: "left" | "right"): FigurePose {
-  return { footSpread: 0, squatDepth: 0, jackOpen: 0, lungeStep: step, lungeBend: bend, lungeLeadLeg: leadLeg };
-}
-
-function leadLegForCycle(cycle: number): "left" | "right" {
-  return cycle % 2 === 1 ? "right" : "left";
+function onlyArmStretch(amount: number, side: "left" | "right"): FigurePose {
+  return { footSpread: 0.5, squatDepth: 0, jackOpen: 0, armStretch: amount, armStretchSide: side };
 }
 
 /**
- * Squat (NASM / Cleveland Clinic): stand → hinge hips back + bend knees → drive up
- * Lunge (Nike / ACE): stand → step forward → lower to 90° both knees → push back up
+ * Demo choreography for each exercise.
+ * Arm stretch: left ×2 → right ×2 = 1 full rep.
  */
 function buildSteps(exerciseId: ExerciseId): DemoStep[] {
   switch (exerciseId) {
@@ -89,27 +85,52 @@ function buildSteps(exerciseId: ExerciseId): DemoStep[] {
         },
       ];
 
-    case "lunges":
+    case "arm_stretching":
       return [
         {
-          caption: "Stand tall — feet together",
-          durationMs: 800,
+          caption: "Stand tall — feet planted, arms at your sides",
+          durationMs: 600,
           poseAt: () => NEUTRAL_FIGURE_POSE,
         },
         {
-          caption: "Step forward and plant your front foot flat",
-          durationMs: 800,
-          poseAt: (t, cycle) => onlyLunge(ease(t), 0, leadLegForCycle(cycle)),
+          caption: "Left arm up and over — stretch #1",
+          durationMs: 900,
+          poseAt: (t) => onlyArmStretch(ease(t), "left"),
         },
         {
-          caption: "Lower down — front thigh parallel, back knee near floor",
-          durationMs: 1000,
-          poseAt: (t, cycle) => onlyLunge(1, ease(t), leadLegForCycle(cycle)),
+          caption: "Arms down",
+          durationMs: 700,
+          poseAt: (t) => onlyArmStretch(1 - ease(t), "left"),
         },
         {
-          caption: "Push through front heel and step back to stand — 1 rep!",
-          durationMs: 1100,
-          poseAt: (t, cycle) => onlyLunge(1 - ease(t), 1 - ease(t), leadLegForCycle(cycle)),
+          caption: "Left arm again — stretch #2",
+          durationMs: 900,
+          poseAt: (t) => onlyArmStretch(ease(t), "left"),
+        },
+        {
+          caption: "Arms down — now switch sides",
+          durationMs: 700,
+          poseAt: (t) => onlyArmStretch(1 - ease(t), "left"),
+        },
+        {
+          caption: "Right arm up and over — stretch #1",
+          durationMs: 900,
+          poseAt: (t) => onlyArmStretch(ease(t), "right"),
+        },
+        {
+          caption: "Arms down",
+          durationMs: 700,
+          poseAt: (t) => onlyArmStretch(1 - ease(t), "right"),
+        },
+        {
+          caption: "Right arm again — stretch #2",
+          durationMs: 900,
+          poseAt: (t) => onlyArmStretch(ease(t), "right"),
+        },
+        {
+          caption: "Arms down — that's 1 rep!",
+          durationMs: 700,
+          poseAt: (t) => onlyArmStretch(1 - ease(t), "right"),
         },
       ];
   }

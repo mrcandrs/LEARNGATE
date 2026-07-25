@@ -117,13 +117,15 @@ export function mapLandmarkToPreview(
   viewWidth: number,
   viewHeight: number,
   allLandmarks?: PoseLandmark[],
+  mirrorX = false,
 ): { x: number; y: number } | null {
   if (contentWidth <= 0 || contentHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) return null;
 
   const sample = allLandmarks?.length ? allLandmarks : [lm];
-  const nx = toNormX(lm.x, contentWidth, sample);
+  const nx0 = toNormX(lm.x, contentWidth, sample);
   const ny = toNormY(lm.y, contentHeight, sample);
-  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return null;
+  if (!Number.isFinite(nx0) || !Number.isFinite(ny)) return null;
+  const nx = mirrorX ? 1 - nx0 : nx0;
 
   const scale = Math.max(viewWidth / contentWidth, viewHeight / contentHeight);
   const drawnW = contentWidth * scale;

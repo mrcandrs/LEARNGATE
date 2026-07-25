@@ -15,7 +15,7 @@ type Props = {
   exerciseId?: ExerciseId;
 };
 
-/** Border + one status line. Taller frame for squats/lunges. */
+/** Border + one status line. Taller frame for full-body exercises. */
 export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
   quality,
   message,

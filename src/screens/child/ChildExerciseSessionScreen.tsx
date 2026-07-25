@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { CommonActions } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Text, useTheme } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -75,7 +76,14 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       clearTimeout(exitTimerRef.current);
       exitTimerRef.current = null;
     }
-    navigation.navigate("ActivitiesMain", { segment: "movement", navKey: Date.now() });
+    // Reset stack so ExerciseSession is not left underneath ActivitiesMain
+    // (returning to the Activities tab later would reopen a stale workout).
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: "ActivitiesMain", params: { segment: "movement", navKey: Date.now() } }],
+      }),
+    );
     if (taskId) {
       navigation.getParent()?.navigate("Home", {
         screen: "TasksList",
@@ -250,13 +258,15 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const stopWorkout = useCallback(() => {
     completedTransitionRef.current = false;
     awardStartedRef.current = false;
+    setCompleted(0);
     setPhase("demo");
     setDemoFinished(true);
     setCameraReady(false);
     setStartingCamera(false);
+    setError(null);
   }, []);
 
-  // Android / gesture back during workout → stop camera, don't pop the stack.
+  // Hardware / gesture back during workout → return to demo (fresh session next start).
   useEffect(() => {
     const unsub = navigation.addListener("beforeRemove", (e) => {
       if (phase !== "workout") return;
@@ -270,6 +280,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     setError(null);
     setDemoFinished(false);
     setDemoRunId((n) => n + 1);
+    setCompleted(0);
     setPhase("demo");
   };
 
@@ -294,6 +305,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
           }
         }
       }
+      setCompleted(0);
       setCameraReady(false);
       completedTransitionRef.current = false;
       awardStartedRef.current = false;
@@ -366,12 +378,13 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        {cameraReady && selectedId === "squats" && poseOverlay ? (
+        {cameraReady && poseOverlay ? (
           <ExercisePoseOverlay
             landmarks={poseOverlay.landmarks}
             contentWidth={poseOverlay.contentWidth}
             contentHeight={poseOverlay.contentHeight}
             quality={formQuality}
+            exerciseId={selectedId}
           />
         ) : null}
 
@@ -409,10 +422,14 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               done={done}
               engineLabel={
                 detectionMode === "stream"
-                  ? `Pose AI · ${EXERCISE_AI_BUILD}`
+                  ? __DEV__
+                    ? `Pose tracking · ${EXERCISE_AI_BUILD}`
+                    : "Pose tracking"
                   : detectionMode === "motion"
-                    ? "⚠ Motion (old path)"
-                    : `Pose · ${EXERCISE_AI_BUILD}`
+                    ? "Motion mode"
+                    : __DEV__
+                      ? `Pose tracking · ${EXERCISE_AI_BUILD}`
+                      : "Pose tracking"
               }
             />
           </View>
@@ -452,10 +469,12 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               </Text>
               <Text style={{ color: c.subtext, fontSize: 11 }}>
                 {detectionMode === "stream"
-                  ? `Pose AI · ${EXERCISE_AI_BUILD}`
+                  ? __DEV__
+                    ? `Pose tracking · ${EXERCISE_AI_BUILD}`
+                    : "Pose tracking"
                   : detectionMode === "pose"
-                    ? `Pose AI (still) · ${EXERCISE_AI_BUILD}`
-                    : "⚠ Motion fallback (old)"}
+                    ? "Pose tracking"
+                    : "Motion mode"}
               </Text>
             </View>
           </View>
@@ -536,7 +555,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               Nice! Now it's your turn.
             </Text>
             <Text variant="bodySmall" style={{ color: c.subtext, textAlign: "center" }}>
-              Stand in the border. Red = start the move. Green = finish it. +1 when you complete a rep.
+              Stand in the frame. Red means start the move. Green means finish it. You get +1 when the rep is complete.
             </Text>
           </View>
         )}

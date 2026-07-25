@@ -4,7 +4,7 @@
  * Half-body needs:
  * - Jumping jack: shoulders + wrists (arms)
  * - Squat: shoulders + hips (hip motion — knees not required)
- * - Lunge: hips + both knees (asymmetry)
+ * - Arm stretching: shoulders + arms
  *
  * Ankles help when visible but are NOT required.
  */
@@ -72,14 +72,18 @@ export function evaluateLegGate(
 ): LegGateResult {
   const ls = pick(landmarks, LM.LEFT_SHOULDER);
   const rs = pick(landmarks, LM.RIGHT_SHOULDER);
-  const lh = pick(landmarks, LM.LEFT_HIP);
-  const rh = pick(landmarks, LM.RIGHT_HIP);
-  const lk = pick(landmarks, LM.LEFT_KNEE);
-  const rk = pick(landmarks, LM.RIGHT_KNEE);
   const lw = pick(landmarks, LM.LEFT_WRIST) ?? pick(landmarks, LM.LEFT_ELBOW);
   const rw = pick(landmarks, LM.RIGHT_WRIST) ?? pick(landmarks, LM.RIGHT_ELBOW);
 
   if (exerciseId === "jumping_jacks") {
+    // Shoulders only — wrists often leave the frame at the top of a jack.
+    if (!(ls || rs)) {
+      return { ok: false, message: "Show your shoulders" };
+    }
+    return { ok: true, message: "" };
+  }
+
+  if (exerciseId === "arm_stretching") {
     if (!(ls || rs)) {
       return { ok: false, message: "Show your shoulders" };
     }
@@ -89,7 +93,7 @@ export function evaluateLegGate(
     return { ok: true, message: "" };
   }
 
-  // Squats — shoulders + hips (one side OK if the other flickers).
+  // Squats — shoulders + hips
   if (exerciseId === "squats") {
     const sL = pick(landmarks, LM.LEFT_SHOULDER, 0.08);
     const sR = pick(landmarks, LM.RIGHT_SHOULDER, 0.08);
@@ -104,17 +108,7 @@ export function evaluateLegGate(
     return { ok: true, message: "" };
   }
 
-  // Lunges — both knees
-  if (!(ls || rs)) {
-    return { ok: false, message: "Show your shoulders" };
-  }
-  if (!(lh || rh)) {
-    return { ok: false, message: "Step back — show your hips" };
-  }
-  if (!(lk && rk)) {
-    return { ok: false, message: "Step back — show both knees" };
-  }
-  return { ok: true, message: "" };
+      return { ok: false, message: "Stand in the frame" };
 }
 
 export function hasCoreLandmarks(landmarks: PoseLandmark[]): boolean {

@@ -15,8 +15,6 @@ import {
 import { streamPoseToLandmarks } from "@/services/exercisePoseLandmarks";
 import {
   normalizePoseLandmarks,
-  mirrorPoseLandmarks,
-  mlKitContentSize,
   resetPoseCoordOrientation,
   type FrameOrientation,
 } from "@/services/exercisePoseCoords";
@@ -36,15 +34,15 @@ const LEGACY_POSE_GAP_MS = 1100;
 const MOTION_FRAME_GAP_MS = 900;
 const EMULATOR_MOTION_FRAME_GAP_MS = 2000;
 const CAMERA_WARMUP_MS = 500;
-/** Skeleton overlay refresh — ~30fps keeps joints glued without flooding React. */
-const SQUAT_SKELETON_UI_MS = 33;
-/** Ignore a second onRep within this window (same squat / duplicate frames). */
-const REP_UI_DEBOUNCE_MS = 500;
+/** Skeleton overlay refresh — ~60fps for snappier joints. */
+const SQUAT_SKELETON_UI_MS = 16;
+/** Ignore duplicate onRep callbacks — keep short so fast jacks are not dropped. */
+const REP_UI_DEBOUNCE_MS = 150;
 
 export type ExerciseDetectionMode = "stream" | "pose" | "motion";
 
 export type PoseOverlayState = {
-  /** Selfie-mirrored landmarks in ML Kit upright content space. */
+  /** Landmarks in ML Kit upright content space (not selfie-mirrored). */
   landmarks: PoseLandmark[];
   contentWidth: number;
   contentHeight: number;
@@ -89,7 +87,8 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
   const lastMessageRef = useRef("");
   const lastLandmarksRef = useRef<PoseLandmark[] | null>(null);
   const lastSkeletonUiAtRef = useRef(0);
-  const showSquatSkeleton = exerciseId === "squats";
+  const showPoseSkeleton =
+    exerciseId === "squats" || exerciseId === "arm_stretching" || exerciseId === "jumping_jacks";
   onRepRef.current = onRep;
 
   const publishHud = useCallback(
@@ -145,16 +144,15 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
         if (poseFailuresRef.current >= 30 && modeRef.current === "stream") {
           poseDetectorRef.current?.reset();
         }
-        if (showSquatSkeleton) setPoseOverlay(null);
-        publishHud("Watching", "Stand in the border", "red", "Stand in the border");
+        if (showPoseSkeleton) setPoseOverlay(null);
+        publishHud("Watching", "Stand in the frame", "red", "Stand in the frame");
         return;
       }
 
       poseFailuresRef.current = 0;
 
-      const { width: contentW } = mlKitContentSize(frameWidth, frameHeight, orientation);
-      const mirrored = mirrorPoseLandmarks(raw, contentW);
-      const oriented = normalizePoseLandmarks(mirrored, frameWidth, frameHeight, orientation);
+      // Landmarks stay in ML Kit / buffer space. Overlay mirrors X in math for selfie.
+      const oriented = normalizePoseLandmarks(raw, frameWidth, frameHeight, orientation);
       const normalized = oriented.landmarks;
 
       const status = poseDetectorRef.current?.feed(normalized) ?? "Watching";
@@ -167,13 +165,14 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
         exerciseId,
         oriented.width,
         oriented.height,
+        hint,
       );
       const quality = form.quality;
       const formMessageLine = workoutStatusLine(form, status, hint, exerciseId);
 
       const now = Date.now();
       const skeletonDue =
-        showSquatSkeleton && now - lastSkeletonUiAtRef.current >= SQUAT_SKELETON_UI_MS;
+        showPoseSkeleton && now - lastSkeletonUiAtRef.current >= SQUAT_SKELETON_UI_MS;
 
       if (skeletonDue) {
         lastSkeletonUiAtRef.current = now;
@@ -189,7 +188,7 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
         publishHud(status, hint, quality, formMessageLine);
       }
     },
-    [exerciseId, publishHud, showSquatSkeleton],
+    [exerciseId, publishHud, showPoseSkeleton],
   );
 
   const feedStreamPose = useCallback(
@@ -210,7 +209,7 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
 
   const switchToMotion = useCallback(() => {
     if (!isExerciseEmulator()) {
-      publishHud("Watching", null, "red", "Pose AI paused — step back into the frame");
+      publishHud("Watching", null, "red", "Step back into the frame");
       return;
     }
     if (modeRef.current === "motion") return;
@@ -322,7 +321,7 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
                 status === "Move!" || status === "Rep!" ? "green" : "red",
                 isExerciseEmulator()
                   ? "Emulator motion mode — move in front of camera"
-                  : "Pose AI unavailable — rebuild the native app",
+                  : "Camera tracking unavailable — rebuild the app",
               );
             }
           }
