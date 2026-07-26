@@ -1829,7 +1829,8 @@ export function ParentChildrenScreen() {
           <Dialog.Title>Assign physical exercise</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Assign an exercise to {exerciseTarget?.name ?? "child"}.
+              Assign an exercise to {exerciseTarget?.name ?? "child"}. Camera pose tracking will count their
+              reps.
             </Text>
             <View style={styles.chipRow}>
               {EXERCISES.map((ex) => (
@@ -1842,10 +1843,18 @@ export function ParentChildrenScreen() {
                     setExercisePoints(String(ex.defaultPoints));
                   }}
                 >
-                  {ex.title}
+                  {ex.emoji} {ex.title}
                 </Chip>
               ))}
             </View>
+            {(() => {
+              const selected = EXERCISES.find((e) => e.id === exerciseId) ?? EXERCISES[0];
+              return (
+                <Text variant="bodySmall" style={[styles.helper, { marginBottom: 8 }]}>
+                  {selected.cardDescription}
+                </Text>
+              );
+            })()}
             <TextInput
               label="Target reps"
               mode="outlined"
@@ -1863,7 +1872,11 @@ export function ParentChildrenScreen() {
           </Dialog.Content>
           <Dialog.Actions>
             <PrimaryButton label="Cancel" mode="text" onPress={() => setExerciseTarget(null)} />
-            <PrimaryButton label={assigning ? "Assigning..." : "Assign"} onPress={() => void assignExercise()} disabled={assigning} />
+            <PrimaryButton
+              label={assigning ? "Assigning..." : "Assign"}
+              onPress={() => void assignExercise()}
+              disabled={assigning}
+            />
           </Dialog.Actions>
         </Dialog>
 

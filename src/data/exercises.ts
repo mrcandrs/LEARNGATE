@@ -15,25 +15,25 @@ export type ExerciseDefinition = {
 export const EXERCISES: ExerciseDefinition[] = [
   {
     id: "jumping_jacks",
-    title: "Jumping Jack",
+    title: "Jumping Jacks",
     emoji: "⭐",
     defaultReps: 10,
     defaultMinutes: 5,
     defaultPoints: 20,
     color: "#8B5CF6",
-    instruction: "Red = arms up. Green = bring arms down. +1 when you finish.",
-    cardDescription: "Jumping jacks — red start, green finish.",
+    instruction: "Raise both arms, then lower them. Each full cycle is one rep.",
+    cardDescription: "Arms up, then down — camera counts each jack.",
   },
   {
     id: "squats",
-    title: "Squat",
+    title: "Squats",
     emoji: "🦵",
     defaultReps: 10,
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#F59E0B",
-    instruction: "Step back so hips show. Red = squat down. Green = stand up.",
-    cardDescription: "Squats — Kids360-style torso tracking.",
+    instruction: "Step back so hips show. Squat down, then stand up for +1.",
+    cardDescription: "Squat down and stand up — hips must stay in frame.",
   },
   {
     id: "arm_stretching",
@@ -43,8 +43,8 @@ export const EXERCISES: ExerciseDefinition[] = [
     defaultMinutes: 5,
     defaultPoints: 25,
     color: "#14B8A6",
-    instruction: "Pulse left twice, then right twice. Ease between pulses — no need to drop arms fully.",
-    cardDescription: "Side stretches — 2 left pulses, then 2 right = 1 rep.",
+    instruction: "Pulse left twice, then right twice. A small bob between pulses is enough.",
+    cardDescription: "Two left pulses, then two right — that is 1 rep.",
   },
 ];
 

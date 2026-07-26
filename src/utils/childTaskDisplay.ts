@@ -42,7 +42,18 @@ export function taskSubtitle(task: TaskRow): string {
     return "Camera verification needed";
   }
   if (task.category === "exercise") {
-    return "Reps required · Physical activity";
+    let reps: number | null = null;
+    if (task.description) {
+      try {
+        const parsed = JSON.parse(task.description) as { targetReps?: number };
+        if (typeof parsed?.targetReps === "number" && parsed.targetReps > 0) {
+          reps = parsed.targetReps;
+        }
+      } catch {
+        // ignore non-JSON descriptions
+      }
+    }
+    return reps != null ? `${reps} reps · Camera tracking` : "Reps required · Camera tracking";
   }
   if (task.category === "learning") {
     return "Learning game · Tap to play";

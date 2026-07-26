@@ -22,7 +22,7 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { useChildTaskActions } from "@/hooks/useChildTaskActions";
 import { formatAppError } from "@/utils/errors";
 import type { ChildTabParamList } from "@/types/navigation";
-import type { ChildTaskCategory, TaskRow } from "@/utils/childTaskDisplay";
+import { taskSubtitle, type ChildTaskCategory, type TaskRow } from "@/utils/childTaskDisplay";
 import type { TaskAuditRow } from "@/services/taskAuditTrail";
 import { cacheChildTasks, readCachedChildTasks } from "@/services/offlineCache";
 import { OFFLINE_MSG } from "@/services/offlineMessages";
@@ -203,7 +203,7 @@ export function ChildTasksScreen() {
           task.category === "learning"
             ? `Learning · +${task.xp_reward} stars`
             : task.category === "exercise"
-              ? `Movement · +${task.xp_reward} stars`
+              ? taskSubtitle(task)
               : task.requires_camera
                 ? "Camera verification"
                 : `Chore · +${task.xp_reward} stars`

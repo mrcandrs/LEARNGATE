@@ -203,7 +203,7 @@ export function ExerciseMascotDemo({ exerciseId, exerciseTitle, onComplete }: Pr
       </Text>
 
       <View style={[styles.stage, { backgroundColor: "#F1F8F4" }]}>
-        <ExerciseDemoFigure width={220} height={260} pose={pose} />
+        <ExerciseDemoFigure width={280} height={330} pose={pose} />
       </View>
 
       <View style={[styles.captionBox, { backgroundColor: c.primary }]}>
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 4,
-    minHeight: 270,
+    minHeight: 340,
   },
   captionBox: {
     borderRadius: radii.md,

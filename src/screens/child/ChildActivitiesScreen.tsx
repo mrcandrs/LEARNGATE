@@ -176,17 +176,17 @@ export function ChildActivitiesScreen() {
                 >
                   <View style={[styles.moveCard, { backgroundColor: c.card, borderColor: c.border }]}>
                     <View style={styles.moveBadge}>
-                      <Text style={styles.moveBadgeText}>{ex.defaultReps} reps · +{ex.defaultPoints} stars</Text>
-                    </View>
-                    <View style={styles.moveBody}>
-                      <Text style={styles.moveEmoji}>{ex.emoji}</Text>
-                      <Text variant="titleSmall" style={styles.moveTitle}>
-                        {ex.title}
-                      </Text>
-                      <Text variant="bodySmall" style={styles.moveDesc} numberOfLines={2}>
-                        {ex.cardDescription}
+                      <Text style={styles.moveBadgeText}>
+                        {ex.defaultReps} reps · +{ex.defaultPoints} stars
                       </Text>
                     </View>
+                    <Text style={styles.moveEmoji}>{ex.emoji}</Text>
+                    <Text variant="titleSmall" style={styles.moveTitle} numberOfLines={1}>
+                      {ex.title}
+                    </Text>
+                    <Text variant="bodySmall" style={styles.moveDesc} numberOfLines={3}>
+                      {ex.cardDescription}
+                    </Text>
                     <Text style={[styles.moveStart, { color: c.primary }]}>Start ›</Text>
                   </View>
                 </Pressable>
@@ -246,10 +246,11 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     moveCard: {
       borderRadius: radii.md,
       padding: 12,
-      height: 188,
+      minHeight: 200,
       borderWidth: 1,
       overflow: "hidden",
-      justifyContent: "space-between",
+      justifyContent: "flex-start",
+      gap: 6,
       ...shadows.card,
     },
     moveBadge: {
@@ -260,16 +261,17 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
       borderRadius: radii.sm,
     },
     moveBadgeText: { color: c.subtext, fontSize: 11, fontWeight: "600" },
-    moveBody: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingVertical: 6,
-      minHeight: 96,
-    },
-    moveEmoji: { fontSize: 32, marginBottom: 4 },
+    moveEmoji: { fontSize: 32, textAlign: "center", marginTop: 2 },
     moveTitle: { color: c.text, fontWeight: "700", textAlign: "center" },
-    moveDesc: { color: c.subtext, textAlign: "center", marginTop: 4, lineHeight: 16 },
-    moveStart: { fontWeight: "700", marginTop: 8 },
+    moveDesc: {
+      color: c.subtext,
+      textAlign: "center",
+      lineHeight: 18,
+      fontSize: 12,
+      minHeight: 54,
+      paddingHorizontal: 2,
+      flexShrink: 0,
+    },
+    moveStart: { fontWeight: "700", marginTop: 4 },
   });
 }

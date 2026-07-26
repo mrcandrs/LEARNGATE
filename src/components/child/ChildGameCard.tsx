@@ -18,14 +18,20 @@ export function ChildGameCard({ game, compact = false, footerNote = "10 question
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{game.badge}</Text>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.badgeSpacer} />
+      )}
       <View style={styles.topRow}>
         <Text style={styles.glyph}>{game.glyph}</Text>
         <MaterialCommunityIcons name={game.icon} size={compact ? 22 : 26} color="rgba(255,255,255,0.95)" />
       </View>
-      <Text style={styles.teaser}>{game.teaser}</Text>
-      <Text style={styles.name}>{game.title}</Text>
-      <Text style={styles.blurb} numberOfLines={2}>
+      <Text style={styles.teaser} numberOfLines={1}>
+        {game.teaser}
+      </Text>
+      <Text style={styles.name} numberOfLines={1}>
+        {game.title}
+      </Text>
+      <Text style={styles.blurb} numberOfLines={compact ? 2 : 3}>
         {game.blurb}
       </Text>
       <View style={styles.footer}>
@@ -41,13 +47,13 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radii.md,
     padding: 14,
-    height: 196,
+    minHeight: 210,
     overflow: "hidden",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     ...shadows.card,
   },
   cardCompact: {
-    height: 168,
+    minHeight: 180,
     padding: 12,
   },
   deco: {
@@ -65,6 +71,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radii.pill,
+    marginBottom: 4,
+  },
+  badgeSpacer: {
+    height: 4,
   },
   badgeText: {
     color: "#FFFFFF",
@@ -77,7 +87,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginTop: 2,
   },
   glyph: {
     color: "#FFFFFF",
@@ -89,7 +98,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.95)",
     fontSize: 12,
     fontWeight: "800",
-    marginTop: 4,
+    marginTop: 6,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -102,14 +111,16 @@ const styles = StyleSheet.create({
   blurb: {
     color: "rgba(255,255,255,0.92)",
     fontSize: 12,
-    lineHeight: 16,
-    flex: 1,
+    lineHeight: 17,
+    marginTop: 6,
+    minHeight: 51,
+    flexShrink: 0,
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 6,
+    marginTop: 10,
   },
   footerText: {
     color: "#FFFDE7",
