@@ -8,6 +8,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import { getExerciseById, normalizeExerciseId } from "@/data/exercises";
@@ -55,6 +56,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const completedTransitionRef = useRef(false);
   const awardStartedRef = useRef(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -232,6 +234,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     const timer = setTimeout(() => {
       setCameraReady(false);
       setPhase("completed");
+      setCelebrationKey((key) => key + 1);
     }, 1000);
     return () => clearTimeout(timer);
   }, [done, phase]);
@@ -328,6 +331,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   if (phase === "completed") {
     return (
       <View style={[styles.workoutRoot, { backgroundColor: c.background }]}>
+        <ConfettiBurst triggerKey={celebrationKey} />
         <View style={[styles.completedCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <MaterialCommunityIcons name="check-circle" size={88} color={c.primary} />
           <Text variant="headlineSmall" style={{ color: c.primaryDark, fontWeight: "900", textAlign: "center" }}>

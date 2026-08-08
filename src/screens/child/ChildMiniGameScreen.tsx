@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Card, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
 import { radii, shadows } from "@/theme/theme";
@@ -391,6 +392,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
   const [round, setRound] = useState(0);
   const [score, setScore] = useState(0);
   const [done, setDone] = useState(false);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
   const lastSpokenRoundRef = useRef<number | null>(null);
@@ -506,6 +508,7 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
         const next = round + 1;
         if (next >= settings.rounds) {
           setDone(true);
+          setCelebrationKey((key) => key + 1);
         } else {
           setRound(next);
         }
@@ -626,37 +629,40 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
   if (done) {
     return (
-      <ScreenContainer scroll>
-        <Card style={[styles.summaryCard, { backgroundColor: c.card }, shadows.card]}>
-          <Card.Content style={styles.summaryInner}>
-            <MaterialCommunityIcons name="trophy" size={56} color={c.warning} />
-            <Text variant="headlineSmall" style={styles.summaryTitle}>
-              Game complete
-            </Text>
-            <Text variant="titleMedium" style={styles.summaryScore}>
-              Score: {score} / {settings.rounds}
-            </Text>
-            <Text variant="bodyMedium" style={styles.summaryXp}>
-              {taskId ? "Completing learning task..." : `+${xpEarned} XP earned this round`}
-            </Text>
-            {isSavingReward && !rewardSaved ? (
+      <View style={styles.celebrationRoot}>
+        <ConfettiBurst triggerKey={celebrationKey} />
+        <ScreenContainer scroll>
+          <Card style={[styles.summaryCard, { backgroundColor: c.card }, shadows.card]}>
+            <Card.Content style={styles.summaryInner}>
+              <MaterialCommunityIcons name="trophy" size={56} color={c.warning} />
+              <Text variant="headlineSmall" style={styles.summaryTitle}>
+                Game complete
+              </Text>
+              <Text variant="titleMedium" style={styles.summaryScore}>
+                Score: {score} / {settings.rounds}
+              </Text>
+              <Text variant="bodyMedium" style={styles.summaryXp}>
+                {taskId ? "Completing learning task..." : `+${xpEarned} XP earned this round`}
+              </Text>
+              {isSavingReward && !rewardSaved ? (
+                <Text variant="bodySmall" style={styles.summaryMeta}>
+                  Saving reward...
+                </Text>
+              ) : null}
+              {saveError ? (
+                <Text variant="bodySmall" style={styles.errorText}>
+                  {saveError}
+                </Text>
+              ) : null}
               <Text variant="bodySmall" style={styles.summaryMeta}>
-                Saving reward...
+                {difficultyText}
               </Text>
-            ) : null}
-            {saveError ? (
-              <Text variant="bodySmall" style={styles.errorText}>
-                {saveError}
-              </Text>
-            ) : null}
-            <Text variant="bodySmall" style={styles.summaryMeta}>
-              {difficultyText}
-            </Text>
-            <PrimaryButton label="Play again" onPress={restart} />
-            <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("ActivitiesMain")} />
-          </Card.Content>
-        </Card>
-      </ScreenContainer>
+              <PrimaryButton label="Play again" onPress={restart} />
+              <PrimaryButton label="Back to games" mode="outlined" onPress={() => navigation.navigate("ActivitiesMain")} />
+            </Card.Content>
+          </Card>
+        </ScreenContainer>
+      </View>
     );
   }
 
@@ -884,6 +890,9 @@ export function ChildMiniGameScreen({ route, navigation }: Props) {
 
 const createStyles = (c: ReturnType<typeof useAppColors>) =>
   StyleSheet.create({
+  celebrationRoot: {
+    flex: 1,
+  },
   hud: {
     flexDirection: "row",
     justifyContent: "space-between",

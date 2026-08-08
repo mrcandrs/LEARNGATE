@@ -7,6 +7,7 @@ import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
+import { ConfettiBurst } from "@/components/ConfettiBurst";
 import { AchievementLadderCard } from "@/components/AchievementLadderCard";
 import { ACHIEVEMENT_CATEGORY_LABELS } from "@/data/achievements";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -51,6 +52,7 @@ export function ChildHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tasksOfflineNotice, setTasksOfflineNotice] = useState<string | null>(null);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const {
     stats: achievementStats,
     ladderGroups,
@@ -174,7 +176,9 @@ export function ChildHomeScreen() {
   const offlineNotice = profileOfflineNotice ?? tasksOfflineNotice;
   const previewTasks = tasks.slice(0, 4);
   return (
-    <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
+    <View style={styles.celebrationRoot}>
+      <ConfettiBurst triggerKey={celebrationKey} />
+      <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
       {child ? (
         <ChildDashboardHeader
           name={child.name}
@@ -341,7 +345,10 @@ export function ChildHomeScreen() {
                       isClaimed={isClaimed}
                       claimingId={claimingId}
                       onClaim={(tier) =>
-                        void claimAchievement(tier.definition.id, () => void refreshProfile(true))
+                        void claimAchievement(tier.definition.id, () => {
+                          setCelebrationKey((key) => key + 1);
+                          void refreshProfile(true);
+                        })
                       }
                     />
                   ))}
@@ -373,6 +380,7 @@ export function ChildHomeScreen() {
         durationMs={3500}
       />
     </ScreenContainer>
+    </View>
   );
 }
 
@@ -394,6 +402,9 @@ const statStyles = StyleSheet.create({
 
 function createStyles(c: ReturnType<typeof useAppColors>) {
   return StyleSheet.create({
+    celebrationRoot: {
+      flex: 1,
+    },
     pad: { paddingHorizontal: 16, paddingBottom: 28, gap: 10 },
     streakCard: {
       flexDirection: "row",
