@@ -24,7 +24,8 @@ export function useChildAchievements(
   const [newUnlockTitle, setNewUnlockTitle] = useState<string | null>(null);
   const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set());
   const [claimingId, setClaimingId] = useState<string | null>(null);
-  const [claimToast, setClaimToast] = useState<{ message: string; variant: "success" | "error" } | null>(null);
+  const [claimCelebration, setClaimCelebration] = useState<{ stars: number } | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const progress = useMemo(() => (stats ? evaluateAchievements(stats) : []), [stats]);
   const ladderProgress = useMemo(() => (stats ? evaluateAchievementLadders(stats) : []), [stats]);
@@ -76,6 +77,8 @@ export function useChildAchievements(
   }, [refresh]);
 
   const clearNewUnlock = useCallback(() => setNewUnlockTitle(null), []);
+  const clearClaimCelebration = useCallback(() => setClaimCelebration(null), []);
+  const clearClaimError = useCallback(() => setClaimError(null), []);
 
   const claimAchievement = useCallback(
     async (achievementId: string, onStarsAwarded?: () => void) => {
@@ -97,14 +100,11 @@ export function useChildAchievements(
               }
             : prev
         );
-        setClaimToast({
-          message: bonus > 0 ? `+${bonus} stars claimed!` : result.message,
-          variant: "success",
-        });
+        setClaimCelebration({ stars: bonus > 0 ? bonus : 0 });
         onStarsAwarded?.();
         void refresh(true);
       } else {
-        setClaimToast({ message: result.message, variant: "error" });
+        setClaimError(result.message);
       }
     },
     [child, refresh]
@@ -126,8 +126,10 @@ export function useChildAchievements(
     clearNewUnlock,
     claimAchievement,
     claimingId,
-    claimToast,
-    clearClaimToast: () => setClaimToast(null),
+    claimCelebration,
+    clearClaimCelebration,
+    claimError,
+    clearClaimError,
     isClaimed,
   };
 }

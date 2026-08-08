@@ -6,8 +6,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { ActivityIndicator, Card, Snackbar, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { ParentManageToast } from "@/components/parent/ParentManageToast";
-import { ConfettiBurst } from "@/components/ConfettiBurst";
+import { AchievementClaimModal } from "@/components/child/AchievementClaimModal";
 import { AchievementLadderCard } from "@/components/AchievementLadderCard";
 import { ACHIEVEMENT_CATEGORY_LABELS } from "@/data/achievements";
 import { ScreenContainer } from "@/components/ScreenContainer";
@@ -52,7 +51,6 @@ export function ChildHomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tasksOfflineNotice, setTasksOfflineNotice] = useState<string | null>(null);
-  const [celebrationKey, setCelebrationKey] = useState(0);
   const {
     stats: achievementStats,
     ladderGroups,
@@ -63,8 +61,10 @@ export function ChildHomeScreen() {
     refresh: refreshAchievements,
     claimAchievement,
     claimingId,
-    claimToast,
-    clearClaimToast,
+    claimCelebration,
+    clearClaimCelebration,
+    claimError,
+    clearClaimError,
     isClaimed,
   } = useChildAchievements(child);
 
@@ -176,9 +176,7 @@ export function ChildHomeScreen() {
   const offlineNotice = profileOfflineNotice ?? tasksOfflineNotice;
   const previewTasks = tasks.slice(0, 4);
   return (
-    <View style={styles.celebrationRoot}>
-      <ConfettiBurst triggerKey={celebrationKey} />
-      <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
+    <ScreenContainer scroll contentPadding={0} includeTopInset={false} onRefresh={onRefresh} refreshing={refreshing}>
       {child ? (
         <ChildDashboardHeader
           name={child.name}
@@ -346,7 +344,6 @@ export function ChildHomeScreen() {
                       claimingId={claimingId}
                       onClaim={(tier) =>
                         void claimAchievement(tier.definition.id, () => {
-                          setCelebrationKey((key) => key + 1);
                           void refreshProfile(true);
                         })
                       }
@@ -372,15 +369,15 @@ export function ChildHomeScreen() {
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={4000}>
         {snackbar ?? ""}
       </Snackbar>
-      <ParentManageToast
-        visible={claimToast != null}
-        message={claimToast?.message ?? ""}
-        variant={claimToast?.variant ?? "success"}
-        onHide={clearClaimToast}
-        durationMs={3500}
+      <Snackbar visible={Boolean(claimError)} onDismiss={clearClaimError} duration={4000}>
+        {claimError ?? ""}
+      </Snackbar>
+      <AchievementClaimModal
+        visible={claimCelebration != null}
+        stars={claimCelebration?.stars ?? 0}
+        onDismiss={clearClaimCelebration}
       />
     </ScreenContainer>
-    </View>
   );
 }
 
@@ -402,9 +399,6 @@ const statStyles = StyleSheet.create({
 
 function createStyles(c: ReturnType<typeof useAppColors>) {
   return StyleSheet.create({
-    celebrationRoot: {
-      flex: 1,
-    },
     pad: { paddingHorizontal: 16, paddingBottom: 28, gap: 10 },
     streakCard: {
       flexDirection: "row",
