@@ -13,6 +13,7 @@ import { effectiveUnlockEndMs, formatUnlockRemaining, isUnlockActive } from "@/u
 import { unlockPricingKey } from "@/utils/appUnlockPackages";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -75,6 +76,7 @@ function groupUnlocks(rows: ChildActiveUnlock[], nowMs: number): Map<string, Gro
 
 export function ParentActiveUnlocksCard({ children }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const [rows, setRows] = useState<ChildActiveUnlock[]>([]);
   const [tick, setTick] = useState(0);
 
@@ -131,8 +133,8 @@ export function ParentActiveUnlocksCard({ children }: Props) {
       <Card.Content style={styles.content}>
         <ParentSectionHeader
           icon="lock-open-variant-outline"
-          title="Currently unlocked apps"
-          subtitle="Apps your children can use right now from approved star unlocks. Timers update live."
+          title={t("parent.unlocks.currentTitle")}
+          subtitle={t("parent.unlocks.currentSubtitle")}
           style={styles.header}
         />
 
@@ -151,7 +153,7 @@ export function ParentActiveUnlocksCard({ children }: Props) {
                     {item.label}
                   </Text>
                   <Text variant="bodySmall" style={{ color: c.subtext }}>
-                    {item.duration ? unlockDurationLabel(item.duration) : "Unlocked"}
+                    {item.duration ? unlockDurationLabel(item.duration) : t("child.unlocks.unlocked")}
                   </Text>
                 </View>
                 <Text variant="bodySmall" style={{ color: c.primary, fontWeight: "700" }}>

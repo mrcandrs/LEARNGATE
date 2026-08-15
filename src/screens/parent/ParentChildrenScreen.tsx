@@ -6,6 +6,8 @@ import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { createClient } from "@supabase/supabase-js";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Card, Chip, Dialog, Divider, IconButton, List, Portal, Switch, Text, TextInput, useTheme } from "react-native-paper";
+import { useLocale } from "@/store/LocaleContext";
+import { localizedExercise, localizedAgeBand, type TranslateFn } from "@/i18n/helpers";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { StepperControl } from "@/components/parent/StepperControl";
@@ -125,26 +127,28 @@ function normalizeJoined<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
-function formatDailyLimitSummary(minutes: number): string {
+function formatDailyLimitSummary(minutes: number, t: TranslateFn): string {
   if (minutes >= 60 && minutes % 60 === 0) {
-    return `${minutes / 60} hr`;
+    return t("parent.children.hoursOnly", { hours: minutes / 60 });
   }
   if (minutes >= 60) {
     const hrs = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+    return mins > 0
+      ? t("parent.children.hoursMinutes", { hours: hrs, minutes: mins })
+      : t("parent.children.hoursOnly", { hours: hrs });
   }
-  return `${minutes} min`;
+  return t("parent.children.minutesOnly", { minutes });
 }
 
-function audioRateLabel(rate: number): string {
+function audioRateLabel(rate: number, t: TranslateFn): string {
   if (rate <= 0.86) {
-    return "Slow";
+    return t("parent.children.audioSlow");
   }
   if (rate >= 0.98) {
-    return "Fast";
+    return t("parent.children.audioFast");
   }
-  return "Medium";
+  return t("parent.children.audioMedium");
 }
 
 type ChildDraft = {
@@ -158,6 +162,7 @@ type ChildDraft = {
 
 export function ParentChildrenScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const { t } = useLocale();
   const route = useRoute<RouteProp<ParentTabParamList, "Children">>();
   const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const theme = useTheme();
@@ -285,7 +290,7 @@ export function ParentChildrenScreen() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error(t("parent.overview.notSignedIn"))));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -415,8 +420,8 @@ export function ParentChildrenScreen() {
       return;
     }
     setUsedApps([]);
-    showSuccess("Recorded app history cleared. New apps will reappear as they are opened.");
-  }, [selectedChildId, showError, showSuccess]);
+    showSuccess(t("parent.children.recordedAppHistoryCleared"));
+  }, [selectedChildId, showError, showSuccess, t]);
 
   const loadSubmissionsPreview = useCallback(async (childId: string) => {
     if (!supabase) {
@@ -477,18 +482,18 @@ export function ParentChildrenScreen() {
     const draft = drafts[childId];
     const { value: dailyLimit, error: limitError } = parseDailyLimitMinutes(draft.daily_limit_minutes);
     if (limitError || dailyLimit == null) {
-      showError(limitError ?? "Invalid daily limit.");
+      showError(limitError ?? t("parent.children.invalidDailyLimit"));
       return false;
     }
 
     const startResult = validateBedtimeForDb(draft.bedtime_start);
     if (startResult.error || !startResult.value) {
-      showError(startResult.error ?? "Invalid bedtime start.");
+      showError(startResult.error ?? t("parent.children.invalidBedtimeStart"));
       return false;
     }
     const endResult = validateBedtimeForDb(draft.bedtime_end);
     if (endResult.error || !endResult.value) {
-      showError(endResult.error ?? "Invalid bedtime end.");
+      showError(endResult.error ?? t("parent.children.invalidBedtimeEnd"));
       return false;
     }
     const bedtimeStart = startResult.value;
@@ -543,10 +548,10 @@ export function ParentChildrenScreen() {
       const childOk = await saveChild(childId);
       const rulesOk = childOk ? await saveScreenRules(childId) : false;
       if (childOk && rulesOk) {
-        showSuccess("All changes saved.");
+        showSuccess(t("parent.children.allChangesSaved"));
         await loadScreenRules(childId);
       } else if (childOk) {
-        showSuccess("Screen limits saved. App blocking could not be saved.");
+        showSuccess(t("parent.children.screenLimitsSavedAppBlockFailed"));
       }
     } finally {
       setSaveBusyChildId(null);
@@ -563,7 +568,7 @@ export function ParentChildrenScreen() {
       return;
     }
     setChildren((prev) => prev.map((child) => (child.id === childId ? { ...child, audio_guide_rate: rate } : child)));
-    showSuccess("Audio guide pace saved.");
+    showSuccess(t("parent.children.audioPaceSaved"));
   };
 
   const toggleBlockedGroup = (group: BlockableAppGroup) => {
@@ -600,7 +605,7 @@ export function ParentChildrenScreen() {
       error: userError,
     } = await supabase.auth.getUser();
     if (userError || !user) {
-      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error(t("parent.overview.notSignedIn"))));
       setReviewBusyId(null);
       return;
     }
@@ -634,7 +639,7 @@ export function ParentChildrenScreen() {
       setReviewBusyId(null);
       return;
     }
-    showSuccess("Submission approved.");
+    showSuccess(t("parent.submissions.approvedMsg"));
     setReviewBusyId(null);
     if (selectedChildId) {
       await loadSubmissionsPreview(selectedChildId);
@@ -651,7 +656,7 @@ export function ParentChildrenScreen() {
       error: userError,
     } = await supabase.auth.getUser();
     if (userError || !user) {
-      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error(t("parent.overview.notSignedIn"))));
       setReviewBusyId(null);
       return;
     }
@@ -678,7 +683,7 @@ export function ParentChildrenScreen() {
     }
     setRejectTarget(null);
     setRejectNote("");
-    showSuccess("Submission rejected. Child can try again.");
+    showSuccess(t("parent.submissions.rejectedMsg"));
     setReviewBusyId(null);
     if (selectedChildId) {
       await loadSubmissionsPreview(selectedChildId);
@@ -692,7 +697,7 @@ export function ParentChildrenScreen() {
       return;
     }
     if (!newChildName.trim() || !newChildBirthday.trim() || !newChildEmail.trim()) {
-      showError("Name, birthday, and child email are required.");
+      showError(t("parent.children.nameAndBirthdayEmailRequired"));
       return;
     }
 
@@ -707,7 +712,7 @@ export function ParentChildrenScreen() {
     } = await supabase.auth.getUser();
 
     if (parentUserError || !parentUser) {
-      showError(formatAppError(parentUserError ?? new Error("Parent session not found.")));
+      showError(formatAppError(parentUserError ?? new Error(t("parent.children.parentSessionNotFound"))));
       return;
     }
 
@@ -716,7 +721,7 @@ export function ParentChildrenScreen() {
     const loginSecret = `LG-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
     if (!env.supabaseUrl || !env.supabaseAnonKey) {
       setIsCreating(false);
-      showError("Supabase is not configured.");
+      showError(t("parent.children.supabaseNotConfigured"));
       return;
     }
 
@@ -741,7 +746,7 @@ export function ParentChildrenScreen() {
 
     if (signUpError || !signUpData.user?.id) {
       setIsCreating(false);
-      showError(formatAppError(signUpError ?? new Error("Failed to create child login account.")));
+      showError(formatAppError(signUpError ?? new Error(t("parent.children.childLoginAccountFailed"))));
       return;
     }
 
@@ -765,7 +770,7 @@ export function ParentChildrenScreen() {
     setNewChildBirthday(defaultBirthdayForNewChild());
     setNewChildEmail("");
     setShowCreateDialog(false);
-    showSuccess(`Child registered! PIN: ${pin}`);
+    showSuccess(t("parent.children.childRegisteredPin", { pin }));
     await loadChildren(false, true);
   };
 
@@ -788,7 +793,7 @@ export function ParentChildrenScreen() {
       showError(formatAppError(updateError));
       return;
     }
-    showSuccess(`Birthday updated · now age ${validated.age}`);
+    showSuccess(t("parent.children.birthdayUpdated", { age: validated.age }));
     await loadChildren(false, true);
   };
 
@@ -804,7 +809,7 @@ export function ParentChildrenScreen() {
       showError(formatAppError(pinError));
       return;
     }
-    showSuccess(`PIN updated · ${pin}`);
+    showSuccess(t("parent.children.pinUpdated", { pin }));
     await loadChildren(false, true);
   };
 
@@ -823,11 +828,11 @@ export function ParentChildrenScreen() {
     const reps = Number(exerciseReps);
     const pts = Number(exercisePoints);
     if (Number.isNaN(reps) || reps <= 0 || reps > 999) {
-      showError("Exercise reps must be a valid number.");
+      showError(t("parent.children.exerciseRepsInvalid"));
       return;
     }
     if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      showError("Exercise points must be a valid number.");
+      showError(t("parent.children.exercisePointsInvalid"));
       return;
     }
 
@@ -836,7 +841,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      showError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error(t("parent.overview.notSignedIn"))));
       return;
     }
 
@@ -861,7 +866,7 @@ export function ParentChildrenScreen() {
     }
 
     setExerciseTarget(null);
-    showSuccess(`Exercise assigned: ${def.title} (${reps} reps)`);
+    showSuccess(t("parent.children.exerciseAssigned", { title: localizedExercise(def.id, t).title, reps }));
   };
 
   const openAssignLearning = (child: ChildRow) => {
@@ -879,7 +884,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      showError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error(t("parent.overview.notSignedIn"))));
       return;
     }
 
@@ -887,7 +892,7 @@ export function ParentChildrenScreen() {
       getGamesForChildAge(getChildAge(learningTarget)).find((g) => g.id === learningGameId) ??
       getGamesForChildAge(getChildAge(learningTarget))[0];
     if (!game) {
-      showError("No learning games are available for this child's age.");
+      showError(t("parent.children.noLearningGamesForAge"));
       return;
     }
     const difficultyLevel = difficultyTierToLevel(learningDifficulty);
@@ -910,7 +915,13 @@ export function ParentChildrenScreen() {
       return;
     }
     setLearningTarget(null);
-    showSuccess(`Learning task assigned: ${game.title} (${difficultyTierLabel(learningDifficulty)}, +${xpReward} stars)`);
+    showSuccess(
+      t("parent.children.learningTaskAssigned", {
+        title: game.title,
+        difficulty: difficultyTierLabel(learningDifficulty),
+        xp: xpReward,
+      })
+    );
   };
 
   const openAssignChore = (child: ChildRow) => {
@@ -924,12 +935,12 @@ export function ParentChildrenScreen() {
       return;
     }
     if (!choreTitle.trim()) {
-      showError("Chore title is required.");
+      showError(t("parent.children.choreTitleRequired"));
       return;
     }
     const pts = Number(chorePoints);
     if (Number.isNaN(pts) || pts < 0 || pts > 9999) {
-      showError("Chore points must be a valid number.");
+      showError(t("parent.children.chorePointsInvalid"));
       return;
     }
     const {
@@ -937,7 +948,7 @@ export function ParentChildrenScreen() {
       error: uError,
     } = await supabase.auth.getUser();
     if (uError || !user) {
-      showError(formatAppError(uError ?? new Error("Not signed in.")));
+      showError(formatAppError(uError ?? new Error(t("parent.overview.notSignedIn"))));
       return;
     }
 
@@ -959,7 +970,7 @@ export function ParentChildrenScreen() {
       return;
     }
     setChoreTarget(null);
-    showSuccess(`Chore assigned: ${choreTitle.trim()}`);
+    showSuccess(t("parent.children.choreAssigned", { title: choreTitle.trim() }));
   };
 
   const onRefresh = useCallback(() => {
@@ -1029,14 +1040,19 @@ export function ParentChildrenScreen() {
     }
     const dailyMinutes = Number.parseInt(selectedDraft.daily_limit_minutes, 10);
     const dailyLabel = Number.isFinite(dailyMinutes)
-      ? formatDailyLimitSummary(dailyMinutes)
-      : `${selectedChild.daily_limit_minutes} min`;
-    const limitPart = selectedDraft.screen_limit_enabled ? `${dailyLabel} daily limit` : "Screen limit off";
+      ? formatDailyLimitSummary(dailyMinutes, t)
+      : t("parent.children.minutesOnly", { minutes: selectedChild.daily_limit_minutes });
+    const limitPart = selectedDraft.screen_limit_enabled
+      ? t("parent.children.ruleSummaryDailyLimit", { label: dailyLabel })
+      : t("parent.children.ruleSummaryScreenLimitOff");
     const bedPart = selectedDraft.bedtime_enabled
-      ? `Bedtime ${formatBedtime12h(selectedDraft.bedtime_start)} to ${formatBedtime12h(selectedDraft.bedtime_end)}`
-      : "Bedtime off";
-    return `Current rule: ${limitPart} • ${bedPart} • Sound: ${audioRateLabel(selectedAudioRate)}`;
-  }, [selectedChild, selectedDraft, selectedAudioRate]);
+      ? t("parent.children.ruleSummaryBedtime", {
+          start: formatBedtime12h(selectedDraft.bedtime_start),
+          end: formatBedtime12h(selectedDraft.bedtime_end),
+        })
+      : t("parent.children.ruleSummaryBedtimeOff");
+    return t("parent.children.ruleSummary", { limitPart, bedPart, sound: audioRateLabel(selectedAudioRate, t) });
+  }, [selectedChild, selectedDraft, selectedAudioRate, t]);
 
   const removeChildAccount = async () => {
     if (!supabase || !childToDelete) {
@@ -1055,38 +1071,38 @@ export function ParentChildrenScreen() {
     if (selectedChildId === removedId) {
       setSelectedChildId(null);
     }
-    showSuccess(`${childToDelete.name} was removed.`);
+    showSuccess(t("parent.children.childRemoved", { name: childToDelete.name }));
     await loadChildren(false, true);
   };
 
   const formatSubmissionTime = (iso: string) => {
     const date = new Date(iso);
     const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return `Photo submitted at ${time}`;
+    return t("parent.children.photoSubmittedAt", { time });
   };
 
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
-        Child location, tasks, screen time, and app controls.
+        {t("parent.children.kicker")}
       </Text>
 
-      {isEmpty ? <Text>No children found for this parent account yet.</Text> : null}
+      {isEmpty ? <Text>{t("parent.children.noChildrenFound")}</Text> : null}
 
       {children.length > 0 ? (
         <Card style={styles.childCard}>
           <Card.Content style={styles.cardContent}>
             <ParentSectionHeader
               icon="account-child"
-              title="Selected Child"
-              subtitle="Pick a child to view their PIN and controls."
+              title={t("parent.children.selectedChildTitle")}
+              subtitle={t("parent.children.selectedChildSubtitle")}
               style={styles.sectionHeaderInCard}
             />
             <Pressable
               onPress={() => setChildPickerVisible(true)}
               style={styles.childSelectorRow}
               accessibilityRole="button"
-              accessibilityLabel="Select child"
+              accessibilityLabel={t("parent.children.selectChild")}
             >
               {selectedChild?.avatar_url ? (
                 <Image source={{ uri: selectedChild.avatar_url }} style={styles.childSelectorAvatar} />
@@ -1100,7 +1116,7 @@ export function ParentChildrenScreen() {
               <Text variant="titleMedium" style={styles.childSelectorName}>
                 {selectedChild
                   ? `${selectedChild.name} (${formatChildAgeLine(selectedChild).split(" · ")[0]})`
-                  : "Select child"}
+                  : t("parent.children.selectChild")}
               </Text>
               <MaterialCommunityIcons name="chevron-down" size={24} color={c.subtext} />
             </Pressable>
@@ -1111,37 +1127,41 @@ export function ParentChildrenScreen() {
                   <View style={styles.pinLeft}>
                     <MaterialCommunityIcons name="lock" size={18} color={c.pinIcon} />
                     <Text variant="titleSmall" style={styles.pinLabel}>
-                      PIN: {selectedChild.auth_pin}
+                      {t("parent.children.pinLabel", { pin: selectedChild.auth_pin })}
                     </Text>
                   </View>
                   <PrimaryButton
-                    label="Regenerate"
+                    label={t("parent.children.regenerate")}
                     mode="text"
                     onPress={() => void regeneratePin(selectedChild.id)}
                     loading={pinBusyChildId === selectedChild.id}
                   />
                 </View>
                 <Text variant="bodySmall" style={styles.pinHint}>
-                  Child signs in using name + this PIN.
+                  {t("parent.children.pinHint")}
                 </Text>
                 <View style={styles.birthdayRow}>
                   <View style={styles.birthdayText}>
                     <Text variant="titleSmall" style={{ color: c.text, fontWeight: "600" }}>
-                      Birthday
+                      {t("parent.children.birthdayLabel")}
                     </Text>
                     <Text variant="bodySmall" style={{ color: c.subtext }}>
                       {formatChildAgeLine(selectedChild)}
                     </Text>
                   </View>
                   <PrimaryButton
-                    label="Change"
+                    label={t("parent.children.change")}
                     mode="text"
                     onPress={() => setBirthdayPickerMode("edit")}
                     loading={birthdaySaving}
                     disabled={birthdaySaving}
                   />
                 </View>
-                <PrimaryButton label="+ Register Child" mode="outlined" onPress={() => setShowCreateDialog(true)} />
+                <PrimaryButton
+                  label={t("parent.children.registerChild")}
+                  mode="outlined"
+                  onPress={() => setShowCreateDialog(true)}
+                />
               </>
             ) : null}
           </Card.Content>
@@ -1154,8 +1174,8 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="map-marker-radius"
-                title="Live Location"
-                subtitle="See where your child is right now on the map."
+                title={t("parent.children.liveLocationTitle")}
+                subtitle={t("parent.children.liveLocationSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               <ParentChildLocationPreview
@@ -1175,32 +1195,44 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="target"
-                title="Assign Tasks & Activities"
-                subtitle="Games, chores, and exercise for this child."
+                title={t("parent.children.assignTasksTitle")}
+                subtitle={t("parent.children.assignTasksSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               <View style={styles.assignRow}>
-                <PrimaryButton label="Learning Game" mode="outlined" onPress={() => openAssignLearning(selectedChild)} />
-                <PrimaryButton label="Household Chore" mode="outlined" onPress={() => openAssignChore(selectedChild)} />
-                <PrimaryButton label="Exercise" mode="outlined" onPress={() => openAssignExercise(selectedChild)} />
+                <PrimaryButton
+                  label={t("parent.children.learningGameButton")}
+                  mode="outlined"
+                  onPress={() => openAssignLearning(selectedChild)}
+                />
+                <PrimaryButton
+                  label={t("parent.children.choreButton")}
+                  mode="outlined"
+                  onPress={() => openAssignChore(selectedChild)}
+                />
+                <PrimaryButton
+                  label={t("parent.children.exerciseButton")}
+                  mode="outlined"
+                  onPress={() => openAssignExercise(selectedChild)}
+                />
               </View>
               <Divider />
               <Text variant="labelLarge" style={styles.subSectionTitle}>
-                Sound / Audio Guidance Speed
+                {t("parent.children.audioSpeedLabel")}
               </Text>
               <View style={styles.chipRow}>
                 <Chip selected={selectedAudioRate <= 0.86} onPress={() => void updateAudioRate(selectedChild.id, 0.84)} compact>
-                  Slow
+                  {t("parent.children.audioSlow")}
                 </Chip>
                 <Chip
                   selected={selectedAudioRate > 0.86 && selectedAudioRate < 0.98}
                   onPress={() => void updateAudioRate(selectedChild.id, 0.92)}
                   compact
                 >
-                  Medium
+                  {t("parent.children.audioMedium")}
                 </Chip>
                 <Chip selected={selectedAudioRate >= 0.98} onPress={() => void updateAudioRate(selectedChild.id, 1.05)} compact>
-                  Fast
+                  {t("parent.children.audioFast")}
                 </Chip>
               </View>
             </Card.Content>
@@ -1215,13 +1247,13 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="clipboard-check-outline"
-                title="Review Submitted Tasks"
-                subtitle="Approve photos or send chores back for retry."
+                title={t("parent.children.reviewSubmissionsTitle")}
+                subtitle={t("parent.children.reviewSubmissionsSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               {submissionRows.length === 0 ? (
                 <Text variant="bodySmall" style={styles.helper}>
-                  No submissions waiting for review.
+                  {t("parent.submissions.empty")}
                 </Text>
               ) : null}
               {submissionRows.map((row) => (
@@ -1229,10 +1261,10 @@ export function ParentChildrenScreen() {
                   <View style={styles.reviewRowMain}>
                     <View style={styles.reviewRowText}>
                       <Text variant="titleSmall" style={styles.reviewTitle}>
-                        {row.tasks?.title ?? "Task"}
+                        {row.tasks?.title ?? t("parent.submissions.task")}
                       </Text>
                       <Text variant="bodySmall" style={styles.helper}>
-                        {row.image_url ? formatSubmissionTime(row.created_at) : "Waiting for parent review"}
+                        {row.image_url ? formatSubmissionTime(row.created_at) : t("child.task.waitingReview")}
                       </Text>
                     </View>
                     <View style={styles.reviewIconActions}>
@@ -1244,7 +1276,7 @@ export function ParentChildrenScreen() {
                         size={20}
                         onPress={() => void approveSubmission(row)}
                         disabled={reviewBusyId === row.id}
-                        accessibilityLabel="Approve submission"
+                        accessibilityLabel={t("parent.children.approveSubmission")}
                       />
                       <IconButton
                         icon="close"
@@ -1257,7 +1289,7 @@ export function ParentChildrenScreen() {
                           setRejectNote("");
                         }}
                         disabled={reviewBusyId === row.id}
-                        accessibilityLabel="Reject submission"
+                        accessibilityLabel={t("parent.children.rejectSubmission")}
                       />
                     </View>
                   </View>
@@ -1273,13 +1305,13 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="timer-outline"
-                title="Screen Time & Bedtime"
-                subtitle="Turn limits on or off, then adjust values."
+                title={t("parent.children.screenTimeTitle")}
+                subtitle={t("parent.children.screenTimeSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               <View style={styles.toggleRow}>
                 <Text variant="labelLarge" style={{ color: c.text, fontWeight: "700" }}>
-                  Screen time
+                  {t("parent.children.screenTimeToggleLabel")}
                 </Text>
                 <Switch
                   value={selectedDraft.screen_limit_enabled}
@@ -1292,7 +1324,7 @@ export function ParentChildrenScreen() {
                 />
               </View>
               <StepperControl
-                label="Daily Screen Limit"
+                label={t("parent.children.dailyScreenLimitLabel")}
                 value={formatDailyLimitDisplay(selectedDraft.daily_limit_minutes, selectedChild.daily_limit_minutes)}
                 disabled={!selectedDraft.screen_limit_enabled}
                 onValuePress={() => selectedDraft.screen_limit_enabled && setDurationPickerOpen(true)}
@@ -1322,12 +1354,12 @@ export function ParentChildrenScreen() {
                     },
                   }))
                 }
-                decrementAccessibilityLabel="Decrease daily screen limit"
-                incrementAccessibilityLabel="Increase daily screen limit"
+                decrementAccessibilityLabel={t("parent.children.decreaseDailyLimit")}
+                incrementAccessibilityLabel={t("parent.children.increaseDailyLimit")}
               />
               <View style={styles.toggleRow}>
                 <Text variant="labelLarge" style={{ color: c.text, fontWeight: "700" }}>
-                  Bedtime
+                  {t("parent.children.bedtimeToggleLabel")}
                 </Text>
                 <Switch
                   value={selectedDraft.bedtime_enabled}
@@ -1340,7 +1372,7 @@ export function ParentChildrenScreen() {
                 />
               </View>
               <StepperControl
-                label="Bedtime Start"
+                label={t("parent.children.bedtimeStartLabel")}
                 value={formatBedtime12h(selectedDraft.bedtime_start)}
                 disabled={!selectedDraft.bedtime_enabled}
                 onValuePress={() => selectedDraft.bedtime_enabled && setBedtimePickerField("start")}
@@ -1362,11 +1394,11 @@ export function ParentChildrenScreen() {
                     },
                   }))
                 }
-                decrementAccessibilityLabel="Earlier bedtime start"
-                incrementAccessibilityLabel="Later bedtime start"
+                decrementAccessibilityLabel={t("parent.children.earlierBedtimeStart")}
+                incrementAccessibilityLabel={t("parent.children.laterBedtimeStart")}
               />
               <StepperControl
-                label="Bedtime End"
+                label={t("parent.children.bedtimeEndLabel")}
                 value={formatBedtime12h(selectedDraft.bedtime_end)}
                 disabled={!selectedDraft.bedtime_enabled}
                 onValuePress={() => selectedDraft.bedtime_enabled && setBedtimePickerField("end")}
@@ -1388,8 +1420,8 @@ export function ParentChildrenScreen() {
                     },
                   }))
                 }
-                decrementAccessibilityLabel="Earlier bedtime end"
-                incrementAccessibilityLabel="Later bedtime end"
+                decrementAccessibilityLabel={t("parent.children.earlierBedtimeEnd")}
+                incrementAccessibilityLabel={t("parent.children.laterBedtimeEnd")}
               />
               {ruleSummary ? (
                 <View style={styles.ruleSummaryBox}>
@@ -1405,12 +1437,12 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="cancel"
-                title="Block Distracting Apps"
-                subtitle="Tap an app to block or unblock it on the child's phone."
+                title={t("parent.children.blockAppsTitle")}
+                subtitle={t("parent.children.blockAppsSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               <Text variant="bodySmall" style={styles.helper}>
-                One tap blocks every common install variant (e.g. TikTok and TikTok Lite).
+                {t("parent.children.blockAppsHint")}
               </Text>
               <View style={styles.appGrid}>
                 {BLOCKABLE_APP_GROUPS.map((app) => {
@@ -1419,7 +1451,7 @@ export function ParentChildrenScreen() {
                     <Pressable
                       key={app.slug}
                       accessibilityRole="button"
-                      accessibilityLabel={`Toggle ${app.label}`}
+                      accessibilityLabel={t("parent.children.toggleApp", { label: app.label })}
                       style={[
                         styles.appTile,
                         {
@@ -1448,13 +1480,13 @@ export function ParentChildrenScreen() {
 
               <View style={styles.usedAppsHeader}>
                 <Text variant="titleSmall" style={styles.usedAppsTitle}>
-                  Apps {selectedChild.name} has used
+                  {t("parent.children.appsUsedByChild", { name: selectedChild.name })}
                 </Text>
               </View>
               {customBlockableApps.length > 0 ? (
                 <>
                   <Text variant="bodySmall" style={styles.helper}>
-                    Block any other app seen on {selectedChild.name}'s phone. New apps appear here after they are opened.
+                    {t("parent.children.blockOtherAppsHint", { name: selectedChild.name })}
                   </Text>
                   <View style={styles.appGrid}>
                     {customBlockableApps.map((app) => {
@@ -1463,7 +1495,7 @@ export function ParentChildrenScreen() {
                         <Pressable
                           key={app.pkg}
                           accessibilityRole="button"
-                          accessibilityLabel={`Toggle ${app.label}`}
+                          accessibilityLabel={t("parent.children.toggleApp", { label: app.label })}
                           style={[
                             styles.appTile,
                             {
@@ -1493,8 +1525,7 @@ export function ParentChildrenScreen() {
                 </>
               ) : (
                 <Text variant="bodySmall" style={styles.helper}>
-                  No other apps recorded yet. Once {selectedChild.name} opens an app on their phone, it will show up here so
-                  you can block it.
+                  {t("parent.children.noOtherAppsRecorded", { name: selectedChild.name })}
                 </Text>
               )}
 
@@ -1502,13 +1533,13 @@ export function ParentChildrenScreen() {
                 <Pressable
                   onPress={() => setClearUsageConfirm(true)}
                   accessibilityRole="button"
-                  accessibilityLabel="Clear recorded app history"
+                  accessibilityLabel={t("parent.children.clearAppHistory")}
                   style={styles.clearHistoryRow}
                   hitSlop={8}
                 >
                   <MaterialCommunityIcons name="broom" size={16} color={theme.colors.error} />
                   <Text variant="bodySmall" style={[styles.clearHistoryText, { color: theme.colors.error }]}>
-                    Clear recorded app history
+                    {t("parent.children.clearAppHistory")}
                   </Text>
                 </Pressable>
               ) : null}
@@ -1519,13 +1550,13 @@ export function ParentChildrenScreen() {
             <Card.Content style={styles.cardContent}>
               <ParentSectionHeader
                 icon="star-circle-outline"
-                title="Star unlock pricing"
-                subtitle="Children can spend weekly stars to ask you to temporarily unlock blocked apps. You still approve every request."
+                title={t("parent.children.starUnlockTitle")}
+                subtitle={t("parent.children.starUnlockSubtitle")}
                 style={styles.sectionHeaderInCard}
               />
               <List.Item
-                title="Allow star unlock requests"
-                description="When off, blocked apps cannot be unlocked with stars."
+                title={t("parent.children.allowUnlockRequestsTitle")}
+                description={t("parent.children.allowUnlockRequestsDescription")}
                 right={() => (
                   <Switch
                     value={screenRule?.app_unlock_enabled !== false}
@@ -1538,7 +1569,7 @@ export function ParentChildrenScreen() {
               />
               {blockedForPricing.length === 0 ? (
                 <Text variant="bodySmall" style={styles.helper}>
-                  Block at least one app above to set star prices for unlock requests.
+                  {t("parent.children.blockAppFirstHint")}
                 </Text>
               ) : screenRule?.app_unlock_enabled !== false ? (
                 blockedForPricing.map((app) => {
@@ -1569,14 +1600,18 @@ export function ParentChildrenScreen() {
                               }
                               style={styles.unlockModeChip}
                             >
-                              {m === "suggested" ? "Suggested" : m === "fixed" ? "Fixed" : "Off"}
+                              {m === "suggested"
+                                ? t("parent.children.suggested")
+                                : m === "fixed"
+                                  ? t("parent.children.fixed")
+                                  : t("parent.children.off")}
                             </Chip>
                           );
                         })}
                       </View>
                       {mode === "fixed" ? (
                         <StepperControl
-                          label="Stars for rest of today"
+                          label={t("parent.children.starsForRestOfToday")}
                           value={`${entry.fixed_stars ?? 15} ★`}
                           onDecrement={() => {
                             const next = Math.max(3, (entry.fixed_stars ?? 15) - 1);
@@ -1586,13 +1621,13 @@ export function ParentChildrenScreen() {
                             const next = Math.min(100, (entry.fixed_stars ?? 15) + 1);
                             setUnlockPricingEntry(app.key, { mode: "fixed", fixed_stars: next });
                           }}
-                          decrementAccessibilityLabel="Fewer stars"
-                          incrementAccessibilityLabel="More stars"
+                          decrementAccessibilityLabel={t("parent.children.fewerStars")}
+                          incrementAccessibilityLabel={t("parent.children.moreStars")}
                         />
                       ) : (
                         <Text variant="bodySmall" style={styles.helper}>
                           {mode === "fixed"
-                            ? "30 min and until Monday scale from this rest-of-today price."
+                            ? t("parent.children.fixedPricingNote")
                             : pricingModeLabel(mode)}
                         </Text>
                       )}
@@ -1604,7 +1639,7 @@ export function ParentChildrenScreen() {
           </Card>
 
           <PrimaryButton
-            label="Save Changes"
+            label={t("parent.children.saveChanges")}
             onPress={() => void saveAllForChild(selectedChild.id)}
             loading={saveBusyChildId === selectedChild.id}
           />
@@ -1627,7 +1662,7 @@ export function ParentChildrenScreen() {
           <BedtimePickerModal
             visible={bedtimePickerField === "start"}
             value24h={selectedDraft.bedtime_start}
-            title="Bedtime start"
+            title={t("parent.children.bedtimeStartModalTitle")}
             onDismiss={() => setBedtimePickerField(null)}
             onConfirm={(hhmm) =>
               setDrafts((prev) => ({
@@ -1639,7 +1674,7 @@ export function ParentChildrenScreen() {
           <BedtimePickerModal
             visible={bedtimePickerField === "end"}
             value24h={selectedDraft.bedtime_end}
-            title="Bedtime end"
+            title={t("parent.children.bedtimeEndModalTitle")}
             onDismiss={() => setBedtimePickerField(null)}
             onConfirm={(hhmm) =>
               setDrafts((prev) => ({
@@ -1660,8 +1695,8 @@ export function ParentChildrenScreen() {
         }
         title={
           birthdayPickerMode === "create"
-            ? "Child's birthday"
-            : `Birthday for ${selectedChild?.name ?? "child"}`
+            ? t("parent.children.childsBirthdayTitle")
+            : t("parent.children.birthdayForChild", { name: selectedChild?.name ?? t("parent.children.childFallback") })
         }
         onDismiss={() => setBirthdayPickerMode(null)}
         onConfirm={(iso) => {
@@ -1687,7 +1722,7 @@ export function ParentChildrenScreen() {
 
       <Portal>
         <Dialog visible={childPickerVisible} onDismiss={() => setChildPickerVisible(false)} style={styles.pickerDialog}>
-          <Dialog.Title>Select child</Dialog.Title>
+          <Dialog.Title>{t("parent.children.selectChild")}</Dialog.Title>
           <Dialog.Content style={styles.pickerDialogContent}>
             <ScrollView
               style={styles.pickerScroll}
@@ -1705,7 +1740,7 @@ export function ParentChildrenScreen() {
                       setChildPickerVisible(false);
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Select ${child.name}`}
+                    accessibilityLabel={t("parent.children.selectChildNamed", { name: child.name })}
                   >
                     {child.avatar_url ? (
                       <Image source={{ uri: child.avatar_url }} style={styles.pickerListAvatar} />
@@ -1728,7 +1763,7 @@ export function ParentChildrenScreen() {
                     iconColor="#B91C1C"
                     size={22}
                     onPress={() => setChildToDelete(child)}
-                    accessibilityLabel={`Remove ${child.name}`}
+                    accessibilityLabel={t("parent.children.removeChildNamed", { name: child.name })}
                   />
                 </View>
               ))}
@@ -1737,17 +1772,18 @@ export function ParentChildrenScreen() {
         </Dialog>
 
         <Dialog visible={Boolean(childToDelete)} onDismiss={() => !deleteBusy && setChildToDelete(null)}>
-          <Dialog.Title>Remove child?</Dialog.Title>
+          <Dialog.Title>{t("parent.children.removeChildTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              Remove {childToDelete?.name ?? "this child"} from your account? Their tasks and history will be deleted.
-              This cannot be undone.
+              {t("parent.children.removeChildConfirm", {
+                name: childToDelete?.name ?? t("parent.overview.thisChildFallback"),
+              })}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" mode="text" onPress={() => setChildToDelete(null)} disabled={deleteBusy} />
+            <PrimaryButton label={t("common.cancel")} mode="text" onPress={() => setChildToDelete(null)} disabled={deleteBusy} />
             <PrimaryButton
-              label={deleteBusy ? "Removing…" : "Remove"}
+              label={deleteBusy ? t("parent.children.removing") : t("parent.children.remove")}
               onPress={() => void removeChildAccount()}
               disabled={deleteBusy}
             />
@@ -1758,22 +1794,23 @@ export function ParentChildrenScreen() {
           visible={clearUsageConfirm}
           onDismiss={() => !clearingUsage && setClearUsageConfirm(false)}
         >
-          <Dialog.Title>Clear app history?</Dialog.Title>
+          <Dialog.Title>{t("parent.children.clearAppHistoryTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              This clears the list of recorded apps for {selectedChild?.name ?? "this child"}. Apps you have already blocked
-              stay blocked, and apps will reappear here as they are opened again.
+              {t("parent.children.clearAppHistoryConfirm", {
+                name: selectedChild?.name ?? t("parent.overview.thisChildFallback"),
+              })}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
             <PrimaryButton
-              label="Cancel"
+              label={t("common.cancel")}
               mode="text"
               onPress={() => setClearUsageConfirm(false)}
               disabled={clearingUsage}
             />
             <PrimaryButton
-              label={clearingUsage ? "Clearing…" : "Clear"}
+              label={clearingUsage ? t("parent.children.clearing") : t("parent.children.clear")}
               onPress={() => void clearUsedAppHistory()}
               disabled={clearingUsage}
             />
@@ -1781,16 +1818,21 @@ export function ParentChildrenScreen() {
         </Dialog>
 
         <Dialog visible={showCreateDialog} onDismiss={() => setShowCreateDialog(false)}>
-          <Dialog.Title>Create Child Account</Dialog.Title>
+          <Dialog.Title>{t("parent.children.createChildAccountTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Parent creates child login + PIN in one step.
+              {t("parent.children.createChildHelper")}
             </Text>
-            <TextInput label="Child Name" mode="outlined" value={newChildName} onChangeText={setNewChildName} />
+            <TextInput
+              label={t("parent.children.childNameLabel")}
+              mode="outlined"
+              value={newChildName}
+              onChangeText={setNewChildName}
+            />
             <Pressable onPress={() => setBirthdayPickerMode("create")} accessibilityRole="button">
               <View pointerEvents="none">
                 <TextInput
-                  label="Birthday"
+                  label={t("parent.children.birthdayLabel")}
                   mode="outlined"
                   value={formatBirthdayDisplay(newChildBirthday)}
                   editable={false}
@@ -1802,7 +1844,7 @@ export function ParentChildrenScreen() {
               {childBirthdayFieldHelper()}
             </Text>
             <TextInput
-              label="Child Email"
+              label={t("parent.children.childEmailLabel")}
               mode="outlined"
               value={newChildEmail}
               keyboardType="email-address"
@@ -1811,14 +1853,13 @@ export function ParentChildrenScreen() {
               onChangeText={setNewChildEmail}
             />
             <Text variant="bodySmall" style={styles.helper}>
-              By creating this profile you confirm you are the parent or guardian and consent to LearnGate collecting
-              this child&apos;s learning, location, and app-usage data as described in Settings → Legal.
+              {t("parent.children.consentText")}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" mode="text" onPress={() => setShowCreateDialog(false)} />
+            <PrimaryButton label={t("common.cancel")} mode="text" onPress={() => setShowCreateDialog(false)} />
             <PrimaryButton
-              label={isCreating ? "Creating..." : "Create"}
+              label={isCreating ? t("parent.children.creating") : t("parent.children.create")}
               onPress={() => void createChildAccount()}
               disabled={isCreating}
             />
@@ -1826,11 +1867,12 @@ export function ParentChildrenScreen() {
         </Dialog>
 
         <Dialog visible={Boolean(exerciseTarget)} onDismiss={() => setExerciseTarget(null)}>
-          <Dialog.Title>Assign physical exercise</Dialog.Title>
+          <Dialog.Title>{t("parent.children.assignExerciseTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Assign an exercise to {exerciseTarget?.name ?? "child"}. Camera pose tracking will count their
-              reps.
+              {t("parent.children.assignExerciseHelper", {
+                name: exerciseTarget?.name ?? t("parent.children.childFallback"),
+              })}
             </Text>
             <View style={styles.chipRow}>
               {EXERCISES.map((ex) => (
@@ -1843,7 +1885,7 @@ export function ParentChildrenScreen() {
                     setExercisePoints(String(ex.defaultPoints));
                   }}
                 >
-                  {ex.emoji} {ex.title}
+                  {ex.emoji} {localizedExercise(ex.id, t).title}
                 </Chip>
               ))}
             </View>
@@ -1851,19 +1893,19 @@ export function ParentChildrenScreen() {
               const selected = EXERCISES.find((e) => e.id === exerciseId) ?? EXERCISES[0];
               return (
                 <Text variant="bodySmall" style={[styles.helper, { marginBottom: 8 }]}>
-                  {selected.cardDescription}
+                  {localizedExercise(selected.id, t).cardDescription}
                 </Text>
               );
             })()}
             <TextInput
-              label="Target reps"
+              label={t("parent.children.targetRepsLabel")}
               mode="outlined"
               value={exerciseReps}
               keyboardType="number-pad"
               onChangeText={(v) => setExerciseReps(v.replace(/[^0-9]/g, "").slice(0, 3))}
             />
             <TextInput
-              label="Reward points (stars)"
+              label={t("parent.children.rewardPointsLabel")}
               mode="outlined"
               value={exercisePoints}
               keyboardType="number-pad"
@@ -1871,9 +1913,9 @@ export function ParentChildrenScreen() {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" mode="text" onPress={() => setExerciseTarget(null)} />
+            <PrimaryButton label={t("common.cancel")} mode="text" onPress={() => setExerciseTarget(null)} />
             <PrimaryButton
-              label={assigning ? "Assigning..." : "Assign"}
+              label={assigning ? t("parent.children.assigning") : t("parent.children.assign")}
               onPress={() => void assignExercise()}
               disabled={assigning}
             />
@@ -1881,14 +1923,17 @@ export function ParentChildrenScreen() {
         </Dialog>
 
         <Dialog visible={Boolean(learningTarget)} onDismiss={() => setLearningTarget(null)}>
-          <Dialog.Title>Assign learning game</Dialog.Title>
+          <Dialog.Title>{t("parent.children.assignLearningTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Games match {learningTarget?.name}&apos;s age ({learningTargetAgeBand?.label},{" "}
-              {learningTargetAgeBand?.shortLabel}).
+              {t("parent.children.gamesMatchAge", {
+                name: learningTarget?.name ?? t("parent.children.childFallback"),
+                label: learningTargetAgeBand ? localizedAgeBand(learningTargetAgeBand.id, t).label : "",
+                shortLabel: learningTargetAgeBand ? localizedAgeBand(learningTargetAgeBand.id, t).shortLabel : "",
+              })}
             </Text>
             <Text variant="labelMedium" style={[styles.subSectionTitle, { marginTop: 8 }]}>
-              Game
+              {t("parent.children.gameLabel")}
             </Text>
             <View style={styles.chipRow}>
               {assignableLearningGames.map((g) => (
@@ -1898,7 +1943,7 @@ export function ParentChildrenScreen() {
               ))}
             </View>
             <Text variant="labelMedium" style={[styles.subSectionTitle, { marginTop: 8 }]}>
-              Difficulty
+              {t("parent.children.difficultyLabel")}
             </Text>
             <View style={styles.chipRow}>
               {(["easy", "medium", "hard"] as const).map((tier) => (
@@ -1913,24 +1958,33 @@ export function ParentChildrenScreen() {
               ))}
             </View>
             <Text variant="bodySmall" style={[styles.helper, { marginTop: 4 }]}>
-              Reward: +{learningTaskXpReward(learningDifficulty, learningGameId)} stars on completion
+              {t("parent.children.rewardOnCompletion", { xp: learningTaskXpReward(learningDifficulty, learningGameId) })}
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" mode="text" onPress={() => setLearningTarget(null)} />
-            <PrimaryButton label={assigningLearning ? "Assigning..." : "Assign"} onPress={() => void assignLearning()} disabled={assigningLearning} />
+            <PrimaryButton label={t("common.cancel")} mode="text" onPress={() => setLearningTarget(null)} />
+            <PrimaryButton
+              label={assigningLearning ? t("parent.children.assigning") : t("parent.children.assign")}
+              onPress={() => void assignLearning()}
+              disabled={assigningLearning}
+            />
           </Dialog.Actions>
         </Dialog>
 
         <Dialog visible={Boolean(choreTarget)} onDismiss={() => setChoreTarget(null)}>
-          <Dialog.Title>Assign household chore</Dialog.Title>
+          <Dialog.Title>{t("parent.children.assignChoreTitle")}</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodySmall" style={styles.helper}>
-              Child will submit a photo, and you will approve or reject it.
+              {t("parent.children.choreHelper")}
             </Text>
-            <TextInput label="Chore title" mode="outlined" value={choreTitle} onChangeText={setChoreTitle} />
             <TextInput
-              label="Reward points (stars)"
+              label={t("parent.children.choreTitleLabel")}
+              mode="outlined"
+              value={choreTitle}
+              onChangeText={setChoreTitle}
+            />
+            <TextInput
+              label={t("parent.children.rewardPointsLabel")}
               mode="outlined"
               value={chorePoints}
               keyboardType="number-pad"
@@ -1938,20 +1992,24 @@ export function ParentChildrenScreen() {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" mode="text" onPress={() => setChoreTarget(null)} />
-            <PrimaryButton label={assigningChore ? "Assigning..." : "Assign"} onPress={() => void assignChore()} disabled={assigningChore} />
+            <PrimaryButton label={t("common.cancel")} mode="text" onPress={() => setChoreTarget(null)} />
+            <PrimaryButton
+              label={assigningChore ? t("parent.children.assigning") : t("parent.children.assign")}
+              onPress={() => void assignChore()}
+              disabled={assigningChore}
+            />
           </Dialog.Actions>
         </Dialog>
 
         <Dialog visible={Boolean(rejectTarget)} onDismiss={() => setRejectTarget(null)}>
-          <Dialog.Title>Reject submission</Dialog.Title>
+          <Dialog.Title>{t("parent.children.rejectSubmission")}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">Optional note for your child:</Text>
+            <Text variant="bodyMedium">{t("parent.children.rejectNotePrompt")}</Text>
             <TextInput mode="outlined" value={rejectNote} onChangeText={setRejectNote} multiline />
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" onPress={() => setRejectTarget(null)} mode="text" />
-            <PrimaryButton label="Confirm reject" onPress={() => void confirmRejectSubmission()} />
+            <PrimaryButton label={t("common.cancel")} onPress={() => setRejectTarget(null)} mode="text" />
+            <PrimaryButton label={t("parent.submissions.confirmReject")} onPress={() => void confirmRejectSubmission()} />
           </Dialog.Actions>
         </Dialog>
       </Portal>

@@ -8,10 +8,13 @@ import { useAppColors } from "@/theme/useAppColors";
 import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { DestructiveButton } from "@/components/DestructiveButton";
 import { formatAppError } from "@/utils/errors";
 import { useThemeMode } from "@/store/ThemeModeContext";
 import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { LegalSectionCard } from "@/components/legal/LegalSectionCard";
+import { useLocale } from "@/store/LocaleContext";
+import { LanguagePicker } from "@/components/LanguagePicker";
 
 type ChildSummary = {
   id: string;
@@ -34,6 +37,7 @@ type ScreenRule = {
 
 export function ParentSettingsScreen() {
   const { isSupabaseConfigured, signOut } = useAuth();
+  const { t } = useLocale();
   const themeMode = useThemeMode();
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
@@ -152,14 +156,14 @@ export function ParentSettingsScreen() {
       setError(formatAppError(upsertError));
       return;
     }
-    setSnackbar("Parent settings saved successfully.");
+    setSnackbar(t("parent.settings.settingsSaved"));
     await loadSettings(false);
   };
 
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
-        Notifications and account preferences. Screen limits, tasks, and app blocking are in Manage Children.
+        {t("parent.settings.kicker")}
       </Text>
 
       {isLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
@@ -167,7 +171,7 @@ export function ParentSettingsScreen() {
 
       {children.length > 0 ? (
         <Card style={styles.card}>
-          <Card.Title title="Selected Child" />
+          <Card.Title title={t("parent.settings.selectedChild")} />
           <Card.Content style={styles.block}>
             <Menu
               visible={childMenuVisible}
@@ -177,16 +181,16 @@ export function ParentSettingsScreen() {
                   onPress={() => setChildMenuVisible(true)}
                   style={styles.pickerRow}
                   accessibilityRole="button"
-                  accessibilityLabel="Select child"
+                  accessibilityLabel={t("parent.settings.selectChild")}
                 >
                   <View style={styles.pickerLeft}>
                     <MaterialCommunityIcons name="account-child-outline" size={20} color={c.primaryDark} />
                     <View style={styles.pickerTextWrap}>
                       <Text variant="labelMedium" style={styles.pickerLabel}>
-                        Child
+                        {t("parent.settings.child")}
                       </Text>
                       <Text variant="titleSmall" style={styles.pickerValue}>
-                        {selectedChild ? selectedChild.name : "Select child"}
+                        {selectedChild ? selectedChild.name : t("parent.settings.selectChild")}
                       </Text>
                     </View>
                   </View>
@@ -208,20 +212,20 @@ export function ParentSettingsScreen() {
           </Card.Content>
         </Card>
       ) : (
-        <Text>No child profile found yet. Add a child first in Manage Children.</Text>
+        <Text>{t("parent.settings.noChildProfile")}</Text>
       )}
 
       <Card style={styles.card}>
-        <Card.Title title="Notifications" />
+        <Card.Title title={t("parent.settings.notifications")} />
         <Card.Content style={styles.block}>
-          <Text>Daily Report</Text>
+          <Text>{t("parent.settings.dailyReport")}</Text>
           <Switch
             value={Boolean(rule?.daily_report_enabled)}
             disabled={!rule}
             onValueChange={(value) => setRule((prev) => (prev ? { ...prev, daily_report_enabled: value } : prev))}
           />
           <Divider />
-          <Text>Task Reminders</Text>
+          <Text>{t("parent.settings.taskReminders")}</Text>
           <Switch
             value={Boolean(rule?.task_reminders_enabled)}
             disabled={!rule}
@@ -229,9 +233,7 @@ export function ParentSettingsScreen() {
           />
           <Divider />
           <Text variant="bodySmall" style={styles.pushHint}>
-            Device alerts need notification permission and a development build (not Expo Go). On a phone used for
-            both parent and child sign-in, open the parent app once so this device is registered for parent alerts.
-            Rebuild after changing notification channels.
+            {t("parent.settings.pushHint")}
           </Text>
           <Button
             mode="outlined"
@@ -250,69 +252,73 @@ export function ParentSettingsScreen() {
               }
             }}
           >
-            Enable push on this device
+            {t("parent.settings.enablePush")}
           </Button>
         </Card.Content>
       </Card>
 
       <Card style={styles.card}>
-        <Card.Title title="Appearance" />
+        <Card.Title title={t("parent.settings.appearance")} />
         <Card.Content style={styles.block}>
-          <Text variant="labelLarge">Color theme</Text>
+          <Text variant="labelLarge">{t("parent.settings.themeMode")}</Text>
           <View style={styles.chipRow}>
             <Chip selected={themeMode.mode === "mint"} onPress={() => themeMode.setMode("mint")}>
-              Mint
+              {t("parent.settings.mint")}
             </Chip>
             <Chip selected={themeMode.mode === "sunset"} onPress={() => themeMode.setMode("sunset")}>
-              Sunset
+              {t("parent.settings.sunset")}
             </Chip>
             <Chip selected={themeMode.mode === "midnight"} onPress={() => themeMode.setMode("midnight")}>
-              Midnight
+              {t("parent.settings.midnight")}
             </Chip>
           </View>
           <Text variant="labelLarge" style={styles.appearanceLabel}>
-            Display mode
+            {t("parent.settings.displayMode")}
           </Text>
           <View style={styles.chipRow}>
             <Chip selected={themeMode.appearance === "light"} onPress={() => themeMode.setAppearance("light")}>
-              Light
+              {t("parent.settings.light")}
             </Chip>
             <Chip selected={themeMode.appearance === "dark"} onPress={() => themeMode.setAppearance("dark")}>
-              Dark
+              {t("parent.settings.dark")}
             </Chip>
           </View>
         </Card.Content>
       </Card>
 
+      <Card style={styles.card}>
+        <Card.Title title={t("parent.settings.language")} />
+        <Card.Content style={styles.block}>
+          <Text variant="bodySmall" style={styles.pushHint}>{t("parent.settings.languageSub")}</Text>
+          <LanguagePicker />
+        </Card.Content>
+      </Card>
+
       <LegalSectionCard />
 
-      <PrimaryButton label="Save Settings" onPress={() => void saveRules()} disabled={!rule} />
-      <Button mode="contained" onPress={() => setConfirmVisible(true)} style={styles.logoutButton}>
-        Log Out
-      </Button>
+      <PrimaryButton label={t("parent.settings.saveSettings")} onPress={() => void saveRules()} disabled={!rule} />
+      <DestructiveButton label={t("common.logOut")} onPress={() => setConfirmVisible(true)} style={styles.logoutButton} />
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={5000}>
         {snackbar ?? ""}
       </Snackbar>
       <Portal>
-        <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)}>
-          <Dialog.Title>Log out</Dialog.Title>
+        <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)} style={{ backgroundColor: c.card }}>
+          <Dialog.Title style={{ color: c.text }}>{t("common.logOut")}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">Are you sure you want to log out?</Text>
+            <Text variant="bodyMedium" style={{ color: c.text }}>{t("common.logOutConfirm")}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button mode="text" onPress={() => setConfirmVisible(false)}>
-              Cancel
+            <Button mode="text" onPress={() => setConfirmVisible(false)} textColor={c.text}>
+              {t("common.cancel")}
             </Button>
-            <Button
-              mode="contained"
+            <DestructiveButton
+              label={t("common.logOut")}
+              style={styles.dialogLogout}
               onPress={() => {
                 setConfirmVisible(false);
                 void signOut();
               }}
-              style={styles.dialogLogout}
-            >
-              Log Out
-            </Button>
+            />
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -398,13 +404,13 @@ function createStyles(c: AppColors) {
     fontWeight: "700",
   },
   errorText: {
-    color: "#B91C1C",
+    color: c.danger,
   },
   logoutButton: {
-    backgroundColor: "#B91C1C",
+    marginTop: 4,
   },
   dialogLogout: {
-    backgroundColor: "#B91C1C",
+    marginTop: 0,
   },
   });
 }

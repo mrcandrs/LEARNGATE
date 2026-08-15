@@ -4,12 +4,14 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
 import { formatAppTimeShort, type ChildMonitor } from "@/services/parentDashboardAnalytics";
 import { colors, radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   monitor: ChildMonitor;
 };
 
 export function ChildMonitorCard({ monitor }: Props) {
+  const { t } = useLocale();
   const statusColor = monitor.isOnline ? colors.primary : colors.subtext;
   const statusIcon = monitor.isOnline ? "circle" : "circle-outline";
 
@@ -31,12 +33,12 @@ export function ChildMonitorCard({ monitor }: Props) {
       </View>
 
       <View style={styles.metrics}>
-        <Metric icon="clipboard-list-outline" label="Task" value={String(monitor.taskCount)} />
-        <Metric icon="check-decagram-outline" label="Done" value={String(monitor.completedCount)} />
-        <Metric icon="star" label="Stars (week)" value={String(monitor.stars)} color={colors.warning} />
+        <Metric icon="clipboard-list-outline" label={t("parent.monitor.task")} value={String(monitor.taskCount)} />
+        <Metric icon="check-decagram-outline" label={t("parent.monitor.done")} value={String(monitor.completedCount)} />
+        <Metric icon="star" label={t("parent.monitor.starsWeek")} value={String(monitor.stars)} color={colors.warning} />
         <Metric
           icon="camera-outline"
-          label="Review"
+          label={t("parent.monitor.review")}
           value={String(monitor.pendingReview)}
           color={monitor.pendingReview > 0 ? "#B45309" : colors.subtext}
         />
@@ -44,9 +46,11 @@ export function ChildMonitorCard({ monitor }: Props) {
 
       <View style={styles.footer}>
         <Text variant="labelSmall" style={styles.footerText}>
-          {formatAppTimeShort(monitor.appTimeSeconds)} app time ·{" "}
-          {monitor.hasLinkedAccount ? "App linked" : "No child login yet"}
-          {monitor.lastWeekStars != null ? ` · Last week: ${monitor.lastWeekStars} stars` : ""}
+          {formatAppTimeShort(monitor.appTimeSeconds)} {t("parent.monitor.appTime")} ·{" "}
+          {monitor.hasLinkedAccount ? t("parent.monitor.appLinked") : t("parent.monitor.noLogin")}
+          {monitor.lastWeekStars != null
+            ? ` · ${t("parent.monitor.lastWeekStars", { count: monitor.lastWeekStars })}`
+            : ""}
         </Text>
       </View>
     </View>

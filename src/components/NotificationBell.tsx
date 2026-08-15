@@ -6,7 +6,8 @@ import { useInAppNotifications } from "@/hooks/useInAppNotifications";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
 import { navigateFromNotification } from "@/navigation/navigationRef";
-import { NOTIFICATION_RETENTION_HINT, type UserNotification } from "@/services/inAppNotifications";
+import { type UserNotification } from "@/services/inAppNotifications";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   enabled: boolean;
@@ -52,6 +53,7 @@ function iconForKind(kind: string): keyof typeof MaterialCommunityIcons.glyphMap
 
 export function NotificationBell({ enabled, variant = "header" }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const { items, loading, unreadCount, refresh, markRead, markAllRead } = useInAppNotifications(enabled);
   const [open, setOpen] = useState(false);
 
@@ -77,7 +79,7 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+        accessibilityLabel={unreadCount > 0 ? t("notifications.a11yUnread", { count: unreadCount }) : t("notifications.a11y")}
         onPress={onOpen}
         hitSlop={8}
         style={[styles.bellBtn, variant === "dashboard" && styles.bellBtnDashboard]}
@@ -92,16 +94,16 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
         <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel="Close notifications" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel={t("notifications.close")} />
           <View style={[styles.sheet, { backgroundColor: c.card, height: Math.round(Dimensions.get("window").height * 0.78) }]}>
             <View style={[styles.sheetHeader, { borderBottomColor: c.border }]}>
               <Text variant="titleLarge" style={{ color: c.text, fontWeight: "700" }}>
-                Notifications
+                {t("notifications.title")}
               </Text>
               <View style={styles.sheetActions}>
                 {unreadCount > 0 ? (
                   <Pressable onPress={() => void markAllRead()} hitSlop={8}>
-                    <Text style={{ color: c.primary, fontWeight: "600" }}>Mark all read</Text>
+                    <Text style={{ color: c.primary, fontWeight: "600" }}>{t("notifications.markAllRead")}</Text>
                   </Pressable>
                 ) : null}
                 <Pressable onPress={() => setOpen(false)} hitSlop={8}>
@@ -117,7 +119,7 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
             ) : items.length === 0 ? (
               <View style={styles.centered}>
                 <MaterialCommunityIcons name="bell-off-outline" size={40} color={c.subtext} />
-                <Text style={{ color: c.subtext, marginTop: 8 }}>No notifications yet.</Text>
+                <Text style={{ color: c.subtext, marginTop: 8 }}>{t("notifications.empty")}</Text>
               </View>
             ) : (
               <>
@@ -170,7 +172,7 @@ export function NotificationBell({ enabled, variant = "header" }: Props) {
                 }}
               />
               <Text variant="labelSmall" style={[styles.retentionHint, { color: c.subtext }]}>
-                {NOTIFICATION_RETENTION_HINT}
+                {t("notifications.retention")}
               </Text>
               </>
             )}

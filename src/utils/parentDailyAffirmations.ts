@@ -1,4 +1,6 @@
-const AFFIRMATIONS = [
+import type { AppLocale } from "@/i18n/types";
+
+const AFFIRMATIONS_EN = [
   "Small steps today become strong habits tomorrow.",
   "Your encouragement is the best reward your child can receive.",
   "Consistency matters more than perfection—keep showing up.",
@@ -38,7 +40,48 @@ const AFFIRMATIONS = [
   "You are enough—and your effort already matters.",
 ];
 
-export function getDailyAffirmation(now = new Date()): string {
-  const dayIndex = Math.floor(now.getTime() / 86_400_000) % AFFIRMATIONS.length;
-  return AFFIRMATIONS[dayIndex] ?? AFFIRMATIONS[0];
+const AFFIRMATIONS_FIL = [
+  "Ang maliliit na hakbang ngayon ay magiging malakas na ugali bukas.",
+  "Ang iyong paghikayat ang pinakamagandang gantimpala para sa iyong anak.",
+  "Mas mahalaga ang pagiging consistent kaysa pagiging perpekto—tuloy lang.",
+  "Bawat natapos na gawain ay patunay na may bunga ang pagsisikap.",
+  "Nagtatayo ka ng tiwala, pokus, at kumpiyansa sa tahanan.",
+  "Ipagdiwang ang progreso, hindi lang ang resulta.",
+  "Ang mahinahong gawain araw-araw ay nagpaparamdam na ligtas at masaya ang pag-aaral.",
+  "Mas natututo ang anak kapag suportado, hindi minamadali.",
+  "Isang maingat na check-in ay maaaring magbago ng buong araw.",
+  "Ginagabayan mo ang paglaki nang may pasensya at malasakit.",
+  "Maraming maliliit na sandali ang pag-aaral—pansinin ang mga iyon.",
+  "Dahil nandiyan ka, mas malusog at may layunin ang screen time.",
+  "Purihin ang pagsisikap at patuloy na susubok ang iyong anak.",
+  "Balansehin ang pahinga, laro, at pag-aaral—iyan ang tunay na tagumpay.",
+  "Nagtuturo ka ng responsibilidad, isang gawain sa bawat pagkakataon.",
+  "Magtiwala sa proseso; bihirang tuwid ang paglaki.",
+  "Ang mabait na hangganan ay nagbibigay ng kalayaang magpokus.",
+  "Mahalaga ang ginagawa mo bilang kasama sa pag-aaral.",
+  "Lumalago ang kuryosidad kapag nararamdaman ng bata na siya ay pinakikinggan.",
+  "Ang pasensya ngayon ay kumpiyansa bukas.",
+  "Modelo ka ng pokus tuwing nagtutuloy kayo hanggang tapos.",
+  "Personal ang progreso—ihambing lamang sa kahapon.",
+  "Isang maikling tagumpay ngayon ay maaaring magbukas ng momentum ngayong linggo.",
+  "Ang iyong matatag na suporta ay ginagawang pagsasanay ang hamon.",
+  "Nagsisimula ang malusog na ugali sa isang malinaw na inaasahan.",
+  "Tinutulungan mo ang iyong anak na magtayo ng self-discipline.",
+  "Ipagdiwang ang kuryosidad—ito ang nagtutulak ng panghabambuhay na pag-aaral.",
+  "Ginagawa ng iyong gabay na oras ng pag-aaral ang screen time.",
+  "Bahagi ng pag-aaral ang pahinga; pinoprotektahan ng balanse ang paglaki.",
+  "Gumagawa ka ng tahanan kung saan pinahahalagahan ang pagsisikap.",
+  "Bawat review na ibinibigay mo ay nagtuturo ng pananagutan.",
+  "Kaya ng iyong anak ang mahihirap na bagay dahil naniniwala ka sa kanya.",
+  "Gawing simple: isang prayoridad sa bawat pagkakataon.",
+  "Nagtatanim ka ng mga binhi na mamumulaklak sa paglipas ng panahon.",
+  "Mas malakas ang mahinahong paalala kaysa malupit na pagwawasto.",
+  "Ang magkasamang pag-aaral ay nagtatayo ng koneksyon at tiwala.",
+  "Sapat ka na—at mahalaga na ang iyong pagsisikap.",
+];
+
+export function getDailyAffirmation(locale: AppLocale = "en", now = new Date()): string {
+  const list = locale === "fil" ? AFFIRMATIONS_FIL : AFFIRMATIONS_EN;
+  const dayIndex = Math.floor(now.getTime() / 86_400_000) % list.length;
+  return list[dayIndex] ?? list[0];
 }

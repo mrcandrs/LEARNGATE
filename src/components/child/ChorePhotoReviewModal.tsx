@@ -2,6 +2,7 @@ import { Image, Modal, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   visible: boolean;
@@ -23,20 +24,21 @@ export function ChorePhotoReviewModal({
   onCancel,
 }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <View style={[styles.sheet, { backgroundColor: c.card }]}>
           <Text variant="titleLarge" style={[styles.title, { color: c.text }]}>
-            Review photo
+            {t("child.chore.reviewPhoto")}
           </Text>
           <Text variant="bodyMedium" style={{ color: c.subtext, textAlign: "center" }}>
             {taskTitle}
           </Text>
 
           {photoUri ? (
-            <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" accessibilityLabel="Chore photo preview" />
+            <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" accessibilityLabel={t("child.chore.previewLabel")} />
           ) : (
             <View style={[styles.preview, styles.previewPlaceholder, { backgroundColor: c.mutedSurface }]}>
               <ActivityIndicator color={c.primary} />
@@ -46,19 +48,19 @@ export function ChorePhotoReviewModal({
           {uploading ? (
             <View style={styles.uploadingRow}>
               <ActivityIndicator size="small" color={c.primary} />
-              <Text style={{ color: c.subtext }}>Uploading photo…</Text>
+              <Text style={{ color: c.subtext }}>{t("child.chore.uploading")}</Text>
             </View>
           ) : null}
 
           <View style={styles.actions}>
             <Button mode="text" onPress={onCancel} disabled={uploading}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button mode="outlined" onPress={onRetake} disabled={uploading}>
-              Retake
+              {t("common.retake")}
             </Button>
             <Button mode="contained" onPress={onSubmit} loading={uploading} disabled={uploading || !photoUri}>
-              Submit
+              {t("common.submit")}
             </Button>
           </View>
         </View>

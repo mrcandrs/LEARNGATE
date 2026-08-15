@@ -11,6 +11,7 @@ import {
 } from "@/services/photoCapture";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 /**
  * In-app camera capture using expo-camera (already in the native build).
@@ -18,6 +19,7 @@ import { radii } from "@/theme/theme";
  */
 export function CameraPhotoCaptureHost() {
   const c = useAppColors();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -73,7 +75,7 @@ export function CameraPhotoCaptureHost() {
           <Text variant="titleMedium" style={{ color: c.text, fontWeight: "700", flex: 1 }}>
             {request.title}
           </Text>
-          <IconButton icon="close" onPress={() => close(null)} accessibilityLabel="Cancel" />
+          <IconButton icon="close" onPress={() => close(null)} accessibilityLabel={t("common.cancel")} />
         </View>
         {request.hint ? (
           <Text style={[styles.hint, { color: c.subtext }]}>{request.hint}</Text>
@@ -82,10 +84,10 @@ export function CameraPhotoCaptureHost() {
         {!permission?.granted ? (
           <View style={styles.centered}>
             <Text style={{ color: c.text, textAlign: "center", marginBottom: 12 }}>
-              Camera permission is required.
+              {t("camera.permission")}
             </Text>
             <Pressable style={[styles.permBtn, { backgroundColor: c.primary }]} onPress={() => void requestPermission()}>
-              <Text style={styles.permBtnText}>Allow camera</Text>
+              <Text style={styles.permBtnText}>{t("camera.allow")}</Text>
             </Pressable>
           </View>
         ) : (
@@ -98,7 +100,7 @@ export function CameraPhotoCaptureHost() {
               onPress={() => void onCapture()}
               disabled={capturing}
               accessibilityRole="button"
-              accessibilityLabel="Take photo"
+              accessibilityLabel={t("camera.takePhoto")}
             >
               <MaterialCommunityIcons name="camera" size={32} color="#FFFFFF" />
             </Pressable>

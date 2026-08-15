@@ -8,6 +8,7 @@ import { supabase } from "@/services/supabase";
 import { useAuth } from "@/store/AuthContext";
 import { getEvidenceSignedUrl } from "@/services/taskEvidence";
 import { formatAppError } from "@/utils/errors";
+import { useLocale } from "@/store/LocaleContext";
 
 type SubmissionRow = {
   id: string;
@@ -28,6 +29,7 @@ function normalizeJoined<T>(value: T | T[] | null | undefined): T | null {
 
 export function ParentSubmissionsScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const { t } = useLocale();
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -162,7 +164,7 @@ export function ParentSubmissionsScreen() {
       return;
     }
 
-    setSnackbar("Submission approved.");
+    setSnackbar(t("parent.submissions.approvedMsg"));
     setBusyId(null);
     await loadSubmissions(false);
   };
@@ -223,7 +225,7 @@ export function ParentSubmissionsScreen() {
 
     setRejectTarget(null);
     setRejectNote("");
-    setSnackbar("Submission rejected. Child can try again.");
+    setSnackbar(t("parent.submissions.rejectedMsg"));
     setBusyId(null);
     await loadSubmissions(false);
   };
@@ -231,40 +233,40 @@ export function ParentSubmissionsScreen() {
   return (
     <ScreenContainer scroll onRefresh={onRefresh} refreshing={refreshing}>
       <Text variant="titleMedium" style={styles.kicker}>
-        Pending reviews
+        {t("parent.submissions.title")}
       </Text>
       <Text variant="bodyMedium" style={styles.subtitle}>
-        Approve or reject photo evidence submitted by your child.
+        {t("parent.submissions.subtitle")}
       </Text>
 
       {isLoading && !refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {rows.length === 0 && !isLoading ? (
-        <Text style={styles.emptyText}>No submissions waiting for review.</Text>
+        <Text style={styles.emptyText}>{t("parent.submissions.empty")}</Text>
       ) : null}
 
       <View style={styles.list}>
         {rows.map((row) => (
           <Card key={row.id} style={styles.card}>
-            <Card.Title title={row.tasks?.title ?? "Task"} subtitle={row.children?.name ?? "Child"} />
+            <Card.Title title={row.tasks?.title ?? t("parent.submissions.task")} subtitle={row.children?.name ?? t("parent.submissions.child")} />
             <Card.Content style={styles.cardBody}>
               {row.image_url && imageUrls[row.id] ? (
                 <Image source={{ uri: imageUrls[row.id] }} style={styles.image} resizeMode="cover" />
               ) : (
-                <Text variant="bodySmall">Could not load image.</Text>
+                <Text variant="bodySmall">{t("parent.submissions.couldNotLoadImage")}</Text>
               )}
               <Text variant="bodySmall" style={styles.meta}>
-                Submitted {new Date(row.created_at).toLocaleString()}
+                {t("parent.submissions.submittedAt", { date: new Date(row.created_at).toLocaleString() })}
               </Text>
               <View style={styles.rowActions}>
                 <PrimaryButton
-                  label="Approve"
+                  label={t("parent.submissions.approve")}
                   onPress={() => void approve(row)}
                   disabled={busyId === row.id}
                 />
                 <PrimaryButton
-                  label="Reject"
+                  label={t("parent.submissions.reject")}
                   onPress={() => {
                     setRejectTarget(row);
                     setRejectNote("");
@@ -280,14 +282,14 @@ export function ParentSubmissionsScreen() {
 
       <Portal>
         <Dialog visible={Boolean(rejectTarget)} onDismiss={() => setRejectTarget(null)}>
-          <Dialog.Title>Reject submission</Dialog.Title>
+          <Dialog.Title>{t("parent.submissions.rejectTitle")}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">Optional note for your child:</Text>
+            <Text variant="bodyMedium">{t("parent.submissions.rejectNoteLabel")}</Text>
             <TextInput mode="outlined" value={rejectNote} onChangeText={setRejectNote} multiline />
           </Dialog.Content>
           <Dialog.Actions>
-            <PrimaryButton label="Cancel" onPress={() => setRejectTarget(null)} mode="text" />
-            <PrimaryButton label="Confirm reject" onPress={() => void confirmReject()} />
+            <PrimaryButton label={t("parent.submissions.cancel")} onPress={() => setRejectTarget(null)} mode="text" />
+            <PrimaryButton label={t("parent.submissions.confirmReject")} onPress={() => void confirmReject()} />
           </Dialog.Actions>
         </Dialog>
       </Portal>

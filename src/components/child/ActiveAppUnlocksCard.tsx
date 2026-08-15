@@ -12,6 +12,7 @@ import { launchAppPackage } from "@/services/appBlocking";
 import { activateAppUnlock, fetchChildTempUnlocks } from "@/services/appUnlock";
 import { emitChildProfileRefresh } from "@/services/childProfileEvents";
 import { ensurePackageAllowedOnNative, flushTempUnlocksToNative } from "@/services/appUnlockNativeSync";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   child: ChildProfileRow | null | undefined;
@@ -19,6 +20,7 @@ type Props = {
 
 export function ActiveAppUnlocksCard({ child }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const [tick, setTick] = useState(0);
 
   const unlocks = useMemo(
@@ -66,11 +68,11 @@ export function ActiveAppUnlocksCard({ child }: Props) {
         <View style={styles.header}>
           <MaterialCommunityIcons name="lock-open-variant" size={22} color={c.primary} />
           <Text variant="titleMedium" style={{ color: c.primaryDark, fontWeight: "800" }}>
-            Unlocked apps
+            {t("child.unlocks.title")}
           </Text>
         </View>
         <Text variant="bodySmall" style={{ color: c.subtext }}>
-          Parent-approved time left on blocked apps. Timer updates every second.
+          {t("child.unlocks.subtitle")}
         </Text>
         {unlocks.map((item) => (
           <Pressable
@@ -78,18 +80,24 @@ export function ActiveAppUnlocksCard({ child }: Props) {
             style={[styles.row, { borderColor: c.border }]}
             onPress={() => void openUnlock(item.key)}
             accessibilityRole="button"
-            accessibilityLabel={item.activated ? `Open ${item.label}` : `Start and open ${item.label}`}
+            accessibilityLabel={
+              item.activated
+                ? t("child.unlocks.openApp", { label: item.label })
+                : t("child.unlocks.startAndOpen", { label: item.label })
+            }
           >
             <MaterialCommunityIcons name={item.icon} size={24} color={c.primaryDark} />
             <View style={styles.rowText}>
               <Text style={{ color: c.text, fontWeight: "700" }}>{item.label}</Text>
               <Text variant="bodySmall" style={{ color: c.subtext }}>
-                {item.duration ? unlockDurationLabel(item.duration) : "Unlocked"}
+                {item.duration ? unlockDurationLabel(item.duration) : t("child.unlocks.unlocked")}
               </Text>
               <Text variant="bodySmall" style={{ color: c.primary }}>
                 {item.activated
                   ? formatUnlockRemaining(item.unlock_until, nowMs)
-                  : `Tap to start${item.duration ? ` your ${unlockDurationLabel(item.duration)}` : ""}`}
+                  : item.duration
+                    ? t("child.unlocks.tapToStartDuration", { duration: unlockDurationLabel(item.duration) })
+                    : t("child.unlocks.tapToStart")}
               </Text>
             </View>
           </Pressable>

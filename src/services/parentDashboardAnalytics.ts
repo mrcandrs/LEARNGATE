@@ -1,3 +1,5 @@
+import { tRuntime } from "@/i18n/runtimeLocale";
+
 export type TaskRow = {
   child_id: string;
   title: string;
@@ -77,13 +79,13 @@ export type ParentDashboardAnalytics = {
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function formatLastSeen(iso: string | null, isOnline: boolean): string {
-  if (isOnline) return "Active now";
-  if (!iso) return "No check-in yet";
+  if (isOnline) return tRuntime("lastSeen.activeNow");
+  if (!iso) return tRuntime("lastSeen.noCheckIn");
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 60_000) return "Just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
+  if (diff < 60_000) return tRuntime("lastSeen.justNow");
+  if (diff < 3_600_000) return tRuntime("lastSeen.minutesAgo", { count: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return tRuntime("lastSeen.hoursAgo", { count: Math.floor(diff / 3_600_000) });
+  return tRuntime("lastSeen.daysAgo", { count: Math.floor(diff / 86_400_000) });
 }
 
 export function buildParentDashboardAnalytics(params: {

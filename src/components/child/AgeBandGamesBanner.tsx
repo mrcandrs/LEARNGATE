@@ -2,6 +2,8 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import type { AgeBandDefinition } from "@/data/childAgeBands";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
+import { localizedAgeBand } from "@/i18n/helpers";
 
 type Props = {
   band: AgeBandDefinition;
@@ -9,21 +11,23 @@ type Props = {
 };
 
 export function AgeBandGamesBanner({ band, childAge }: Props) {
+  const { t } = useLocale();
+  const copy = localizedAgeBand(band.id, t);
   return (
     <View style={styles.wrap}>
       <Text style={styles.emoji}>{band.emoji}</Text>
       <View style={styles.text}>
-        <Text style={styles.title}>{band.heroTitle}</Text>
-        <Text style={styles.subtitle}>{band.heroSubtitle}</Text>
+        <Text style={styles.title}>{copy.heroTitle}</Text>
+        <Text style={styles.subtitle}>{copy.heroSubtitle}</Text>
         {typeof childAge === "number" ? (
           <View style={styles.pill}>
             <Text style={styles.pillText}>
-              {band.label} · Age {childAge} · {band.shortLabel}
+              {t("ageBands.ageLine", { label: copy.label, age: childAge, shortLabel: copy.shortLabel })}
             </Text>
           </View>
         ) : (
           <View style={styles.pill}>
-            <Text style={styles.pillText}>{band.label} · {band.shortLabel}</Text>
+            <Text style={styles.pillText}>{t("ageBands.bandLine", { label: copy.label, shortLabel: copy.shortLabel })}</Text>
           </View>
         )}
       </View>

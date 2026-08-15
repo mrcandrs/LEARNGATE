@@ -38,6 +38,9 @@ import {
 } from "@/services/parentInsights";
 import { fetchLatestWeeklySnapshots, fetchWeeklyStarHistory, type WeeklyStarSnapshot } from "@/services/weeklyStarSnapshots";
 import type { ParentTabParamList } from "@/types/navigation";
+import { useLocale } from "@/store/LocaleContext";
+import type { TranslateFn } from "@/i18n/helpers";
+import type { TranslationKey } from "@/i18n/types";
 
 type OverviewToast = {
   message: string;
@@ -75,6 +78,12 @@ function formatActivityTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function activityTypeLabel(type: string, t: TranslateFn): string {
+  const key = `parent.overview.activityTypes.${type}` as TranslationKey;
+  const label = t(key);
+  return label === key ? type.replace(/_/g, " ") : label;
+}
+
 type AppUsageItem = {
   id: string;
   child_id: string;
@@ -84,11 +93,11 @@ type AppUsageItem = {
   duration_seconds: number | null;
 };
 
-function formatUsageRelativeTime(iso: string): string {
+function formatUsageRelativeTime(iso: string, t: TranslateFn): string {
   const diff = Date.now() - new Date(iso).getTime();
-  if (diff < 45_000) return "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} min ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} hr ago`;
+  if (diff < 45_000) return t("parent.overview.justNow");
+  if (diff < 3_600_000) return t("parent.overview.minAgo", { count: Math.floor(diff / 60_000) });
+  if (diff < 86_400_000) return t("parent.overview.hrAgo", { count: Math.floor(diff / 3_600_000) });
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -97,18 +106,20 @@ function formatUsageRelativeTime(iso: string): string {
   });
 }
 
-function formatUsedDuration(seconds: number | null): string | null {
+function formatUsedDuration(seconds: number | null, t: TranslateFn): string | null {
   if (!seconds || seconds < 60) return null;
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `used ${minutes} min`;
+  if (minutes < 60) return t("parent.overview.usedMin", { count: minutes });
   const hours = Math.floor(minutes / 60);
   const rem = minutes % 60;
-  return rem > 0 ? `used ${hours} hr ${rem} min` : `used ${hours} hr`;
+  return rem > 0
+    ? t("parent.overview.usedHrMin", { hours, minutes: rem })
+    : t("parent.overview.usedHr", { count: hours });
 }
 
-function formatAppUsageDetail(eventAt: string, durationSeconds: number | null): string {
-  const opened = `Opened ${formatUsageRelativeTime(eventAt)}`;
-  const used = formatUsedDuration(durationSeconds);
+function formatAppUsageDetail(eventAt: string, durationSeconds: number | null, t: TranslateFn): string {
+  const opened = t("parent.overview.opened", { time: formatUsageRelativeTime(eventAt, t) });
+  const used = formatUsedDuration(durationSeconds, t);
   return used ? `${opened} · ${used}` : opened;
 }
 
@@ -116,6 +127,7 @@ type ManagedChild = { id: string; name: string; avatar_url: string | null };
 
 export function ParentOverviewScreen() {
   const { isSupabaseConfigured } = useAuth();
+  const { t } = useLocale();
   const route = useRoute<RouteProp<ParentTabParamList, "Overview">>();
   const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const c = useAppColors();
@@ -258,7 +270,7 @@ export function ParentOverviewScreen() {
     setUsageRefreshing(true);
     try {
       await loadRecentActivityForChild(selectedChildId);
-      showSuccess("Recent activity refreshed.");
+      showSuccess(t("parent.overview.recentActivityRefreshed"));
     } finally {
       setUsageRefreshing(false);
     }
@@ -267,10 +279,10 @@ export function ParentOverviewScreen() {
   const loadDashboard = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
       setStats([
-        { label: "Children Managed", value: "0" },
-        { label: "Active Now", value: "0" },
-        { label: "Pending Reviews", value: "0" },
-        { label: "Completed This Week", value: "0" },
+        { label: t("parent.overview.childrenManaged"), value: "0" },
+        { label: t("parent.overview.activeNow"), value: "0" },
+        { label: t("parent.overview.pendingReviews"), value: "0" },
+        { label: t("parent.overview.completedThisWeek"), value: "0" },
       ]);
       setAnalytics(null);
       setActivity([]);
@@ -291,7 +303,7 @@ export function ParentOverviewScreen() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      showError(formatAppError(userError ?? new Error("Not signed in.")));
+      showError(formatAppError(userError ?? new Error(t("parent.overview.notSignedIn"))));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -305,7 +317,7 @@ export function ParentOverviewScreen() {
       .eq("parent_id", user.id);
 
     if (childrenError || !children) {
-      showError(formatAppError(childrenError ?? new Error("Failed to load children.")));
+      showError(formatAppError(childrenError ?? new Error(t("parent.overview.failedToLoadChildren"))));
       setIsLoading(false);
       setRefreshing(false);
       return;
@@ -370,7 +382,7 @@ export function ParentOverviewScreen() {
 
     const managed = childRows.map((c) => ({
       id: c.id,
-      name: c.name ?? "Child",
+      name: c.name ?? t("parent.overview.childFallback"),
       avatar_url: c.avatar_url ?? null,
     }));
 
@@ -392,13 +404,13 @@ export function ParentOverviewScreen() {
 
     setAnalytics(built);
     setStats([
-      { label: "Children Managed", value: String(childRows.length) },
+      { label: t("parent.overview.childrenManaged"), value: String(childRows.length) },
       {
-        label: "Active Now",
+        label: t("parent.overview.activeNow"),
         value: childRows.length ? `${built.onlineCount}/${childRows.length}` : "0",
       },
-      { label: "Pending Reviews", value: String(built.pendingReviewsTotal) },
-      { label: "Completed This Week", value: String(built.week.totalCompleted) },
+      { label: t("parent.overview.pendingReviews"), value: String(built.pendingReviewsTotal) },
+      { label: t("parent.overview.completedThisWeek"), value: String(built.week.totalCompleted) },
     ]);
     setActivity([]);
     setManagedChildren(managed);
@@ -429,7 +441,7 @@ export function ParentOverviewScreen() {
     }
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured, loadRecentActivityForChild, selectedChildId, showError]);
+  }, [isSupabaseConfigured, loadRecentActivityForChild, selectedChildId, showError, t]);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -490,7 +502,7 @@ export function ParentOverviewScreen() {
       return null;
     }
     const stored = storedInsights[childId];
-    const childName = managedChildren.find((c) => c.id === childId)?.name ?? "Child";
+    const childName = managedChildren.find((c) => c.id === childId)?.name ?? t("parent.overview.childFallback");
     if (!stored) {
       return null;
     }
@@ -576,10 +588,9 @@ export function ParentOverviewScreen() {
       {pushTokenReady === false ? (
         <Card style={[styles.pushBanner, { borderColor: c.warning }]}>
           <Card.Content>
-            <Text variant="titleSmall">Alerts not enabled on this device</Text>
+            <Text variant="titleSmall">{t("parent.overview.alertsNotEnabled")}</Text>
             <Text variant="bodySmall" style={[styles.pushBannerHint, { color: c.subtext }]}>
-              Parent notifications (task completed, submissions) need a push token saved for your account. Use a
-              separate phone/emulator from the child account.
+              {t("parent.overview.alertsHint")}
             </Text>
             <Button
               mode="contained"
@@ -592,7 +603,7 @@ export function ParentOverviewScreen() {
                   const result = await registerAndSavePushToken();
                   setPushTokenReady(result.ok);
                   if (result.ok) {
-                    showSuccess("Alerts enabled on this device.");
+                    showSuccess(t("parent.overview.alertsEnabledMsg"));
                   } else {
                     showError(result.message);
                   }
@@ -601,7 +612,7 @@ export function ParentOverviewScreen() {
                 }
               }}
             >
-              Enable alerts on this device
+              {t("parent.overview.enableAlerts")}
             </Button>
           </Card.Content>
         </Card>
@@ -645,7 +656,7 @@ export function ParentOverviewScreen() {
       <View style={styles.recentSection}>
         <View style={styles.recentHeader}>
           <View style={styles.recentTitleWrap}>
-            <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Recent Activity</Text>
+            <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>{t("parent.overview.recentActivity")}</Text>
             {selectedChildName ? (
               <Text variant="labelMedium" style={{ color: c.subtext }}>
                 {selectedChildName}
@@ -656,7 +667,7 @@ export function ParentOverviewScreen() {
             onPress={() => void refreshAppUsage()}
             disabled={usageRefreshing || !selectedChildId}
             accessibilityRole="button"
-            accessibilityLabel="Refresh recent activity"
+            accessibilityLabel={t("parent.overview.refreshActivity")}
           >
             <Text
               style={[
@@ -665,28 +676,27 @@ export function ParentOverviewScreen() {
                 (usageRefreshing || !selectedChildId) && styles.refreshDisabled,
               ]}
             >
-              {usageRefreshing ? "Refreshing…" : "Refresh"}
+              {usageRefreshing ? t("parent.overview.refreshing") : t("parent.overview.refresh")}
             </Text>
           </Pressable>
         </View>
 
         <View style={[styles.recentCard, { borderColor: c.border, backgroundColor: c.card }]}>
           {managedChildren.length === 0 ? (
-            <Text style={styles.emptyText}>Add a child profile to see activity here.</Text>
+            <Text style={styles.emptyText}>{t("parent.overview.addChildToSeeActivity")}</Text>
           ) : (
             <>
               {usageLastRefreshedAt ? (
                 <Text variant="labelSmall" style={[styles.usageMeta, { color: c.subtext }]}>
-                  Last refreshed {formatUsageRelativeTime(usageLastRefreshedAt.toISOString())}. Child phone uploads
-                  about every 30 seconds.
+                  {t("parent.overview.lastRefreshed", { time: formatUsageRelativeTime(usageLastRefreshedAt.toISOString(), t) })}
                 </Text>
               ) : null}
 
               {visibleAppUsage.length === 0 && visibleActivity.length === 0 && !usageRefreshing ? (
                 <Text style={[styles.emptyText, { color: c.subtext }]}>
-                  No recent activity yet for{" "}
-                  {managedChildren.find((c) => c.id === selectedChildId)?.name ?? "this child"}. On their phone: Child
-                  Settings → App activity reporting → turn Usage access on, then tap Refresh.
+                  {t("parent.overview.noRecentActivity", {
+                    name: managedChildren.find((c) => c.id === selectedChildId)?.name ?? t("parent.overview.thisChildFallback"),
+                  })}
                 </Text>
               ) : null}
 
@@ -701,10 +711,10 @@ export function ParentOverviewScreen() {
                   </View>
                   <View style={styles.activityText}>
                     <Text style={[styles.activityMain, { color: c.text }]} numberOfLines={1}>
-                      {displayAppUsageLabel(item.app_label, item.package_name)} opened
+                      {t("parent.overview.appOpened", { label: displayAppUsageLabel(item.app_label, item.package_name) })}
                     </Text>
                     <Text style={[styles.activityTime, { color: c.subtext }]}>
-                      {formatAppUsageDetail(item.event_at, item.duration_seconds)}
+                      {formatAppUsageDetail(item.event_at, item.duration_seconds, t)}
                     </Text>
                   </View>
                 </View>
@@ -720,7 +730,7 @@ export function ParentOverviewScreen() {
                     />
                   </View>
                   <View style={styles.activityText}>
-                    <Text style={[styles.activityMain, { color: c.text }]}>{item.type.replace(/_/g, " ")}</Text>
+                    <Text style={[styles.activityMain, { color: c.text }]}>{activityTypeLabel(item.type, t)}</Text>
                     <Text style={[styles.activityTime, { color: c.subtext }]}>
                       {formatActivityTime(item.created_at)}
                     </Text>
@@ -738,7 +748,7 @@ export function ParentOverviewScreen() {
                   accessibilityRole="button"
                 >
                   <Text style={[styles.viewMoreText, { color: c.primaryDark }]}>
-                    {activityExpanded ? "Show fewer activities" : "View more activities"}
+                    {activityExpanded ? t("parent.overview.showFewer") : t("parent.overview.viewMore")}
                   </Text>
                 </Pressable>
               ) : null}

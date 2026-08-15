@@ -21,6 +21,7 @@ import { useAuth } from "@/store/AuthContext";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ChildAccess">;
 
@@ -33,6 +34,7 @@ const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
 
 export function ChildAccessScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLocale();
   const { selectRole, isSupabaseConfigured } = useAuth();
   const [childName, setChildName] = useState("");
   const [pin, setPin] = useState("");
@@ -49,7 +51,7 @@ export function ChildAccessScreen({ navigation }: Props) {
     }
 
     if (!childName.trim() || !pin.trim()) {
-      setError("Child name and PIN are required.");
+      setError(t("auth.childAccess.nameAndPinRequired"));
       return;
     }
 
@@ -66,7 +68,7 @@ export function ChildAccessScreen({ navigation }: Props) {
     const loginCreds = Array.isArray(creds) ? creds[0] : null;
     if (credsError || !loginCreds?.login_email || !loginCreds?.login_secret) {
       setIsSubmitting(false);
-      setError(credsError ? formatAppError(credsError) : "Invalid child name or PIN.");
+      setError(credsError ? formatAppError(credsError) : t("auth.childAccess.invalidCredentials"));
       return;
     }
 
@@ -130,7 +132,7 @@ export function ChildAccessScreen({ navigation }: Props) {
           style={[styles.backBtn, { top: insets.top + 8 }]}
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("auth.childAccess.goBack")}
           hitSlop={12}
         />
       </View>
@@ -149,16 +151,16 @@ export function ChildAccessScreen({ navigation }: Props) {
           <View style={styles.card}>
             <View style={styles.badge}>
               <MaterialCommunityIcons name="shield-check" size={18} color={GREEN} />
-              <Text style={styles.badgeText}>Secure Child Login</Text>
+              <Text style={styles.badgeText}>{t("auth.childAccess.secureLogin")}</Text>
             </View>
 
-            <Text style={styles.cardTitle}>Child Access</Text>
-            <Text style={styles.cardSubtitle}>Enter your child name and parent PIN.</Text>
+            <Text style={styles.cardTitle}>{t("auth.childAccess.title")}</Text>
+            <Text style={styles.cardSubtitle}>{t("auth.childAccess.subtitle")}</Text>
 
             {successToastVisible ? (
               <View style={styles.successToast}>
                 <MaterialCommunityIcons name="check-circle" size={16} color="#15803D" />
-                <Text style={styles.successToastText}>Logged in successfully</Text>
+                <Text style={styles.successToastText}>{t("auth.childAccess.loggedIn")}</Text>
               </View>
             ) : null}
 
@@ -168,7 +170,7 @@ export function ChildAccessScreen({ navigation }: Props) {
                   <MaterialCommunityIcons name="account-outline" size={22} color={GREEN} style={styles.fieldIcon} />
                   <TextInput
                     style={styles.fieldInput}
-                    placeholder="Child Name"
+                    placeholder={t("auth.childAccess.childNamePlaceholder")}
                     placeholderTextColor="#9CA3AF"
                     value={childName}
                     onChangeText={setChildName}
@@ -181,7 +183,7 @@ export function ChildAccessScreen({ navigation }: Props) {
                   <MaterialCommunityIcons name="lock-outline" size={22} color={GREEN} style={styles.fieldIcon} />
                   <TextInput
                     style={styles.fieldInput}
-                    placeholder="Parent PIN ( 6 digits )"
+                    placeholder={t("auth.childAccess.pinPlaceholder")}
                     placeholderTextColor="#9CA3AF"
                     value={pin}
                     onChangeText={(value) => setPin(value.replace(/[^0-9]/g, "").slice(0, 6))}
@@ -191,7 +193,7 @@ export function ChildAccessScreen({ navigation }: Props) {
                   <Pressable
                     onPress={() => setShowPin((v) => !v)}
                     accessibilityRole="button"
-                    accessibilityLabel={showPin ? "Hide PIN" : "Show PIN"}
+                    accessibilityLabel={showPin ? t("auth.childAccess.hidePin") : t("auth.childAccess.showPin")}
                     hitSlop={8}
                   >
                     <MaterialCommunityIcons
@@ -213,32 +215,32 @@ export function ChildAccessScreen({ navigation }: Props) {
                 isSubmitting && styles.btnDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel={isSupabaseConfigured ? "Unlock" : "Continue in demo mode"}
+              accessibilityLabel={isSupabaseConfigured ? t("auth.childAccess.unlock") : t("auth.childAccess.continueDemo")}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <Text style={styles.unlockLabel}>
-                  {isSupabaseConfigured ? "Unlock" : "Continue in Demo Mode"}
+                  {isSupabaseConfigured ? t("auth.childAccess.unlock") : t("auth.childAccess.continueDemo")}
                 </Text>
               )}
             </Pressable>
 
             {isSubmitting && isSupabaseConfigured ? (
-              <Text style={styles.signingInHint}>Signing in…</Text>
+              <Text style={styles.signingInHint}>{t("auth.childAccess.signingIn")}</Text>
             ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             {!isSupabaseConfigured ? (
               <Text style={styles.warning}>
-                Supabase keys are not configured yet. Add your .env values to enable real child authentication.
+                {t("auth.childAccess.supabaseWarning")}
               </Text>
             ) : null}
 
             <View style={styles.safetyFooter}>
               <MaterialCommunityIcons name="shield-check-outline" size={16} color={GREEN} />
-              <Text style={styles.safetyText}>Your child&apos;s safety is our top priority</Text>
+              <Text style={styles.safetyText}>{t("auth.childAccess.safety")}</Text>
             </View>
           </View>
         </ScrollView>

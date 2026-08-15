@@ -9,6 +9,7 @@ import { supabase } from "@/services/supabase";
 import { formatAppError } from "@/utils/errors";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 import { reverseGeocode } from "@/services/geoapify";
 
 export type ParentLocationChild = {
@@ -47,6 +48,7 @@ const DEFAULT_REGION: Region = {
 
 export function ParentChildLocationPreview({ children, selectedChildId }: ParentChildLocationPreviewProps) {
   const c = useAppColors();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const { isSupabaseConfigured } = useAuth();
   const mapRef = useRef<MapView | null>(null);
@@ -366,7 +368,9 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
       <Marker
         coordinate={markerCoordinate}
         title={selectedMarker.child.name}
-        description={`Updated ${new Date(selectedMarker.location.captured_at).toLocaleTimeString()}`}
+        description={t("location.updatedAt", {
+          time: new Date(selectedMarker.location.captured_at).toLocaleTimeString(),
+        })}
         anchor={{ x: 0.5, y: 1 }}
       >
         <View style={[styles.markerWrap, styles.markerSelected]}>
@@ -384,13 +388,13 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
         </View>
       </Marker>
     );
-  }, [selectedMarker, markerCoordinate, pinColorForChild]);
+  }, [selectedMarker, markerCoordinate, pinColorForChild, t]);
 
   return (
     <View style={styles.wrap}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Open full screen map"
+        accessibilityLabel={t("location.openMap")}
         onPress={() => setMapExpanded(true)}
         style={[styles.mapShell, { borderColor: c.border, backgroundColor: c.surfaceTint }]}
       >
@@ -408,12 +412,12 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
         {selectedName ? (
           <View style={[styles.mapBadge, { backgroundColor: c.primaryDark }]}>
             <MaterialCommunityIcons name="map-marker" size={14} color="#FFFFFF" />
-            <Text style={styles.mapBadgeText}>{selectedName} selected</Text>
+            <Text style={styles.mapBadgeText}>{t("location.namedSelected", { name: selectedName })}</Text>
           </View>
         ) : null}
         <View style={[styles.expandHint, { backgroundColor: c.card, borderColor: c.border }]}>
           <MaterialCommunityIcons name="arrow-expand" size={16} color={c.primaryDark} />
-          <Text style={[styles.expandHintText, { color: c.text }]}>Tap to expand map</Text>
+          <Text style={[styles.expandHintText, { color: c.text }]}>{t("location.tapExpand")}</Text>
         </View>
         {loading ? (
           <View style={styles.mapLoadingOverlay} pointerEvents="none">
@@ -426,9 +430,9 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
         <View style={[styles.expandedRoot, { backgroundColor: c.background, paddingTop: insets.top }]}>
           <View style={[styles.expandedHeader, { borderBottomColor: c.border }]}>
             <Text variant="titleMedium" style={{ color: c.text, fontWeight: "700", flex: 1 }}>
-              {selectedName ? `${selectedName}'s location` : "Live location"}
+              {selectedName ? t("location.namedLocation", { name: selectedName }) : t("location.liveLocation")}
             </Text>
-            <IconButton icon="close" accessibilityLabel="Close map" onPress={() => setMapExpanded(false)} />
+            <IconButton icon="close" accessibilityLabel={t("location.closeMap")} onPress={() => setMapExpanded(false)} />
           </View>
           <View
             style={styles.expandedMap}
@@ -452,10 +456,10 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
           {selectedState?.location ? (
             <View style={[styles.expandedFooter, { backgroundColor: c.card, borderTopColor: c.border }]}>
               <Text style={{ color: c.subtext, fontSize: 13 }}>
-                {(placeByChild[selectedState.child.id]?.place ?? "Resolving location…").split(",").slice(0, 3).join(",")}
+                {(placeByChild[selectedState.child.id]?.place ?? t("location.resolving")).split(",").slice(0, 3).join(",")}
               </Text>
               <Text style={{ color: c.subtext, fontSize: 12, marginTop: 4 }}>
-                Updated {new Date(selectedState.location.captured_at).toLocaleString()}
+                {t("location.updatedAt", { time: new Date(selectedState.location.captured_at).toLocaleString() })}
               </Text>
             </View>
           ) : (
@@ -507,22 +511,22 @@ export function ParentChildLocationPreview({ children, selectedChildId }: Parent
             </View>
             {selectedState.location ? (
               <Text style={[styles.meta, { color: c.subtext }]}>
-                {selectedState.child.is_online ? "Online" : "Offline"} ·{" "}
-                {(placeByChild[selectedState.child.id]?.place ?? "Resolving location…").split(",").slice(0, 2).join(",")}
+                {selectedState.child.is_online ? t("common.online") : t("common.offline")} ·{" "}
+                {(placeByChild[selectedState.child.id]?.place ?? t("location.resolving")).split(",").slice(0, 2).join(",")}
               </Text>
             ) : (
               <Text style={[styles.pending, { color: c.subtext }]}>
-                Waiting for permission or first location update
+                {t("location.waitingPermission")}
               </Text>
             )}
             {selectedState.child.last_seen_at ? (
               <Text style={[styles.meta, { color: c.subtext }]}>
-                Last seen {new Date(selectedState.child.last_seen_at).toLocaleString()}
+                {t("location.lastSeenAt", { time: new Date(selectedState.child.last_seen_at).toLocaleString() })}
               </Text>
             ) : null}
             {selectedState.location ? (
               <Text style={[styles.meta, { color: c.subtext }]}>
-                Updated {new Date(selectedState.location.captured_at).toLocaleString()}
+                {t("location.updatedAt", { time: new Date(selectedState.location.captured_at).toLocaleString() })}
               </Text>
             ) : null}
           </View>

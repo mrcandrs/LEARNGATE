@@ -14,6 +14,7 @@ import {
 import { AuthProvider } from "./src/store/AuthContext";
 import { AudioGuidanceProvider } from "./src/store/AudioGuidanceContext";
 import { ThemeModeProvider, useThemeMode } from "./src/store/ThemeModeContext";
+import { LocaleProvider } from "./src/store/LocaleContext";
 
 WebBrowser.maybeCompleteAuthSession();
 import { CameraPhotoCaptureHost } from "./src/components/CameraPhotoCaptureHost";
@@ -51,7 +52,9 @@ export default function App() {
 
   return (
     <ThemeModeProvider>
-      <AppShell />
+      <LocaleProvider>
+        <AppShell />
+      </LocaleProvider>
     </ThemeModeProvider>
   );
 }

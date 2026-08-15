@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseFormQuality";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   remaining: number;
@@ -26,18 +27,19 @@ export const ExerciseWorkoutHud = memo(function ExerciseWorkoutHud({
   done,
   engineLabel,
 }: Props) {
+  const { t } = useLocale();
   const statusColor = formQualityColor(quality === "none" ? "red" : quality);
 
   return (
     <View style={styles.row} pointerEvents="box-none">
       <View style={styles.repPill}>
-        <Text style={styles.repPillLabel}>Left</Text>
+        <Text style={styles.repPillLabel}>{t("child.exercise.left")}</Text>
         <Text style={styles.repPillNum}>{String(remaining).padStart(2, "0")}</Text>
       </View>
       <View style={styles.centerPill}>
-        <Text style={styles.centerDone}>{completed} done</Text>
+        <Text style={styles.centerDone}>{t("child.exercise.doneCount", { count: completed })}</Text>
         <Text style={[styles.centerStatus, { color: statusColor }]} numberOfLines={2}>
-          {statusMessage || "Get ready!"}
+          {statusMessage || t("child.exercise.getReady")}
         </Text>
         {engineLabel ? <Text style={styles.engineLabel}>{engineLabel}</Text> : null}
       </View>
@@ -46,10 +48,10 @@ export const ExerciseWorkoutHud = memo(function ExerciseWorkoutHud({
         disabled={done}
         style={[styles.stopBtn, done && styles.stopBtnDisabled]}
         accessibilityRole="button"
-        accessibilityLabel="Stop workout"
+        accessibilityLabel={t("child.exercise.stopWorkout")}
       >
         <MaterialCommunityIcons name="stop-circle-outline" size={22} color="#FFFFFF" />
-        <Text style={styles.stopText}>Stop</Text>
+        <Text style={styles.stopText}>{t("child.exercise.stop")}</Text>
       </Pressable>
     </View>
   );

@@ -8,6 +8,7 @@ import {
 import { formatAppTimeShort } from "@/services/parentDashboardAnalytics";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   history: WeeklyStarSnapshot[];
@@ -26,7 +27,8 @@ export function StarHistoryCard({
   childName,
 }: Props) {
   const c = useAppColors();
-  const title = childName ? `${childName}'s Star History` : "Star History";
+  const { t } = useLocale();
+  const title = childName ? t("parent.starHistory.titleNamed", { name: childName }) : t("parent.starHistory.title");
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
@@ -36,16 +38,14 @@ export function StarHistoryCard({
       </View>
 
       <View style={[styles.summaryRow, { backgroundColor: c.surfaceTint }]}>
-        <SummaryChip label="This week" value={`${starsThisWeek} ★`} accent={c.warning} />
-        <SummaryChip label="All time" value={`${starsLifetime} ★`} accent={c.primary} />
+        <SummaryChip label={t("parent.starHistory.thisWeek")} value={`${starsThisWeek} ★`} accent={c.warning} />
+        <SummaryChip label={t("parent.starHistory.allTime")} value={`${starsLifetime} ★`} accent={c.primary} />
       </View>
 
       {loading ? (
         <ActivityIndicator style={styles.loader} color={c.primary} />
       ) : history.length === 0 ? (
-        <Text style={[styles.empty, { color: c.subtext }]}>
-          No closed weeks yet. After each Monday midnight (Manila time), last week&apos;s stars appear here.
-        </Text>
+        <Text style={[styles.empty, { color: c.subtext }]}>{t("parent.starHistory.empty")}</Text>
       ) : (
         <View style={styles.list}>
           {history.map((row) => (
@@ -55,11 +55,14 @@ export function StarHistoryCard({
                   {formatWeekRangeLabel(row.week_start, row.week_end)}
                 </Text>
                 <Text style={[styles.starsValue, { color: c.warning }]}>
-                  {row.stars_at_reset} stars
+                  {t("parent.starHistory.starsCount", { count: row.stars_at_reset })}
                 </Text>
               </View>
               <Text style={[styles.meta, { color: c.subtext }]}>
-                {row.tasks_completed} tasks · {formatAppTimeShort(row.app_time_seconds)} app time
+                {t("parent.starHistory.tasksAppTime", {
+                  tasks: row.tasks_completed,
+                  time: formatAppTimeShort(row.app_time_seconds),
+                })}
               </Text>
             </View>
           ))}

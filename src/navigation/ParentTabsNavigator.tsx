@@ -8,22 +8,25 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { useParentChildPushHealthCheck } from "@/hooks/useParentChildPushHealthCheck";
 import { useAuth } from "@/store/AuthContext";
 import { useTheme } from "react-native-paper";
+import { useLocale } from "@/store/LocaleContext";
 
 const Tab = createBottomTabNavigator<ParentTabParamList>();
 
-const PARENT_TITLES: Record<keyof ParentTabParamList, string> = {
-  Overview: "Home",
-  Children: "Manage Children",
-  Settings: "Settings",
-};
-
 export function ParentTabsNavigator() {
   const theme = useTheme();
+  const { t, locale } = useLocale();
   const { appMode } = useAuth();
   useParentChildPushHealthCheck(appMode === "parent");
 
+  const parentTitles: Record<keyof ParentTabParamList, string> = {
+    Overview: t("parent.tabs.overview"),
+    Children: t("parent.tabs.children"),
+    Settings: t("parent.tabs.settings"),
+  };
+
   return (
     <Tab.Navigator
+      key={locale}
       screenOptions={({ route }) => ({
         headerShown: true,
         headerStyle: { backgroundColor: theme.colors.primary },
@@ -31,7 +34,7 @@ export function ParentTabsNavigator() {
         headerTitleStyle: { fontWeight: "700" },
         headerShadowVisible: false,
         headerRight: () => <NotificationBell enabled={appMode === "parent"} variant="header" />,
-        title: PARENT_TITLES[route.name as keyof ParentTabParamList],
+        title: parentTitles[route.name as keyof ParentTabParamList],
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: {

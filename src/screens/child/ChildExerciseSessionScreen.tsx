@@ -29,18 +29,22 @@ import { isStreamPoseAvailable, EXERCISE_AI_BUILD } from "@/services/exercisePos
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { formatAppError } from "@/utils/errors";
 import { isLikelyOfflineError, OFFLINE_MSG } from "@/services/offlineMessages";
+import { useLocale } from "@/store/LocaleContext";
+import { localizedExercise } from "@/i18n/helpers";
 
 type Props = NativeStackScreenProps<ChildActivitiesStackParamList, "ExerciseSession">;
 type SessionPhase = "demo" | "workout" | "completed";
 
 export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(c, insets), [c, insets]);
   const taskId = route.params.taskId;
   const selectedId = normalizeExerciseId(route.params.exerciseId);
   const exercise = useMemo(() => getExerciseById(selectedId), [selectedId]);
+  const exerciseTitle = useMemo(() => localizedExercise(selectedId, t).title, [selectedId, t]);
   const isLegWorkout = isFullBodyExercise(selectedId);
   const { child, refresh: refreshProfile } = useChildProfile();
   const [permission, requestPermission] = useCameraPermissions();
@@ -294,7 +298,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
       if (!permission?.granted) {
         const res = await requestPermission();
         if (!res.granted) {
-          setError("Camera permission is required to count reps.");
+          setError(t("child.exercise.cameraPermissionRequired"));
           return;
         }
       }
@@ -303,7 +307,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         if (visionStatus !== "granted") {
           const visionRes = await VisionCamera.requestCameraPermission();
           if (visionRes !== "granted") {
-            setError("Camera permission is required to count reps.");
+            setError(t("child.exercise.cameraPermissionRequired"));
             return;
           }
         }
@@ -318,12 +322,12 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     }
   };
 
-  const moveLabel = formMessage || (cameraOn && cameraReady ? "Get ready!" : "Starting…");
+  const moveLabel = formMessage || (cameraOn && cameraReady ? t("child.exercise.getReady") : t("child.exercise.starting"));
 
   if (!permission) {
     return (
       <View style={[styles.centered, { backgroundColor: c.background }]}>
-        <Text style={{ color: c.text }}>Loading camera…</Text>
+        <Text style={{ color: c.text }}>{t("child.exercise.loadingCamera")}</Text>
       </View>
     );
   }
@@ -335,22 +339,22 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         <View style={[styles.completedCard, { backgroundColor: c.card, borderColor: c.border }]}>
           <MaterialCommunityIcons name="check-circle" size={88} color={c.primary} />
           <Text variant="headlineSmall" style={{ color: c.primaryDark, fontWeight: "900", textAlign: "center" }}>
-            Workout complete!
+            {t("child.exercise.workoutComplete")}
           </Text>
           <Text variant="titleMedium" style={{ color: c.text, fontWeight: "700", textAlign: "center" }}>
-            {exercise.emoji} {exercise.title}
+            {exercise.emoji} {exerciseTitle}
           </Text>
           <Text variant="bodyLarge" style={{ color: c.subtext, textAlign: "center" }}>
-            {completed} / {targetReps} reps done
+            {t("child.exercise.repsDone", { completed, target: targetReps })}
           </Text>
           {isSaving ? (
-            <Text style={{ color: c.primary, fontWeight: "700" }}>Awarding your stars…</Text>
+            <Text style={{ color: c.primary, fontWeight: "700" }}>{t("child.exercise.awarding")}</Text>
           ) : (
-            <Text style={{ color: c.subtext }}>Great job!</Text>
+            <Text style={{ color: c.subtext }}>{t("child.exercise.greatJob")}</Text>
           )}
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          <PrimaryButton label="Practice again" onPress={practiceAgain} />
-          <PrimaryButton label="Back to activities" mode="outlined" onPress={exitSession} />
+          <PrimaryButton label={t("child.exercise.practiceAgain")} onPress={practiceAgain} />
+          <PrimaryButton label={t("child.exercise.backToActivities")} mode="outlined" onPress={exitSession} />
         </View>
         <ParentManageToast
           visible={toast != null}
@@ -378,7 +382,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
 
         {!cameraReady ? (
           <View style={styles.cameraOverlay}>
-            <Text style={styles.overlayText}>Opening camera…</Text>
+            <Text style={styles.overlayText}>{t("child.exercise.openingCamera")}</Text>
           </View>
         ) : null}
 
@@ -405,12 +409,12 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             onPress={stopWorkout}
             style={styles.workoutBack}
             accessibilityRole="button"
-            accessibilityLabel="Stop workout"
+            accessibilityLabel={t("child.exercise.stopWorkout")}
           >
             <MaterialCommunityIcons name="chevron-left" size={28} color="#FFFFFF" />
           </Pressable>
           <Text style={styles.workoutTitle}>
-            {exercise.emoji} {exercise.title}
+            {exercise.emoji} {exerciseTitle}
           </Text>
           <View style={styles.workoutTopSpacer} />
         </View>
@@ -420,20 +424,20 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             <ExerciseWorkoutHud
               remaining={remaining}
               completed={completed}
-              statusMessage={formMessage || "Get ready!"}
+              statusMessage={formMessage || t("child.exercise.getReady")}
               quality={formQuality}
               onStop={stopWorkout}
               done={done}
               engineLabel={
                 detectionMode === "stream"
                   ? __DEV__
-                    ? `Pose tracking · ${EXERCISE_AI_BUILD}`
-                    : "Pose tracking"
+                    ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
+                    : t("child.exercise.poseTracking")
                   : detectionMode === "motion"
-                    ? "Motion mode"
+                    ? t("child.exercise.motionMode")
                     : __DEV__
-                      ? `Pose tracking · ${EXERCISE_AI_BUILD}`
-                      : "Pose tracking"
+                      ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
+                      : t("child.exercise.poseTracking")
               }
             />
           </View>
@@ -463,41 +467,41 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         <View style={[styles.workoutBottom, { backgroundColor: c.card }]}>
           <View style={styles.repRowCompact}>
             <View style={[styles.repBigBox, { backgroundColor: c.primary }]}>
-              <Text style={styles.repBigLabel}>Remaining</Text>
+              <Text style={styles.repBigLabel}>{t("child.exercise.remaining")}</Text>
               <Text style={styles.repBigNum}>{String(remaining).padStart(2, "0")}</Text>
             </View>
             <View style={styles.repSideCompact}>
-              <Text style={{ color: c.subtext, fontSize: 13 }}>Completed: {completed}</Text>
+              <Text style={{ color: c.subtext, fontSize: 13 }}>{t("child.exercise.completedCount", { count: completed })}</Text>
               <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
                 {moveLabel}
               </Text>
               <Text style={{ color: c.subtext, fontSize: 11 }}>
                 {detectionMode === "stream"
                   ? __DEV__
-                    ? `Pose tracking · ${EXERCISE_AI_BUILD}`
-                    : "Pose tracking"
+                    ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
+                    : t("child.exercise.poseTracking")
                   : detectionMode === "pose"
-                    ? "Pose tracking"
-                    : "Motion mode"}
+                    ? t("child.exercise.poseTracking")
+                    : t("child.exercise.motionMode")}
               </Text>
             </View>
           </View>
 
           {done && !isSaving ? (
             <Text style={{ color: c.primary, fontWeight: "800", textAlign: "center", fontSize: 15 }}>
-              All reps done!
+              {t("child.exercise.allRepsDone")}
             </Text>
           ) : null}
 
           <View style={styles.btnRow}>
             <View style={styles.flexBtn}>
-              <PrimaryButton label="Stop" mode="outlined" onPress={stopWorkout} disabled={done} />
+              <PrimaryButton label={t("child.exercise.stop")} mode="outlined" onPress={stopWorkout} disabled={done} />
             </View>
           </View>
 
           {isEmulator && __DEV__ ? (
             <PrimaryButton
-              label="Test +1 rep (emulator)"
+              label={t("child.exercise.testRep")}
               mode="outlined"
               onPress={() => setCompleted((n) => Math.min(targetReps, n + 1))}
             />
@@ -517,13 +521,15 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             <MaterialCommunityIcons name="chevron-left" size={26} color={c.primaryDark} />
           </Pressable>
           <Text variant="titleMedium" style={{ color: c.primaryDark, fontWeight: "800", flex: 1 }}>
-            {exercise.emoji} {exercise.title}
+            {exercise.emoji} {exerciseTitle}
           </Text>
         </View>
 
         <View style={[styles.exerciseSummary, { backgroundColor: c.card, borderColor: c.border }]}>
           <Text variant="bodySmall" style={{ color: c.subtext }}>
-            {taskId ? `Assigned task · ${targetReps} reps` : `Practice · goal ${targetReps} reps`}
+            {taskId
+              ? t("child.exercise.assignedTask", { reps: targetReps })
+              : t("child.exercise.practiceGoal", { reps: targetReps })}
           </Text>
           {!taskId ? (
             <View style={styles.stepperRow}>
@@ -534,7 +540,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               >
                 <Text style={styles.stepBtnText}>−</Text>
               </Pressable>
-              <Text style={[styles.stepValue, { color: c.text }]}>{targetReps} reps</Text>
+              <Text style={[styles.stepValue, { color: c.text }]}>{targetReps} {t("common.reps")}</Text>
               <Pressable
                 style={[styles.stepBtn, { backgroundColor: c.primary }]}
                 onPress={() => setTargetReps((n) => Math.min(50, n + 1))}
@@ -550,31 +556,31 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
           <ExerciseMascotDemo
             key={`${selectedId}-${demoRunId}`}
             exerciseId={selectedId}
-            exerciseTitle={exercise.title}
+            exerciseTitle={exerciseTitle}
             onComplete={() => setDemoFinished(true)}
           />
         ) : (
           <View style={[styles.controlCard, { backgroundColor: c.card }]}>
             <Text variant="bodyMedium" style={{ color: c.text, textAlign: "center", fontWeight: "700" }}>
-              Nice! Now it's your turn.
+              {t("child.exercise.niceYourTurn")}
             </Text>
             <Text variant="bodySmall" style={{ color: c.subtext, textAlign: "center" }}>
-              Stand in the frame. Red means start the move. Green means finish it. You get +1 when the rep is complete.
+              {t("child.exercise.standInFrame")}
             </Text>
           </View>
         )}
 
         <View style={[styles.controlCard, { backgroundColor: c.card }]}>
           {!demoFinished ? (
-            <PrimaryButton label={`${MASCOT_NAME} is demonstrating…`} disabled onPress={() => {}} />
+            <PrimaryButton label={t("child.exercise.demonstrating", { name: MASCOT_NAME })} disabled onPress={() => {}} />
           ) : (
             <PrimaryButton
-              label={startingCamera ? "Starting…" : "Your turn — open camera"}
+              label={startingCamera ? t("child.exercise.starting") : t("child.exercise.yourTurnOpenCamera")}
               onPress={() => void beginWorkout()}
               disabled={startingCamera}
             />
           )}
-          <PrimaryButton label="Watch again" mode="outlined" onPress={startDemo} disabled={!demoFinished} />
+          <PrimaryButton label={t("child.exercise.watchAgain")} mode="outlined" onPress={startDemo} disabled={!demoFinished} />
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
       </ScrollView>
@@ -624,7 +630,7 @@ function createStyles(c: ReturnType<typeof useAppColors>, insets: { top: number;
     stepValue: { fontSize: 16, fontWeight: "800", minWidth: 72, textAlign: "center" },
     btnRow: { flexDirection: "row", gap: 10 },
     flexBtn: { flex: 1 },
-    errorText: { color: "#B91C1C", textAlign: "center" },
+    errorText: { color: c.danger, textAlign: "center" },
     workoutRoot: { flex: 1 },
     workoutRootFull: { paddingBottom: 0 },
     cameraArea: { flex: 1, position: "relative" },

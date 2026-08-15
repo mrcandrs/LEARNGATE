@@ -1,6 +1,7 @@
 import type { ParentChildInsight } from "@/components/parent/ParentInsightsSummaryCard";
 import { supabase } from "@/services/supabase";
 import { FunctionsHttpError } from "@supabase/supabase-js";
+import { tRuntime } from "@/i18n/runtimeLocale";
 
 export type StoredParentInsight = {
   child_id: string;
@@ -20,18 +21,22 @@ export function formatGeneratedAgo(generatedAt: string | undefined): string | nu
   }
   const ms = Date.now() - new Date(generatedAt).getTime();
   if (ms < 60_000) {
-    return "Generated just now";
+    return tRuntime("parent.insights.generatedJustNow");
   }
   const mins = Math.floor(ms / 60_000);
   if (mins < 60) {
-    return `Generated ${mins} min ago`;
+    return tRuntime("parent.insights.generatedMins", { count: mins });
   }
   const hours = Math.floor(mins / 60);
   if (hours < 24) {
-    return hours === 1 ? "Generated 1 hr ago" : `Generated ${hours} hr ago`;
+    return hours === 1
+      ? tRuntime("parent.insights.generatedHour")
+      : tRuntime("parent.insights.generatedHours", { count: hours });
   }
   const days = Math.floor(hours / 24);
-  return days === 1 ? "Generated 1 day ago" : `Generated ${days} days ago`;
+  return days === 1
+    ? tRuntime("parent.insights.generatedDay")
+    : tRuntime("parent.insights.generatedDays", { count: days });
 }
 
 export function storedInsightToCard(stored: StoredParentInsight, childName: string): ParentChildInsight {

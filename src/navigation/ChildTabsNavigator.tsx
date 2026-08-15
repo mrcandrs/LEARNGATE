@@ -11,6 +11,7 @@ import { useAuth } from "@/store/AuthContext";
 import { useChildHeartbeat } from "@/hooks/useChildHeartbeat";
 import { useChildScreenLockContext } from "@/store/ChildScreenLockContext";
 import { useTheme } from "react-native-paper";
+import { useLocale } from "@/store/LocaleContext";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
 
@@ -42,11 +43,13 @@ export function ChildTabsNavigator() {
   useChildLocationTracking();
   const { appMode } = useAuth();
   const theme = useTheme();
+  const { t, locale } = useLocale();
   const lock = useChildScreenLockContext();
   useChildHeartbeat({ enabled: appMode === "child" && !lock.isLocked, intervalMs: 60_000 });
 
   return (
     <Tab.Navigator
+      key={locale}
       screenListeners={{
         tabPress: (e) => {
           if (lock.isLocked) {
@@ -77,7 +80,7 @@ export function ChildTabsNavigator() {
         component={ChildHomeStackNavigator}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon focused={focused} icon="home-outline" label="Home" activeColor={theme.colors.primary} />
+            <TabIcon focused={focused} icon="home-outline" label={t("child.tabs.home")} activeColor={theme.colors.primary} />
           ),
         }}
       />
@@ -89,7 +92,7 @@ export function ChildTabsNavigator() {
             <TabIcon
               focused={focused}
               icon="gamepad-variant-outline"
-              label="Activities"
+              label={t("child.tabs.activities")}
               activeColor={theme.colors.secondary}
             />
           ),

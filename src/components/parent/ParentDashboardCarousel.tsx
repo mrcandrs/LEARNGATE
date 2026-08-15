@@ -19,16 +19,17 @@ import type { ParentStat } from "@/types/app";
 import { useAppColors } from "@/theme/useAppColors";
 import type { AppColors } from "@/theme/theme";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-function statIcons(c: AppColors): Record<string, { icon: IconName; color: string }> {
-  return {
-    "Children Managed": { icon: "account-group-outline", color: c.primary },
-    "Active Now": { icon: "access-point", color: c.primary },
-    "Pending Reviews": { icon: "clipboard-text-clock-outline", color: c.warning },
-    "Completed This Week": { icon: "check-circle-outline", color: c.info },
-  };
+function statIcons(c: AppColors): Array<{ icon: IconName; color: string }> {
+  return [
+    { icon: "account-group-outline", color: c.primary },
+    { icon: "access-point", color: c.primary },
+    { icon: "clipboard-text-clock-outline", color: c.warning },
+    { icon: "check-circle-outline", color: c.info },
+  ];
 }
 
 type ParentDashboardCarouselProps = {
@@ -40,6 +41,7 @@ const SLIDE_COUNT = 3;
 
 export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCarouselProps) {
   const c = useAppColors();
+  const { t } = useLocale();
   const icons = useMemo(() => statIcons(c), [c]);
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
@@ -69,14 +71,14 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Dashboard Overview</Text>
+        <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>{t("dashboard.overview")}</Text>
         <View style={styles.arrows}>
           <Pressable
             onPress={() => goToPage(page - 1)}
             disabled={page === 0}
             style={[styles.arrowBtn, { borderColor: c.border, backgroundColor: c.card }, page === 0 && styles.arrowBtnDisabled]}
             accessibilityRole="button"
-            accessibilityLabel="Previous overview panel"
+            accessibilityLabel={t("dashboard.prevPanel")}
           >
             <MaterialCommunityIcons name="chevron-left" size={20} color={c.primaryDark} />
           </Pressable>
@@ -89,7 +91,7 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
               page === SLIDE_COUNT - 1 && styles.arrowBtnDisabled,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Next overview panel"
+            accessibilityLabel={t("dashboard.nextPanel")}
           >
             <MaterialCommunityIcons name="chevron-right" size={20} color={c.primaryDark} />
           </Pressable>
@@ -107,20 +109,18 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
         <View style={[styles.slide, { width: slideWidth }]}>
           <View style={[styles.panelCard, { borderColor: c.border, backgroundColor: c.card }]}>
             <View style={styles.panelHeader}>
-              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>Summary</Text>
+              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>{t("dashboard.summary")}</Text>
               <View style={[styles.pill, { backgroundColor: c.surfaceTint }]}>
-                <Text style={[styles.pillText, { color: c.primaryDark }]}>Overview</Text>
+                <Text style={[styles.pillText, { color: c.primaryDark }]}>{t("dashboard.overviewPill")}</Text>
               </View>
             </View>
             <View style={styles.statGrid}>
-              {stats.map((item) => {
-                const meta = icons[item.label];
-                const displayLabel =
-                  item.label === "Completed This Week" ? "Done This Week" : item.label;
+              {stats.map((item, index) => {
+                const meta = icons[index];
                 return (
                   <View key={item.label} style={styles.statCell}>
                     <StatCard
-                      label={displayLabel}
+                      label={item.label}
                       value={item.value}
                       iconName={meta?.icon ?? "chart-box-outline"}
                       iconColor={meta?.color ?? c.primary}
@@ -135,15 +135,15 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
         <View style={[styles.slide, { width: slideWidth }]}>
           <View style={[styles.panelCard, { borderColor: c.border, backgroundColor: c.card }]}>
             <View style={styles.panelHeader}>
-              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>Task Pipeline</Text>
+              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>{t("dashboard.taskPipeline")}</Text>
               <View style={[styles.pill, { backgroundColor: c.surfaceTint }]}>
-                <Text style={[styles.pillText, { color: c.primaryDark }]}>Today</Text>
+                <Text style={[styles.pillText, { color: c.primaryDark }]}>{t("dashboard.today")}</Text>
               </View>
             </View>
             <TaskPipelineCard pipeline={analytics.pipeline} />
             <View style={styles.progressBlock}>
               <View style={styles.progressLabels}>
-                <Text style={[styles.progressLabel, { color: c.subtext }]}>Weekly progress</Text>
+                <Text style={[styles.progressLabel, { color: c.subtext }]}>{t("dashboard.weeklyProgress")}</Text>
                 <Text style={[styles.progressPct, { color: c.primaryDark }]}>{pipelineProgressPct}%</Text>
               </View>
               <View style={[styles.progressTrack, { backgroundColor: c.progressTrack }]}>
@@ -158,19 +158,19 @@ export function ParentDashboardCarousel({ stats, analytics }: ParentDashboardCar
         <View style={[styles.slide, { width: slideWidth }]}>
           <View style={[styles.panelCard, { borderColor: c.border, backgroundColor: c.card }]}>
             <View style={styles.panelHeader}>
-              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>Weekly Analytics</Text>
+              <Text style={[styles.panelTitle, { color: c.primaryDark }]}>{t("dashboard.weeklyAnalytics")}</Text>
               <View style={[styles.pill, { backgroundColor: c.surfaceTint }]}>
-                <Text style={[styles.pillText, { color: c.primaryDark }]}>Report</Text>
+                <Text style={[styles.pillText, { color: c.primaryDark }]}>{t("dashboard.report")}</Text>
               </View>
             </View>
             <View style={styles.weekHighlightRow}>
               <View style={[styles.weekHighlight, { backgroundColor: c.surfaceTint }]}>
                 <Text style={[styles.weekNumber, { color: c.primaryDark }]}>{analytics.week.totalCompleted}</Text>
-                <Text style={[styles.weekLabel, { color: c.subtext }]}>Completions</Text>
+                <Text style={[styles.weekLabel, { color: c.subtext }]}>{t("dashboard.completions")}</Text>
               </View>
               <View style={[styles.weekHighlight, { backgroundColor: c.surfaceTint }]}>
                 <Text style={[styles.weekNumber, { color: c.primaryDark }]}>{analytics.week.pointsThisWeek}</Text>
-                <Text style={[styles.weekLabel, { color: c.subtext }]}>Activity Points</Text>
+                <Text style={[styles.weekLabel, { color: c.subtext }]}>{t("dashboard.activityPoints")}</Text>
               </View>
             </View>
             <CategoryBarChart

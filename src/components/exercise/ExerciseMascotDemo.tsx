@@ -10,6 +10,8 @@ import {
   NEUTRAL_FIGURE_POSE,
   type FigurePose,
 } from "@/components/exercise/ExerciseDemoFigure";
+import { useLocale } from "@/store/LocaleContext";
+import type { TranslateFn } from "@/i18n/helpers";
 
 const DEMO_CYCLES = 2;
 
@@ -45,92 +47,92 @@ function onlyArmStretch(amount: number, side: "left" | "right"): FigurePose {
  * Demo choreography for each exercise.
  * Arm stretch: left ×2 → right ×2 = 1 full rep.
  */
-function buildSteps(exerciseId: ExerciseId): DemoStep[] {
+function buildSteps(exerciseId: ExerciseId, t: TranslateFn): DemoStep[] {
   switch (exerciseId) {
     case "jumping_jacks":
       return [
         {
-          caption: "Start — feet together, arms at your sides",
+          caption: t("child.exercise.demo.jacksStart"),
           durationMs: 750,
           poseAt: () => NEUTRAL_FIGURE_POSE,
         },
         {
-          caption: "Jump! Legs out wide and both arms above your head",
+          caption: t("child.exercise.demo.jacksJump"),
           durationMs: 950,
-          poseAt: (t) => onlyJack(ease(t)),
+          poseAt: (progress) => onlyJack(ease(progress)),
         },
         {
-          caption: "Jump back — feet together, arms down. That's 1 rep!",
+          caption: t("child.exercise.demo.jacksBack"),
           durationMs: 950,
-          poseAt: (t) => onlyJack(1 - ease(t)),
+          poseAt: (progress) => onlyJack(1 - ease(progress)),
         },
       ];
 
     case "squats":
       return [
         {
-          caption: "Stand tall — feet shoulder-width, chest up",
+          caption: t("child.exercise.demo.squatStart"),
           durationMs: 900,
           poseAt: () => onlySquat(0),
         },
         {
-          caption: "Push hips back and bend knees — thighs parallel to floor",
+          caption: t("child.exercise.demo.squatDown"),
           durationMs: 1300,
-          poseAt: (t) => onlySquat(ease(t)),
+          poseAt: (progress) => onlySquat(ease(progress)),
         },
         {
-          caption: "Drive through your heels and stand up — that's 1 rep!",
+          caption: t("child.exercise.demo.squatUp"),
           durationMs: 1300,
-          poseAt: (t) => onlySquat(1 - ease(t)),
+          poseAt: (progress) => onlySquat(1 - ease(progress)),
         },
       ];
 
     case "arm_stretching":
       return [
         {
-          caption: "Stand tall — feet planted, arms at your sides",
+          caption: t("child.exercise.demo.stretchStart"),
           durationMs: 600,
           poseAt: () => NEUTRAL_FIGURE_POSE,
         },
         {
-          caption: "Left arm up and over — stretch #1",
+          caption: t("child.exercise.demo.stretchLeft1"),
           durationMs: 900,
-          poseAt: (t) => onlyArmStretch(ease(t), "left"),
+          poseAt: (progress) => onlyArmStretch(ease(progress), "left"),
         },
         {
-          caption: "Arms down",
+          caption: t("child.exercise.demo.stretchArmsDown"),
           durationMs: 700,
-          poseAt: (t) => onlyArmStretch(1 - ease(t), "left"),
+          poseAt: (progress) => onlyArmStretch(1 - ease(progress), "left"),
         },
         {
-          caption: "Left arm again — stretch #2",
+          caption: t("child.exercise.demo.stretchLeft2"),
           durationMs: 900,
-          poseAt: (t) => onlyArmStretch(ease(t), "left"),
+          poseAt: (progress) => onlyArmStretch(ease(progress), "left"),
         },
         {
-          caption: "Arms down — now switch sides",
+          caption: t("child.exercise.demo.stretchSwitch"),
           durationMs: 700,
-          poseAt: (t) => onlyArmStretch(1 - ease(t), "left"),
+          poseAt: (progress) => onlyArmStretch(1 - ease(progress), "left"),
         },
         {
-          caption: "Right arm up and over — stretch #1",
+          caption: t("child.exercise.demo.stretchRight1"),
           durationMs: 900,
-          poseAt: (t) => onlyArmStretch(ease(t), "right"),
+          poseAt: (progress) => onlyArmStretch(ease(progress), "right"),
         },
         {
-          caption: "Arms down",
+          caption: t("child.exercise.demo.stretchArmsDown"),
           durationMs: 700,
-          poseAt: (t) => onlyArmStretch(1 - ease(t), "right"),
+          poseAt: (progress) => onlyArmStretch(1 - ease(progress), "right"),
         },
         {
-          caption: "Right arm again — stretch #2",
+          caption: t("child.exercise.demo.stretchRight2"),
           durationMs: 900,
-          poseAt: (t) => onlyArmStretch(ease(t), "right"),
+          poseAt: (progress) => onlyArmStretch(ease(progress), "right"),
         },
         {
-          caption: "Arms down — that's 1 rep!",
+          caption: t("child.exercise.demo.stretchDone"),
           durationMs: 700,
-          poseAt: (t) => onlyArmStretch(1 - ease(t), "right"),
+          poseAt: (progress) => onlyArmStretch(1 - ease(progress), "right"),
         },
       ];
   }
@@ -138,6 +140,7 @@ function buildSteps(exerciseId: ExerciseId): DemoStep[] {
 
 export function ExerciseMascotDemo({ exerciseId, exerciseTitle, onComplete }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const progress = useRef(new Animated.Value(0)).current;
   const [stepIndex, setStepIndex] = useState(0);
   const [cycle, setCycle] = useState(1);
@@ -147,7 +150,7 @@ export function ExerciseMascotDemo({ exerciseId, exerciseTitle, onComplete }: Pr
     let mounted = true;
     let currentStep = 0;
     let currentCycle = 1;
-    const demoSteps = buildSteps(exerciseId);
+    const demoSteps = buildSteps(exerciseId, t);
 
     const runStep = () => {
       if (!mounted) return;
@@ -188,18 +191,18 @@ export function ExerciseMascotDemo({ exerciseId, exerciseTitle, onComplete }: Pr
       progress.removeListener(listenerId);
       progress.stopAnimation();
     };
-  }, [exerciseId, onComplete, progress]);
+  }, [exerciseId, onComplete, progress, t]);
 
-  const steps = buildSteps(exerciseId);
-  const caption = steps[stepIndex]?.caption ?? `Watch how to do ${exerciseTitle}`;
+  const steps = buildSteps(exerciseId, t);
+  const caption = steps[stepIndex]?.caption ?? t("child.exercise.demo.watchHow", { title: exerciseTitle });
 
   return (
     <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
       <Text variant="titleSmall" style={{ color: c.primaryDark, fontWeight: "800", textAlign: "center" }}>
-        {MASCOT_NAME} shows you how
+        {t("child.exercise.gateyShows", { name: MASCOT_NAME })}
       </Text>
       <Text variant="bodySmall" style={{ color: c.subtext, textAlign: "center", marginTop: 4 }}>
-        Copy each move, then open the camera for your turn
+        {t("child.exercise.gateyHint")}
       </Text>
 
       <View style={[styles.stage, { backgroundColor: "#F1F8F4" }]}>
@@ -209,7 +212,7 @@ export function ExerciseMascotDemo({ exerciseId, exerciseTitle, onComplete }: Pr
       <View style={[styles.captionBox, { backgroundColor: c.primary }]}>
         <Text style={styles.captionText}>{caption}</Text>
         <Text style={styles.cycleText}>
-          Demo rep {Math.min(cycle, DEMO_CYCLES)} of {DEMO_CYCLES}
+          {t("child.exercise.demoRep", { current: Math.min(cycle, DEMO_CYCLES), total: DEMO_CYCLES })}
         </Text>
       </View>
     </View>

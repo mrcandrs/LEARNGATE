@@ -5,34 +5,35 @@ import { LEGAL_CONTACT_EMAIL, LEGAL_LAST_UPDATED } from "@/content/legalDocument
 import { openLegalDocument } from "@/navigation/openLegalDocument";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 export function LegalSectionCard() {
   const c = useAppColors();
+  const { t } = useLocale();
 
   return (
     <Card style={[styles.card, { backgroundColor: c.card }, shadows.card]}>
       <Card.Title
-        title="Legal"
-        subtitle={`Privacy Policy & Terms · Updated ${LEGAL_LAST_UPDATED}`}
+        title={t("legal.title")}
+        subtitle={t("legal.subtitle", { date: LEGAL_LAST_UPDATED })}
         left={(props) => <MaterialCommunityIcons {...props} name="scale-balance" size={24} color={c.primaryDark} />}
       />
       <Card.Content style={styles.content}>
         <Text variant="bodySmall" style={{ color: c.subtext, lineHeight: 20 }}>
-          LearnGate collects child activity, location, and app usage data to provide parental controls you enable.
-          Review how we handle data and your responsibilities as a parent account holder.
+          {t("legal.body")}
         </Text>
         <Divider style={styles.divider} />
         <List.Item
-          title="Privacy Policy"
-          description="What we collect, why, and your choices"
+          title={t("legal.privacy")}
+          description={t("legal.privacyDesc")}
           left={(props) => <List.Icon {...props} icon="shield-account-outline" color={c.primaryDark} />}
           right={(props) => <List.Icon {...props} icon="chevron-right" />}
           onPress={() => openLegalDocument("privacy")}
           style={styles.row}
         />
         <List.Item
-          title="Terms & Conditions"
-          description="Account rules, monitoring features, and liability"
+          title={t("legal.terms")}
+          description={t("legal.termsDesc")}
           left={(props) => <List.Icon {...props} icon="file-document-outline" color={c.primaryDark} />}
           right={(props) => <List.Icon {...props} icon="chevron-right" />}
           onPress={() => openLegalDocument("terms")}
@@ -41,7 +42,7 @@ export function LegalSectionCard() {
         <View style={[styles.contactBox, { backgroundColor: c.mutedSurface }]}>
           <MaterialCommunityIcons name="email-outline" size={18} color={c.subtext} />
           <Text variant="bodySmall" style={{ color: c.subtext, flex: 1 }}>
-            Privacy or data requests: {LEGAL_CONTACT_EMAIL}
+            {t("legal.contact", { email: LEGAL_CONTACT_EMAIL })}
           </Text>
         </View>
       </Card.Content>

@@ -1,20 +1,28 @@
+import { tRuntime } from "@/i18n/runtimeLocale";
+
 /**
  * Kid-friendly offline / cache copy for LearnGate.
  */
 export const OFFLINE_MSG = {
-  profile:
-    "You're offline. Showing your saved profile — it'll update automatically when you're back online.",
-  homeTasks:
-    "You're offline. Showing your saved tasks — they'll refresh when you're back online.",
-  tasks:
-    "You're offline. Showing your saved task list — it'll sync when you're back online.",
-  action:
-    "You're offline right now. Connect to the internet and try again — then your progress can sync.",
-  award:
-    "Couldn't reach the server. When you're back online, try again so your stars can sync.",
-  generic:
-    "No internet connection. Your saved data is still here — it'll sync when you're back online.",
-} as const;
+  get profile() {
+    return tRuntime("offline.profile");
+  },
+  get homeTasks() {
+    return tRuntime("offline.homeTasks");
+  },
+  get tasks() {
+    return tRuntime("offline.tasks");
+  },
+  get action() {
+    return tRuntime("offline.action");
+  },
+  get award() {
+    return tRuntime("offline.award");
+  },
+  get generic() {
+    return tRuntime("offline.generic");
+  },
+};
 
 export function isLikelyOfflineError(error: unknown): boolean {
   if (error == null) return false;

@@ -6,6 +6,7 @@ import type { TaskPipeline } from "@/services/parentDashboardAnalytics";
 import { useMemo } from "react";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -15,20 +16,21 @@ type Props = {
 
 export function TaskPipelineCard({ pipeline }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const stages = useMemo(
     () =>
       [
-        { key: "pending" as const, label: "Pending", icon: "clock-outline" as IconName, color: c.subtext },
-        { key: "in_progress" as const, label: "In progress", icon: "progress-clock" as IconName, color: c.info },
-        { key: "awaiting_review" as const, label: "Review", icon: "camera-account" as IconName, color: c.warning },
-        { key: "completed" as const, label: "Done", icon: "check-circle" as IconName, color: c.primary },
+        { key: "pending" as const, label: t("dashboard.pending"), icon: "clock-outline" as IconName, color: c.subtext },
+        { key: "in_progress" as const, label: t("dashboard.inProgress"), icon: "progress-clock" as IconName, color: c.info },
+        { key: "awaiting_review" as const, label: t("dashboard.review"), icon: "camera-account" as IconName, color: c.warning },
+        { key: "completed" as const, label: t("dashboard.done"), icon: "check-circle" as IconName, color: c.primary },
       ] satisfies Array<{
         key: keyof TaskPipeline;
         label: string;
         icon: IconName;
         color: string;
       }>,
-    [c]
+    [c, t]
   );
 
   return (

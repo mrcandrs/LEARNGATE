@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { AppColors } from "@/theme/theme";
+import type { TranslateFn } from "@/i18n/helpers";
 
 export type ChildTaskCategory = "learning" | "exercise" | "chore";
 
@@ -37,9 +38,9 @@ export function taskCategoryTint(category: ChildTaskCategory, c?: AppColors): st
   return "#E0E7FF";
 }
 
-export function taskSubtitle(task: TaskRow): string {
+export function taskSubtitle(task: TaskRow, t: TranslateFn): string {
   if (task.category === "chore" && task.requires_camera) {
-    return "Camera verification needed";
+    return t("child.task.cameraNeeded");
   }
   if (task.category === "exercise") {
     let reps: number | null = null;
@@ -53,13 +54,44 @@ export function taskSubtitle(task: TaskRow): string {
         // ignore non-JSON descriptions
       }
     }
-    return reps != null ? `${reps} reps · Camera tracking` : "Reps required · Camera tracking";
+    return reps != null
+      ? t("child.task.repsCamera", { reps })
+      : t("child.task.repsRequired");
   }
   if (task.category === "learning") {
-    return "Learning game · Tap to play";
+    return t("child.task.learningGame");
   }
   if (task.status === "submitted") {
-    return "Waiting for parent review";
+    return t("child.task.waitingReview");
   }
-  return "Tap to complete";
+  return t("child.task.tapComplete");
+}
+
+export function taskListSubtitle(task: TaskRow, t: TranslateFn): string {
+  if (task.category === "learning") {
+    return t("child.task.learningStars", { stars: task.xp_reward });
+  }
+  if (task.category === "exercise") {
+    return taskSubtitle(task, t);
+  }
+  if (task.requires_camera) {
+    return t("child.task.choreCamera");
+  }
+  return t("child.task.choreStars", { stars: task.xp_reward });
+}
+
+export function taskActionLabel(task: TaskRow, t: TranslateFn): string {
+  if (task.category === "learning") {
+    return t("common.play");
+  }
+  if (task.category === "exercise") {
+    return t("common.start");
+  }
+  if (task.requires_camera && task.status === "submitted") {
+    return t("child.task.waiting");
+  }
+  if (task.requires_camera) {
+    return t("child.task.takePhoto");
+  }
+  return t("common.complete");
 }

@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   learning: number;
@@ -12,13 +13,14 @@ type Props = {
 
 export function CategoryBarChart({ learning, exercise, chore }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const items = useMemo(
     () => [
-      { key: "learning" as const, label: "Learning", color: c.info },
-      { key: "exercise" as const, label: "Exercise", color: c.primary },
-      { key: "chore" as const, label: "Chores", color: c.warning },
+      { key: "learning" as const, label: t("dashboard.learning"), color: c.info },
+      { key: "exercise" as const, label: t("dashboard.exercise"), color: c.primary },
+      { key: "chore" as const, label: t("dashboard.chores"), color: c.warning },
     ],
-    [c]
+    [c, t]
   );
   const values = { learning, exercise, chore };
   const max = Math.max(learning, exercise, chore, 1);

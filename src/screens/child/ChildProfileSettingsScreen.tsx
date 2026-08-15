@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { StarResetCountdown } from "@/components/child/StarResetCountdown";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { DestructiveButton } from "@/components/DestructiveButton";
 import { blockedAppsForDisplay } from "@/constants/blockedAppPackages";
 import { formatUnlockRemaining, unlockRowForPackage } from "@/utils/appUnlockTime";
 import { packagesForUnlockKey } from "@/utils/appUnlockPackages";
@@ -27,6 +28,8 @@ import { registerAndSavePushToken, hasMyPushToken } from "@/services/pushNotific
 import { getAgeBandForChild } from "@/data/childAgeBands";
 import { formatChildAgeLine, getChildAge } from "@/utils/childBirthday";
 import { levelToDifficultyLabel } from "@/utils/difficulty";
+import { useLocale } from "@/store/LocaleContext";
+import { LanguagePicker } from "@/components/LanguagePicker";
 
 function StatusInfoRow({
   label,
@@ -39,7 +42,8 @@ function StatusInfoRow({
   description: string;
   colors: ReturnType<typeof useAppColors>;
 }) {
-  const statusText = enabled === null ? "Checking…" : enabled ? "On" : "Off";
+  const { t } = useLocale();
+  const statusText = enabled === null ? t("child.profile.statusChecking") : enabled ? t("child.profile.statusOn") : t("child.profile.statusOff");
   const statusColor = enabled ? c.primary : c.subtext;
 
   return (
@@ -72,6 +76,7 @@ const statusStyles = StyleSheet.create({
 
 export function ChildProfileSettingsScreen() {
   const { signOut } = useAuth();
+  const { t } = useLocale();
   const audio = useAudioGuidance();
   const themeMode = useThemeMode();
   const c = useAppColors();
@@ -194,13 +199,13 @@ export function ChildProfileSettingsScreen() {
             <Avatar.Icon size={100} icon="account" style={{ backgroundColor: c.surfaceTint }} color={c.primary} />
           )}
           <PrimaryButton
-            label={uploadingAvatar ? "Uploading…" : "Change photo"}
+            label={uploadingAvatar ? t("child.profile.uploading") : t("child.profile.changePhoto")}
             mode="text"
             onPress={() => void handleUploadAvatar()}
             disabled={uploadingAvatar || !child}
           />
           <Text variant="headlineSmall" style={styles.name}>
-            {child?.name ?? "Profile"}
+            {child?.name ?? t("child.profile.profile")}
           </Text>
           <Text variant="bodyMedium" style={styles.subtitle}>
             {child ? formatChildAgeLine(child) : "—"} · {child ? getAgeBandForChild(getChildAge(child)).label : "—"} ·{" "}
@@ -215,13 +220,13 @@ export function ChildProfileSettingsScreen() {
               ]}
             >
               <MaterialCommunityIcons name="star" size={16} color={c.pinIcon} />
-              <Text style={[styles.statPillText, { color: c.text }]}>{child?.stars ?? 0} Stars (week)</Text>
+              <Text style={[styles.statPillText, { color: c.text }]}>{t("child.profile.starsWeek", { count: child?.stars ?? 0 })}</Text>
             </View>
             <View style={[styles.statPill, { backgroundColor: c.surfaceTint }]}>
-              <Text style={[styles.statPillText, { color: c.text }]}>{tasksDone} Task Done</Text>
+              <Text style={[styles.statPillText, { color: c.text }]}>{t("child.profile.tasksDone", { count: tasksDone })}</Text>
             </View>
             <View style={[styles.statPill, { backgroundColor: c.surfaceTint }]}>
-              <Text style={[styles.statPillText, { color: c.text }]}>{streakDays} Day Streak</Text>
+              <Text style={[styles.statPillText, { color: c.text }]}>{t("child.profile.dayStreak", { count: streakDays })}</Text>
             </View>
           </View>
           <StarResetCountdown variant="card" subtextColor={c.subtext} />
@@ -229,10 +234,10 @@ export function ChildProfileSettingsScreen() {
 
         <View style={[styles.card, { backgroundColor: c.card }]}>
           <Text variant="titleMedium" style={styles.cardTitle}>
-            Appearance
+            {t("child.profile.appearance")}
           </Text>
           <Text variant="bodySmall" style={styles.cardSub}>
-            Pick your app look.
+            {t("child.profile.appearanceSub")}
           </Text>
           <View style={styles.chipRow}>
             {(["mint", "sunset", "midnight"] as const).map((mode) => (
@@ -243,7 +248,7 @@ export function ChildProfileSettingsScreen() {
                 style={themeMode.mode === mode ? { backgroundColor: c.surfaceTint } : undefined}
                 textStyle={{ color: c.text }}
               >
-                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                {t(`child.profile.${mode}`)}
               </Chip>
             ))}
           </View>
@@ -251,50 +256,60 @@ export function ChildProfileSettingsScreen() {
 
         <View style={[styles.card, { backgroundColor: c.card }]}>
           <Text variant="titleMedium" style={styles.cardTitle}>
-            App Settings
+            {t("child.profile.appSettings")}
           </Text>
           <SettingRow
-            label="Dark Mode"
-            sub="Use a darker interface for night time."
+            label={t("child.profile.darkMode")}
+            sub={t("child.profile.darkModeSub")}
             value={themeMode.appearance === "dark"}
             onChange={(v) => themeMode.setAppearance(v ? "dark" : "light")}
           />
           <SettingRow
-            label="Audio Guide"
-            sub="Turn spoken prompts on or off."
+            label={t("child.profile.audioGuide")}
+            sub={t("child.profile.audioGuideSub")}
             value={child?.audio_guide_enabled ?? audio.enabled}
             onChange={(v) => void onToggleAudio(v)}
           />
           <SettingRow
-            label="Notifications"
-            sub="Receive reminders for tasks and rewards."
+            label={t("child.profile.notifications")}
+            sub={t("child.profile.notificationsSub")}
             value={notificationsOn === true}
             disabled={pushRegistering}
             onChange={(v) => void onToggleNotifications(v)}
           />
         </View>
 
+        <View style={[styles.card, { backgroundColor: c.card }]}>
+          <Text variant="titleMedium" style={styles.cardTitle}>
+            {t("child.profile.language")}
+          </Text>
+          <Text variant="bodySmall" style={styles.cardSub}>
+            {t("child.profile.languageSub")}
+          </Text>
+          <LanguagePicker />
+        </View>
+
         {Platform.OS === "android" && nativeReady ? (
           <View style={[styles.card, { backgroundColor: c.card }]}>
             <Text variant="titleMedium" style={styles.cardTitle}>
-              Privacy &amp; Access
+              {t("child.profile.privacyAccess")}
             </Text>
             <Text variant="bodySmall" style={styles.cardSub}>
-              These permissions are set on this device by a parent. You can see their status here.
+              {t("child.profile.privacyAccessSub")}
             </Text>
             {isAppBlockingAvailable() ? (
               <StatusInfoRow
-                label="LearnGate Accessibility"
+                label={t("child.profile.accessibilityLabel")}
                 enabled={accessibilityOn}
-                description="Keeps screen-time and bedtime lock working. It blocks Home, Recents, and other apps while LearnGate is locked."
+                description={t("child.profile.accessibilityDesc")}
                 colors={c}
               />
             ) : null}
             {isUsageStatsAvailable() ? (
               <StatusInfoRow
-                label="Usage access"
+                label={t("child.profile.usageAccessLabel")}
                 enabled={usageAccessOn}
-                description="When on, LearnGate shares app opens with your parent automatically in the background."
+                description={t("child.profile.usageAccessDesc")}
                 colors={c}
               />
             ) : null}
@@ -304,10 +319,10 @@ export function ChildProfileSettingsScreen() {
         {Platform.OS === "android" && nativeReady && isAppBlockingAvailable() ? (
           <View style={[styles.card, { backgroundColor: c.card }]}>
             <Text variant="titleMedium" style={styles.cardTitle}>
-              Blocked apps
+              {t("child.profile.blockedApps")}
             </Text>
             {blockedApps.length === 0 ? (
-              <Text style={styles.cardSub}>None right now.</Text>
+              <Text style={styles.cardSub}>{t("child.profile.noneBlocked")}</Text>
             ) : (
               blockedApps.map((app) => {
                 const unlockRow = tempUnlockRowForApp(app.key);
@@ -319,7 +334,7 @@ export function ChildProfileSettingsScreen() {
                     {unlockRow ? (
                       <>
                         <Text variant="labelSmall" style={{ color: c.subtext }}>
-                          {unlockRow.duration ? unlockDurationLabel(unlockRow.duration) : "Unlocked"}
+                          {unlockRow.duration ? unlockDurationLabel(unlockRow.duration) : t("child.profile.unlocked")}
                         </Text>
                         <Text variant="labelSmall" style={{ color: c.primary }}>
                           {formatUnlockRemaining(unlockRow)}
@@ -341,27 +356,27 @@ export function ChildProfileSettingsScreen() {
 
         <View style={[styles.card, { backgroundColor: c.card }]}>
           <Text variant="titleMedium" style={styles.cardTitle}>
-            Account
+            {t("child.profile.account")}
           </Text>
           <Text variant="bodySmall" style={styles.cardSub}>
-            Manage child account settings.
+            {t("child.profile.accountSub")}
           </Text>
-          <Button mode="contained" onPress={() => setConfirmVisible(true)} style={styles.logoutBtn}>
-            Log Out
-          </Button>
+          <DestructiveButton label={t("common.logOut")} onPress={() => setConfirmVisible(true)} style={styles.logoutBtn} />
         </View>
       </View>
 
       <Portal>
-        <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)}>
-          <Dialog.Title>Log out</Dialog.Title>
+        <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)} style={{ backgroundColor: c.card }}>
+          <Dialog.Title style={{ color: c.text }}>{t("common.logOut")}</Dialog.Title>
           <Dialog.Content>
-            <Text variant="bodyMedium">Are you sure you want to log out?</Text>
+            <Text variant="bodyMedium" style={{ color: c.text }}>{t("common.logOutConfirm")}</Text>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setConfirmVisible(false)}>Cancel</Button>
-            <Button
-              mode="contained"
+            <Button onPress={() => setConfirmVisible(false)} textColor={c.text}>
+              {t("common.cancel")}
+            </Button>
+            <DestructiveButton
+              label={t("common.logOut")}
               style={styles.logoutBtn}
               onPress={() => {
                 setConfirmVisible(false);
@@ -370,9 +385,7 @@ export function ChildProfileSettingsScreen() {
                   await signOut();
                 })();
               }}
-            >
-              Log Out
-            </Button>
+            />
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -456,7 +469,7 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
       paddingVertical: 8,
       borderBottomWidth: 1,
     },
-    logoutBtn: { backgroundColor: "#B91C1C", marginTop: 4 },
-    errorText: { color: "#B91C1C" },
+    logoutBtn: { marginTop: 4 },
+    errorText: { color: c.danger },
   });
 }

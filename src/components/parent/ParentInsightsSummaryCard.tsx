@@ -4,6 +4,7 @@ import type { WeekAnalytics } from "@/services/parentDashboardAnalytics";
 import { formatGeneratedAgo } from "@/services/parentInsights";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 export type ParentChildInsight = {
   childName: string;
@@ -32,21 +33,22 @@ export function ParentInsightsSummaryCard({
   onTogglePlan,
 }: ParentInsightsSummaryCardProps) {
   const c = useAppColors();
+  const { t } = useLocale();
   const generatedLabel = formatGeneratedAgo(generatedAt);
   const trendLine =
     week.totalCompleted > week.priorWeekCompleted
-      ? "Completions improved from last week"
+      ? t("parent.insights.improved")
       : week.totalCompleted < week.priorWeekCompleted
-        ? "Completions dipped vs last week"
+        ? t("parent.insights.dipped")
         : week.trendLabel;
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>AI-Assisted Insights</Text>
+      <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>{t("parent.insights.title")}</Text>
       <View style={[styles.card, { backgroundColor: c.insightCardBg, borderColor: c.insightCardBorder }]}>
         <View style={styles.topRow}>
           <View style={styles.summaryCol}>
-            <Text style={[styles.kicker, { color: c.primaryDark }]}>This week summary</Text>
+            <Text style={[styles.kicker, { color: c.primaryDark }]}>{t("parent.insights.thisWeekSummary")}</Text>
             <Text style={[styles.bigNumber, { color: c.primaryDark }]}>{week.totalCompleted}</Text>
             <Text style={[styles.trend, { color: c.primaryDark }]}>{trendLine}</Text>
           </View>
@@ -54,9 +56,9 @@ export function ParentInsightsSummaryCard({
             onPress={onTogglePlan}
             style={[styles.planBtn, { backgroundColor: c.primaryDark }]}
             accessibilityRole="button"
-            accessibilityLabel={expanded ? "Hide more insights" : "View more insights"}
+            accessibilityLabel={expanded ? t("parent.insights.hideMore") : t("parent.insights.viewMore")}
           >
-            <Text style={styles.planBtnText}>{expanded ? "Hide More" : "View More"}</Text>
+            <Text style={styles.planBtnText}>{expanded ? t("parent.insights.hideMore") : t("parent.insights.viewMore")}</Text>
           </Pressable>
         </View>
 
@@ -65,7 +67,7 @@ export function ParentInsightsSummaryCard({
             {loading ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color={c.primary} />
-                <Text style={{ color: c.subtext }}>Generating personalized insight…</Text>
+                <Text style={{ color: c.subtext }}>{t("parent.insights.generating")}</Text>
               </View>
             ) : insight ? (
               <>
@@ -77,14 +79,14 @@ export function ParentInsightsSummaryCard({
                 <Text style={[styles.detailStep, { color: c.primaryDark }]}>{insight.nextBestStep}</Text>
               </>
             ) : (
-              <Text style={{ color: c.subtext }}>Could not load insight. Pull to refresh and try again.</Text>
+              <Text style={{ color: c.subtext }}>{t("parent.insights.loadFailed")}</Text>
             )}
-            <Text style={[styles.poweredBy, { color: c.subtext }]}>Powered by Google Gemini</Text>
+            <Text style={[styles.poweredBy, { color: c.subtext }]}>{t("parent.insights.poweredBy")}</Text>
             {generatedLabel && !loading ? (
               <Text style={[styles.generatedAt, { color: c.subtext }]}>{generatedLabel}</Text>
             ) : null}
             <Text style={[styles.aiNote, { color: c.subtext }]}>
-              Recommendations are AI-generated from recent in-app behavior. Tap View More to refresh.
+              {t("parent.insights.aiNote")}
             </Text>
           </View>
         ) : null}

@@ -11,6 +11,7 @@ import type { AppUnlockRequestRow } from "@/constants/appUnlock";
 import { fetchPendingUnlockRequests, resolveAppUnlock } from "@/services/appUnlock";
 import { useAppColors } from "@/theme/useAppColors";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -20,15 +21,16 @@ type Props = {
   onResolved?: () => void;
 };
 
-function childNameFromRow(row: AppUnlockRequestRow): string {
+function childNameFromRow(row: AppUnlockRequestRow, fallback: string): string {
   const joined = row.children;
-  if (!joined) return "Child";
-  if (Array.isArray(joined)) return joined[0]?.name ?? "Child";
-  return joined.name ?? "Child";
+  if (!joined) return fallback;
+  if (Array.isArray(joined)) return joined[0]?.name ?? fallback;
+  return joined.name ?? fallback;
 }
 
 export function ParentAppUnlockRequestsCard({ childIds, highlighted = false, onResolved }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const theme = useTheme();
   const [requests, setRequests] = useState<AppUnlockRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,15 +81,15 @@ export function ParentAppUnlockRequestsCard({ childIds, highlighted = false, onR
       <Card.Content style={styles.content}>
         <ParentSectionHeader
           icon="star-circle-outline"
-          title="Unlock requests"
-          subtitle="Your child used stars to ask for blocked apps. Approve for a limited time or deny to refund stars."
+          title={t("parent.unlocks.requestsTitle")}
+          subtitle={t("parent.unlocks.requestsSubtitle")}
           style={styles.header}
         />
 
         {requests.map((row) => {
           const label = row.app_label ?? labelForBlockedPackage(row.package_name);
           const icon = iconForPackage(row.package_name) as IconName;
-          const childName = childNameFromRow(row);
+          const childName = childNameFromRow(row, t("parent.submissions.child"));
 
           return (
             <View key={row.id} style={[styles.row, { borderColor: c.border }]}>
@@ -99,11 +101,15 @@ export function ParentAppUnlockRequestsCard({ childIds, highlighted = false, onR
                   {label}
                 </Text>
                 <Text variant="bodySmall" style={{ color: c.subtext }}>
-                  {childName} · {row.stars_escrowed} stars · {unlockDurationLabel(row.duration)}
+                  {t("parent.unlocks.starsDuration", {
+                    name: childName,
+                    stars: row.stars_escrowed,
+                    duration: unlockDurationLabel(row.duration),
+                  })}
                 </Text>
                 {row.child_message ? (
                   <Text variant="bodySmall" style={[styles.note, { color: c.subtext }]}>
-                    Note from child: “{row.child_message}”
+                    {t("parent.unlocks.noteFromChild", { note: row.child_message })}
                   </Text>
                 ) : null}
               </View>
@@ -115,7 +121,7 @@ export function ParentAppUnlockRequestsCard({ childIds, highlighted = false, onR
                   disabled={busyId != null}
                   onPress={() => void handleResolve(row.id, "approve")}
                 >
-                  Approve
+                  {t("common.approve")}
                 </Button>
                 <Button
                   mode="text"
@@ -124,7 +130,7 @@ export function ParentAppUnlockRequestsCard({ childIds, highlighted = false, onR
                   disabled={busyId != null}
                   onPress={() => void handleResolve(row.id, "deny")}
                 >
-                  Deny
+                  {t("common.deny")}
                 </Button>
               </View>
             </View>

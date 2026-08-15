@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { NotificationBell } from "@/components/NotificationBell";
 import { StarResetCountdown } from "@/components/child/StarResetCountdown";
 import { useAppColors } from "@/theme/useAppColors";
+import { useLocale } from "@/store/LocaleContext";
 import { radii, shadows } from "@/theme/theme";
 type Props = {
   name: string;
@@ -22,10 +23,12 @@ export function ChildDashboardHeader({
   avatarUrl,
   showNotifications = true,
   onAvatarPress,
-  subtitle = "Let's learn, play, and grow today.",
+  subtitle,
 }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
+  const headerSubtitle = subtitle ?? t("child.home.streakBegin");
 
   return (
     <LinearGradient
@@ -39,7 +42,7 @@ export function ChildDashboardHeader({
           onPress={onAvatarPress}
           disabled={!onAvatarPress}
           accessibilityRole="button"
-          accessibilityLabel="Open profile and settings"
+          accessibilityLabel={t("child.home.openProfile")}
           style={styles.avatarBtn}
         >
           <View style={styles.avatarWrap}>
@@ -52,17 +55,17 @@ export function ChildDashboardHeader({
         </Pressable>
         <View style={styles.textBlock}>
           <Text variant="titleLarge" style={styles.greeting}>
-            Hello, {name}!
+            {t("child.home.hello", { name })}
           </Text>
           <Text variant="bodySmall" style={styles.subtitle}>
-            {subtitle}
+            {headerSubtitle}
           </Text>
           <View style={styles.metaRow}>
             <View style={styles.pillRow}>
               <View style={styles.pill}>
                 <MaterialCommunityIcons name="star" size={14} color="#FBBF24" />
                 <Text variant="labelMedium" style={styles.pillText}>
-                  {stars} stars this week
+                  {t("child.home.starsThisWeekPill", { count: stars })}
                 </Text>
               </View>
             </View>

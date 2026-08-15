@@ -8,7 +8,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { AchievementClaimModal } from "@/components/child/AchievementClaimModal";
 import { AchievementLadderCard } from "@/components/AchievementLadderCard";
-import { ACHIEVEMENT_CATEGORY_LABELS } from "@/data/achievements";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { ChildDashboardHeader } from "@/components/ChildDashboardHeader";
 import { ActiveAppUnlocksCard } from "@/components/child/ActiveAppUnlocksCard";
@@ -29,9 +28,11 @@ import { getAgeBandForChild } from "@/data/childAgeBands";
 import { getChildAge } from "@/utils/childBirthday";
 import { ChildGameCard } from "@/components/child/ChildGameCard";
 import type { ChildHomeStackParamList, ChildTabParamList } from "@/types/navigation";
-import { taskCategoryIcon, taskCategoryTint, taskSubtitle, type TaskRow } from "@/utils/childTaskDisplay";
+import { taskCategoryIcon, taskCategoryTint, taskListSubtitle, type TaskRow } from "@/utils/childTaskDisplay";
 import { cacheHomeTasks, readCachedHomeTasks } from "@/services/offlineCache";
 import { OFFLINE_MSG } from "@/services/offlineMessages";
+import { useLocale } from "@/store/LocaleContext";
+import { localizedAgeBand, localizedAchievementCategory, localizedResolvedGame } from "@/i18n/helpers";
 
 type HomeNav = CompositeNavigationProp<
   NativeStackNavigationProp<ChildHomeStackParamList, "HomeMain">,
@@ -40,6 +41,7 @@ type HomeNav = CompositeNavigationProp<
 
 export function ChildHomeScreen() {
   const navigation = useNavigation<HomeNav>();
+  const { t } = useLocale();
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
@@ -169,8 +171,8 @@ export function ChildHomeScreen() {
   const childAge = child ? getChildAge(child) : null;
   const ageBand = useMemo(() => getAgeBandForChild(childAge), [childAge]);
   const recommendedGames = useMemo(
-    () => getRecommendedGamesForChildAge(childAge, 2),
-    [childAge]
+    () => getRecommendedGamesForChildAge(childAge, 2).map((game) => localizedResolvedGame(game, t)),
+    [childAge, t]
   );
   const showError = profileError ?? error ?? actionError;
   const offlineNotice = profileOfflineNotice ?? tasksOfflineNotice;
@@ -183,7 +185,7 @@ export function ChildHomeScreen() {
           stars={child.stars}
           avatarUrl={child.avatar_url}
           onAvatarPress={() => navigation.navigate("ProfileSettings")}
-          subtitle={`${ageBand.emoji} ${ageBand.heroTitle} — games picked for age ${childAge ?? "—"}`}
+          subtitle={t("child.home.gamesForAge", { emoji: ageBand.emoji, heroTitle: localizedAgeBand(ageBand.id, t).heroTitle, age: childAge ?? "—" })}
         />
       ) : null}
 
@@ -198,14 +200,14 @@ export function ChildHomeScreen() {
           <MaterialCommunityIcons name="fire" size={36} color="#FFFFFF" />
           <View style={styles.streakText}>
             <Text variant="titleMedium" style={styles.streakTitle}>
-              {streakDays > 0 ? `${streakDays}-day streak!` : "Start your streak"}
+              {streakDays > 0 ? t("child.home.streakActive", { days: streakDays }) : t("child.home.streakStart")}
             </Text>
             <Text variant="bodySmall" style={styles.streakSub}>
               {streakDays > 0
-                ? `Keep it going — ${unlockedCount}/${totalCount} achievements unlocked.`
+                ? t("child.home.streakKeep", { unlocked: unlockedCount, total: totalCount })
                 : nextUp
-                  ? `Complete a task today — next badge: ${nextUp.definition.title}.`
-                  : "Complete a task or game today to begin your streak."}
+                  ? t("child.home.streakNext", { title: nextUp.definition.title })
+                  : t("child.home.streakBegin")}
             </Text>
           </View>
           <View style={styles.streakBadge}>
@@ -215,10 +217,10 @@ export function ChildHomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text variant="titleLarge" style={styles.sectionTitle}>
-            Today&apos;s Task
+            {t("child.home.taskSingular")}
           </Text>
           <Pressable onPress={() => navigation.navigate("TasksList")} accessibilityRole="button">
-            <Text style={styles.seeAll}>View all ›</Text>
+            <Text style={styles.seeAll}>{t("child.home.viewAll")} ›</Text>
           </Pressable>
         </View>
 
@@ -226,7 +228,7 @@ export function ChildHomeScreen() {
         {!loading && previewTasks.length === 0 ? (
           <Card style={styles.emptyCard}>
             <Card.Content>
-              <Text style={styles.emptyText}>No pending tasks yet. You&apos;re all caught up!</Text>
+              <Text style={styles.emptyText}>{t("child.home.noPendingTasks")}</Text>
             </Card.Content>
           </Card>
         ) : (
@@ -247,7 +249,7 @@ export function ChildHomeScreen() {
                       {task.title}
                     </Text>
                     <Text variant="bodySmall" style={styles.taskMeta}>
-                      {taskSubtitle(task)}
+                      {taskListSubtitle(task, t)}
                     </Text>
                   </View>
                   {uploadingTaskId === task.id ? (
@@ -263,13 +265,13 @@ export function ChildHomeScreen() {
 
         <View style={[styles.sectionHeader, { marginTop: 8 }]}>
           <Text variant="titleLarge" style={styles.sectionTitle}>
-            {ageBand.emoji} Picked for You
+            {t("child.home.pickedForYou", { emoji: ageBand.emoji })}
           </Text>
           <Pressable
             onPress={() => navigation.navigate("Activities", { screen: "ActivitiesMain", params: { segment: "games" } })}
             accessibilityRole="button"
           >
-            <Text style={styles.seeAll}>See all ›</Text>
+            <Text style={styles.seeAll}>{t("child.home.seeAll")} ›</Text>
           </Pressable>
         </View>
 
@@ -292,13 +294,13 @@ export function ChildHomeScreen() {
         </View>
 
         <Card style={styles.statsCard}>
-          <Card.Title title="Learning Stats" titleStyle={styles.cardTitle} subtitleStyle={{ color: c.subtext }} />
+          <Card.Title title={t("child.home.learningStats")} titleStyle={styles.cardTitle} subtitleStyle={{ color: c.subtext }} />
           <Card.Content style={styles.statsList}>
-            <StatRow label="Active days (14d)" value={String(achievementStats?.activeDaysLast14 ?? 0)} />
-            <StatRow label="Tasks Completed" value={String(achievementStats?.completedTasks ?? 0)} />
-            <StatRow label="Games Finished" value={String(achievementStats?.gamesCompleted ?? 0)} />
-            <StatRow label="Daily streak" value={`${streakDays} days`} />
-            <StatRow label="Stars This Week" value={String(child?.stars ?? 0)} />
+            <StatRow label={t("child.home.activeDays14")} value={String(achievementStats?.activeDaysLast14 ?? 0)} />
+            <StatRow label={t("child.home.tasksCompleted")} value={String(achievementStats?.completedTasks ?? 0)} />
+            <StatRow label={t("child.home.gamesFinished")} value={String(achievementStats?.gamesCompleted ?? 0)} />
+            <StatRow label={t("child.home.dailyStreakLabel")} value={t("child.home.dailyStreakValue", { days: streakDays })} />
+            <StatRow label={t("child.home.starsThisWeekLabel")} value={String(child?.stars ?? 0)} />
           </Card.Content>
         </Card>
 
@@ -313,8 +315,8 @@ export function ChildHomeScreen() {
 
         <Card style={styles.statsCard}>
           <Card.Title
-            title="Achievements"
-            subtitle={`${unlockedCount} of ${totalCount} unlocked`}
+            title={t("child.home.achievements")}
+            subtitle={t("child.home.achievementsSubtitle", { unlocked: unlockedCount, total: totalCount })}
             titleStyle={styles.cardTitle}
             subtitleStyle={{ color: c.subtext }}
           />
@@ -322,7 +324,11 @@ export function ChildHomeScreen() {
             {achievementsLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
             {nextUp && !nextUp.unlocked ? (
               <Text style={styles.nextUp}>
-                Next up: {nextUp.definition.title} ({nextUp.progress.current}/{nextUp.progress.target})
+                {t("child.home.nextUp", {
+                  title: nextUp.definition.title,
+                  current: nextUp.progress.current,
+                  target: nextUp.progress.target,
+                })}
               </Text>
             ) : null}
             <View style={styles.ladderList}>
@@ -330,7 +336,7 @@ export function ChildHomeScreen() {
                 <View key={group.category} style={styles.ladderCategory}>
                   <View style={styles.ladderCategoryHeader}>
                     <Text variant="labelLarge" style={styles.ladderCategoryTitle}>
-                      {ACHIEVEMENT_CATEGORY_LABELS[group.category]}
+                      {localizedAchievementCategory(group.category, t)}
                     </Text>
                     <Text variant="labelSmall" style={styles.ladderCategoryCount}>
                       {group.unlockedCount}/{group.totalCount}
@@ -463,6 +469,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     },
     ladderCategoryTitle: { color: c.text, fontWeight: "800" },
     ladderCategoryCount: { color: c.subtext, fontWeight: "700" },
-    errorText: { color: "#B91C1C" },
+    errorText: { color: c.danger },
   });
 }

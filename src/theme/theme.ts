@@ -66,6 +66,8 @@ export type AppColors = {
   locationStatusBorder: string;
   mutedSurface: string;
   pinIcon: string;
+  danger: string;
+  onDanger: string;
 };
 
 const lightPalettes: Record<AppThemeMode, AppColors> = {
@@ -92,6 +94,8 @@ const lightPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#4CAF50",
     mutedSurface: "#F8FAFC",
     pinIcon: "#EAB308",
+    danger: "#DC2626",
+    onDanger: "#FFFFFF",
   },
   sunset: {
     primary: "#EA580C",
@@ -116,6 +120,8 @@ const lightPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#EA580C",
     mutedSurface: "#FFF1E6",
     pinIcon: "#EAB308",
+    danger: "#DC2626",
+    onDanger: "#FFFFFF",
   },
   midnight: {
     primary: "#4F46E5",
@@ -140,6 +146,8 @@ const lightPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#4F46E5",
     mutedSurface: "#E6E9FF",
     pinIcon: "#EAB308",
+    danger: "#DC2626",
+    onDanger: "#FFFFFF",
   },
 };
 
@@ -167,6 +175,8 @@ const darkPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#66BB6A",
     mutedSurface: "#141C18",
     pinIcon: "#FACC15",
+    danger: "#F87171",
+    onDanger: "#FFFFFF",
   },
   sunset: {
     primary: "#FB923C",
@@ -191,6 +201,8 @@ const darkPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#FB923C",
     mutedSurface: "#201408",
     pinIcon: "#FACC15",
+    danger: "#F87171",
+    onDanger: "#FFFFFF",
   },
   midnight: {
     primary: "#818CF8",
@@ -215,6 +227,8 @@ const darkPalettes: Record<AppThemeMode, AppColors> = {
     locationStatusBorder: "#818CF8",
     mutedSurface: "#12162A",
     pinIcon: "#FACC15",
+    danger: "#F87171",
+    onDanger: "#FFFFFF",
   },
 };
 

@@ -4,6 +4,8 @@ import { Button, Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import type { AchievementLadderProgress, LadderTierProgress } from "@/services/childAchievements";
 import { useAppColors } from "@/theme/useAppColors";
+import { useLocale } from "@/store/LocaleContext";
+import type { TranslationKey } from "@/i18n/types";
 import { radii } from "@/theme/theme";
 
 type Props = {
@@ -15,6 +17,7 @@ type Props = {
 
 export function AchievementLadderCard({ ladder, isClaimed, claimingId, onClaim }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const styles = useMemo(() => createStyles(c), [c]);
   const { ladder: def, currentValue, tiers, unlockedCount } = ladder;
   const formatValue = def.formatValue ?? ((v: number) => String(v));
@@ -32,10 +35,10 @@ export function AchievementLadderCard({ ladder, isClaimed, claimingId, onClaim }
         </View>
         <View style={styles.headerText}>
           <Text variant="titleSmall" style={styles.title}>
-            {def.title}
+            {t(`achievements.ladders.${def.id}.title` as TranslationKey)}
           </Text>
           <Text variant="bodySmall" style={styles.description}>
-            {def.description}
+            {t(`achievements.ladders.${def.id}.description` as TranslationKey)}
           </Text>
         </View>
         <View style={styles.countPill}>
@@ -109,11 +112,14 @@ export function AchievementLadderCard({ ladder, isClaimed, claimingId, onClaim }
         </Text>
         {ladder.nextTier ? (
           <Text variant="labelSmall" style={styles.nextHint}>
-            Next: {ladder.nextTier.progress.current}/{ladder.nextTier.progress.target}
+            {t("achievements.nextProgress", {
+              current: ladder.nextTier.progress.current,
+              target: ladder.nextTier.progress.target,
+            })}
           </Text>
         ) : (
           <Text variant="labelSmall" style={styles.nextHintComplete}>
-            All steps complete!
+            {t("achievements.allStepsComplete")}
           </Text>
         )}
       </View>
@@ -128,7 +134,10 @@ export function AchievementLadderCard({ ladder, isClaimed, claimingId, onClaim }
           style={styles.claimBtn}
           labelStyle={styles.claimLabel}
         >
-          Claim +{claimableTier.definition.bonusStars} stars ({claimableTier.definition.stepLabel})
+          {t("achievements.claimButton", {
+            stars: claimableTier.definition.bonusStars,
+            step: claimableTier.definition.stepLabel,
+          })}
         </Button>
       ) : null}
     </View>

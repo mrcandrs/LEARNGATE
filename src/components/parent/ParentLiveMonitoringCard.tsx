@@ -5,6 +5,7 @@ import { formatAppTimeShort, type ChildMonitor } from "@/services/parentDashboar
 import { useAppColors } from "@/theme/useAppColors";
 import type { AppColors } from "@/theme/theme";
 import { radii, shadows } from "@/theme/theme";
+import { useLocale } from "@/store/LocaleContext";
 
 export type LiveMonitorChildOption = {
   id: string;
@@ -32,13 +33,14 @@ export function ParentLiveMonitoringCard({
   onSelectChild,
 }: ParentLiveMonitoringCardProps) {
   const c = useAppColors();
+  const { t } = useLocale();
   const deviceLine = monitor.hasLinkedAccount
-    ? `LearnGate app · ${monitor.lastSeenLabel}`
-    : `PIN login · ${monitor.lastSeenLabel}`;
+    ? t("parent.monitor.appLogin", { seen: monitor.lastSeenLabel })
+    : t("parent.monitor.pinLogin", { seen: monitor.lastSeenLabel });
 
   return (
     <View style={styles.wrap}>
-      <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>Live Monitoring</Text>
+      <Text style={[styles.sectionTitle, { color: c.primaryDark }]}>{t("parent.monitor.liveTitle")}</Text>
       <View style={[styles.card, { borderColor: c.border, backgroundColor: c.card }]}>
         <View style={styles.profileRow}>
           <View style={[styles.avatarWrap, { backgroundColor: c.surfaceTint }]}>
@@ -67,7 +69,7 @@ export function ParentLiveMonitoringCard({
                 onPress={onOpenMenu}
                 style={[styles.childPill, { backgroundColor: c.surfaceTint, borderColor: c.surfaceTintBorder }]}
                 accessibilityRole="button"
-                accessibilityLabel="Select child to monitor"
+                accessibilityLabel={t("parent.monitor.selectChild")}
               >
                 <Text style={[styles.childPillText, { color: c.primaryDark }]} numberOfLines={1}>
                   {monitor.childName}
@@ -90,13 +92,13 @@ export function ParentLiveMonitoringCard({
         </View>
 
         <View style={[styles.statsRow, { borderTopColor: c.border }]}>
-          <Stat value={String(monitor.taskCount)} label="Task" colors={c} />
+          <Stat value={String(monitor.taskCount)} label={t("parent.monitor.task")} colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={String(monitor.completedCount)} label="Completed" colors={c} />
+          <Stat value={String(monitor.completedCount)} label={t("parent.monitor.completed")} colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={String(monitor.pendingCount)} label="Pending" colors={c} />
+          <Stat value={String(monitor.pendingCount)} label={t("parent.monitor.pending")} colors={c} />
           <View style={[styles.divider, { backgroundColor: c.border }]} />
-          <Stat value={formatAppTimeShort(monitor.appTimeSeconds)} label="App time" colors={c} />
+          <Stat value={formatAppTimeShort(monitor.appTimeSeconds)} label={t("parent.monitor.appTimeLabel")} colors={c} />
         </View>
       </View>
     </View>

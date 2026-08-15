@@ -21,6 +21,7 @@ import { supabase } from "@/services/supabase";
 import { signInWithGoogleOAuth } from "@/services/googleOAuth";
 import { formatAppError } from "@/utils/errors";
 import { LegalFooterLinks } from "@/components/legal/LegalFooterLinks";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
 
@@ -33,6 +34,7 @@ const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
 
 export function ParentLoginScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { t } = useLocale();
   const { selectRole, isSupabaseConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +45,7 @@ export function ParentLoginScreen({ navigation }: Props) {
 
   const handleGoogle = async () => {
     if (!isSupabaseConfigured || !supabase) {
-      setError("Configure Supabase to use Google sign-in.");
+      setError(t("auth.login.googleNeedsSupabase"));
       return;
     }
     setError(null);
@@ -62,7 +64,7 @@ export function ParentLoginScreen({ navigation }: Props) {
     }
 
     if (!email.trim() || !password.trim()) {
-      setError("Email and password are required.");
+      setError(t("auth.login.emailPasswordRequired"));
       return;
     }
 
@@ -92,7 +94,7 @@ export function ParentLoginScreen({ navigation }: Props) {
           style={[styles.backBtn, { top: insets.top + 8 }]}
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("auth.login.goBack")}
           hitSlop={12}
         />
       </View>
@@ -109,14 +111,14 @@ export function ParentLoginScreen({ navigation }: Props) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Parent Login</Text>
-            <Text style={styles.cardSubtitle}>Sign In to manage your child</Text>
+            <Text style={styles.cardTitle}>{t("auth.login.title")}</Text>
+            <Text style={styles.cardSubtitle}>{t("auth.login.subtitle")}</Text>
 
             {isSupabaseConfigured ? (
               <>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Continue with Google"
+                  accessibilityLabel={t("auth.login.continueWithGoogle")}
                   disabled={googleBusy || isSubmitting}
                   onPress={() => void handleGoogle()}
                   style={({ pressed }) => [
@@ -130,13 +132,13 @@ export function ParentLoginScreen({ navigation }: Props) {
                     accessibilityIgnoresInvertColors
                   />
                   <Text style={styles.googleLabel}>
-                    {googleBusy ? "Opening Google…" : "Continue with Google"}
+                    {googleBusy ? t("auth.login.openingGoogle") : t("auth.login.continueWithGoogle")}
                   </Text>
                 </Pressable>
 
                 <View style={styles.dividerRow}>
                   <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>OR WITH EMAIL</Text>
+                  <Text style={styles.dividerText}>{t("auth.login.orWithEmail")}</Text>
                   <View style={styles.dividerLine} />
                 </View>
 
@@ -144,7 +146,7 @@ export function ParentLoginScreen({ navigation }: Props) {
                   <MaterialCommunityIcons name="email-outline" size={22} color={GREEN} style={styles.fieldIcon} />
                   <TextInput
                     style={styles.fieldInput}
-                    placeholder="Email"
+                    placeholder={t("auth.login.emailPlaceholder")}
                     placeholderTextColor="#9CA3AF"
                     value={email}
                     onChangeText={setEmail}
@@ -158,7 +160,7 @@ export function ParentLoginScreen({ navigation }: Props) {
                   <MaterialCommunityIcons name="lock-outline" size={22} color={GREEN} style={styles.fieldIcon} />
                   <TextInput
                     style={styles.fieldInput}
-                    placeholder="Password"
+                    placeholder={t("auth.login.passwordPlaceholder")}
                     placeholderTextColor="#9CA3AF"
                     value={password}
                     onChangeText={setPassword}
@@ -168,7 +170,7 @@ export function ParentLoginScreen({ navigation }: Props) {
                   <Pressable
                     onPress={() => setShowPassword((v) => !v)}
                     accessibilityRole="button"
-                    accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                    accessibilityLabel={showPassword ? t("auth.login.hidePassword") : t("auth.login.showPassword")}
                     hitSlop={8}
                   >
                     <MaterialCommunityIcons
@@ -190,10 +192,10 @@ export function ParentLoginScreen({ navigation }: Props) {
                 (isSubmitting || googleBusy) && styles.btnDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel={isSupabaseConfigured ? "Sign In" : "Continue in demo mode"}
+              accessibilityLabel={isSupabaseConfigured ? t("auth.login.signIn") : t("auth.login.continueDemo")}
             >
               <Text style={styles.signInLabel}>
-                {isSupabaseConfigured ? (isSubmitting ? "Signing in…" : "Sign In") : "Continue in Demo Mode"}
+                {isSupabaseConfigured ? (isSubmitting ? t("auth.login.signingIn") : t("auth.login.signIn")) : t("auth.login.continueDemo")}
               </Text>
             </Pressable>
 
@@ -202,9 +204,9 @@ export function ParentLoginScreen({ navigation }: Props) {
                 onPress={() => navigation.navigate("ParentSignUp")}
                 style={({ pressed }) => [styles.createBtn, pressed && styles.btnPressed]}
                 accessibilityRole="button"
-                accessibilityLabel="Create Account"
+                accessibilityLabel={t("auth.login.createAccount")}
               >
-                <Text style={styles.createLabel}>Create Account</Text>
+                <Text style={styles.createLabel}>{t("auth.login.createAccount")}</Text>
               </Pressable>
             ) : null}
 
@@ -212,7 +214,7 @@ export function ParentLoginScreen({ navigation }: Props) {
 
             {!isSupabaseConfigured ? (
               <Text style={styles.warning}>
-                Supabase keys are not configured yet. Add your .env values to enable real authentication.
+                {t("auth.login.supabaseWarning")}
               </Text>
             ) : null}
 

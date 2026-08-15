@@ -6,6 +6,7 @@ import { useAppColors } from "@/theme/useAppColors";
 import { fetchTaskAuditTrail, formatWhen, type TaskAuditRow, type TaskAuditEvent } from "@/services/taskAuditTrail";
 import { radii } from "@/theme/theme";
 import { formatAppError } from "@/utils/errors";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   task: TaskAuditRow | null;
@@ -15,6 +16,7 @@ type Props = {
 
 export function ChildTaskAuditDialog({ task, visible, onDismiss }: Props) {
   const c = useAppColors();
+  const { t } = useLocale();
   const styles = useMemo(() => createStyles(c), [c]);
   const [events, setEvents] = useState<TaskAuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,13 +47,13 @@ export function ChildTaskAuditDialog({ task, visible, onDismiss }: Props) {
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss} style={styles.dialog}>
-        <Dialog.Title style={{ color: c.text }}>{task?.title ?? "Task history"}</Dialog.Title>
+        <Dialog.Title style={{ color: c.text }}>{task?.title ?? t("audit.title")}</Dialog.Title>
         <Dialog.ScrollArea style={styles.scrollArea}>
           <ScrollView contentContainerStyle={styles.scrollContent}>
             {loading ? <ActivityIndicator color={c.primary} /> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
             {!loading && !error && events.length === 0 ? (
-              <Text style={{ color: c.subtext }}>No history recorded yet.</Text>
+              <Text style={{ color: c.subtext }}>{t("audit.empty")}</Text>
             ) : null}
             {events.map((event, index) => (
               <View key={`${event.at}-${event.title}-${index}`} style={styles.eventRow}>
@@ -76,7 +78,7 @@ export function ChildTaskAuditDialog({ task, visible, onDismiss }: Props) {
         </Dialog.ScrollArea>
         <Dialog.Actions>
           <Button onPress={onDismiss} textColor={c.primary}>
-            Close
+            {t("common.close")}
           </Button>
         </Dialog.Actions>
       </Dialog>
@@ -101,6 +103,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     },
     dot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
     eventBody: { flex: 1 },
-    error: { color: "#B91C1C" },
+    error: { color: c.danger },
   });
 }

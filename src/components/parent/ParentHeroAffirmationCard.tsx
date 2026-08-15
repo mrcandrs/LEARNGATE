@@ -1,12 +1,14 @@
 import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Text } from "react-native-paper";
-import { getDailyAffirmation } from "@/utils/parentDailyAffirmations";
-import { useAppColors } from "@/theme/useAppColors";
 import { radii } from "@/theme/theme";
+import { useAppColors } from "@/theme/useAppColors";
+import { useLocale } from "@/store/LocaleContext";
+import { getDailyAffirmation } from "@/utils/parentDailyAffirmations";
 
 export function ParentHeroAffirmationCard() {
-  const affirmation = getDailyAffirmation();
+  const { t, locale } = useLocale();
+  const affirmation = getDailyAffirmation(locale);
   const appColors = useAppColors();
 
   return (
@@ -17,7 +19,7 @@ export function ParentHeroAffirmationCard() {
       style={styles.card}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>Guide your child through better learning habits.</Text>
+        <Text style={styles.title}>{t("parent.hero.title")}</Text>
         <Text style={styles.affirmation}>{affirmation}</Text>
       </View>
     </LinearGradient>

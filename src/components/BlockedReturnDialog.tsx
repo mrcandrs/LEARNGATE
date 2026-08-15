@@ -25,12 +25,14 @@ import { unlockRowForPackage } from "@/utils/appUnlockTime";
 import { useAuth } from "@/store/AuthContext";
 import type { ChildProfileRow } from "@/types/child";
 import { useAppColors } from "@/theme/useAppColors";
+import { useLocale } from "@/store/LocaleContext";
 
 /** Modal when the native blocker returns the child to LearnGate for a blocked app. */
 export function BlockedReturnDialog() {
   const { appMode } = useAuth();
   const theme = useTheme();
   const c = useAppColors();
+  const { t } = useLocale();
   const [child, setChild] = useState<ChildProfileRow | null>(null);
   const childRef = useRef<ChildProfileRow | null>(null);
   childRef.current = child;
@@ -83,7 +85,7 @@ export function BlockedReturnDialog() {
     for (const d of UNLOCK_DURATIONS) {
       const quote = await fetchUnlockQuote(childId, pkg, d.id);
       if (quote.disabled) {
-        disabledReason = quote.reason ?? "Star unlock is not available for this app.";
+        disabledReason = quote.reason ?? t("blocked.starUnlockUnavailable");
         break;
       }
       if (quote.ok && quote.stars != null) {
@@ -94,7 +96,7 @@ export function BlockedReturnDialog() {
     setQuotes(next);
     setQuoteDisabled(disabledReason);
     setQuoteLoading(false);
-  }, []);
+  }, [t]);
 
   const openUnlockedApp = useCallback(async (pkg: string, _unlockRow?: TempUnlockRow | null) => {
     // Break the bounce ↔ auto-relaunch ping-pong: if we just relaunched this app, don't slam it
@@ -202,7 +204,7 @@ export function BlockedReturnDialog() {
     };
   }, [appMode, clearRetryTimeouts, refreshChild]);
 
-  const friendly = blockedPkg ? labelForBlockedPackage(blockedPkg) : "This app";
+  const friendly = blockedPkg ? labelForBlockedPackage(blockedPkg) : t("blocked.thisApp");
   const selectedStars = quotes[duration];
   const canAfford =
     selectedStars != null && child != null && child.stars >= selectedStars && !quoteDisabled;
@@ -220,7 +222,7 @@ export function BlockedReturnDialog() {
     });
     setRequestBusy(false);
     if (!result.ok) {
-      setError(result.reason ?? "Could not send request.");
+      setError(result.reason ?? t("blocked.sendFailed"));
       return;
     }
     setRequestSent(true);
@@ -233,21 +235,21 @@ export function BlockedReturnDialog() {
     <Portal>
       <Dialog visible={visible} onDismiss={dismiss} dismissable={false} dismissableBackButton>
         <Dialog.Icon icon="shield-lock-outline" />
-        <Dialog.Title>App blocked</Dialog.Title>
+        <Dialog.Title>{t("blocked.title")}</Dialog.Title>
         <Dialog.Content>
           <Text variant="bodyMedium" style={styles.body}>
             {friendly !== blockedPkg
-              ? `${friendly} is blocked — your parent locked this app.`
-              : `"${friendly}" was blocked.`}
+              ? t("blocked.namedBlocked", { name: friendly })
+              : t("blocked.unnamedBlocked", { name: friendly })}
           </Text>
 
           {pending || requestSent ? (
             <View style={[styles.pendingBox, { backgroundColor: c.surfaceTint, borderColor: c.border }]}>
               <Text variant="titleSmall" style={{ color: c.primaryDark }}>
-                Waiting for parent
+                {t("blocked.waitingParent")}
               </Text>
               <Text variant="bodySmall" style={{ color: c.subtext, marginTop: 4 }}>
-                Your unlock request was sent. Your parent will approve or deny it. Stars are held until then.
+                {t("blocked.waitingHint")}
               </Text>
             </View>
           ) : quoteDisabled ? (
@@ -257,15 +259,15 @@ export function BlockedReturnDialog() {
           ) : (
             <>
               <Text variant="titleSmall" style={[styles.sectionLabel, { color: c.primaryDark }]}>
-                Ask parent with stars
+                {t("blocked.askWithStars")}
               </Text>
               <Text variant="bodySmall" style={{ color: c.subtext, marginBottom: 8 }}>
-                You have {child?.stars ?? 0} stars this week. Stars are returned if your parent says no.
+                {t("blocked.youHaveStars", { count: child?.stars ?? 0 })}
               </Text>
 
               {quoteLoading ? (
                 <Text variant="bodySmall" style={{ color: c.subtext }}>
-                  Loading prices…
+                  {t("blocked.loadingPrices")}
                 </Text>
               ) : (
                 <RadioButton.Group onValueChange={(v) => setDuration(v as UnlockDuration)} value={duration}>
@@ -275,7 +277,7 @@ export function BlockedReturnDialog() {
                     return (
                       <RadioButton.Item
                         key={d.id}
-                        label={`${d.label} — ${stars ?? "?"} ★`}
+                        label={t("blocked.durationStars", { duration: d.label, stars: stars ?? "?" })}
                         value={d.id}
                         disabled={stars == null || !affordable}
                         labelStyle={{ color: affordable ? c.text : c.subtext }}
@@ -287,7 +289,7 @@ export function BlockedReturnDialog() {
 
               <TextInput
                 mode="outlined"
-                label="Note for parent (optional)"
+                label={t("blocked.noteLabel")}
                 value={message}
                 onChangeText={setMessage}
                 maxLength={120}
@@ -304,11 +306,11 @@ export function BlockedReturnDialog() {
         </Dialog.Content>
         <Dialog.Actions>
           <Button mode="text" onPress={dismiss}>
-            OK
+            {t("common.ok")}
           </Button>
           {!pending && !requestSent && !quoteDisabled && !quoteLoading ? (
             <Button mode="contained" onPress={() => void onRequestUnlock()} loading={requestBusy} disabled={!canAfford}>
-              Request unlock
+              {t("blocked.requestUnlock")}
             </Button>
           ) : null}
         </Dialog.Actions>

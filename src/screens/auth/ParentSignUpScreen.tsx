@@ -11,11 +11,13 @@ import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
+import { useLocale } from "@/store/LocaleContext";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentSignUp">;
 
 export function ParentSignUpScreen({ navigation }: Props) {
   const { isSupabaseConfigured } = useAuth();
+  const { t } = useLocale();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,17 +28,17 @@ export function ParentSignUpScreen({ navigation }: Props) {
 
   const handleSignUp = async () => {
     if (!isSupabaseConfigured || !supabase) {
-      setError("Supabase is not configured. Add your .env keys first.");
+      setError(t("auth.signUp.supabaseNotConfigured"));
       return;
     }
 
     if (!email.trim() || !password.trim()) {
-      setError("Email and password are required.");
+      setError(t("auth.signUp.emailPasswordRequired"));
       return;
     }
 
     if (!acceptedLegal) {
-      setError("Please accept the Terms & Conditions and Privacy Policy.");
+      setError(t("auth.signUp.acceptLegalRequired"));
       return;
     }
 
@@ -61,7 +63,7 @@ export function ParentSignUpScreen({ navigation }: Props) {
       return;
     }
 
-    setSuccessMessage("Account created successfully. You can now sign in.");
+    setSuccessMessage(t("auth.signUp.successMessage"));
     setTimeout(() => {
       navigation.navigate("ParentLogin");
     }, 800);
@@ -71,15 +73,15 @@ export function ParentSignUpScreen({ navigation }: Props) {
     <ScreenContainer scroll>
       <View style={styles.content}>
         <Text variant="headlineLarge" style={styles.title}>
-          Parent Sign Up
+          {t("auth.signUp.title")}
         </Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
-          Create a parent account to manage children, tasks, and screen time.
+          {t("auth.signUp.subtitle")}
         </Text>
 
-        <TextInput label="Full Name" mode="outlined" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
+        <TextInput label={t("auth.signUp.fullName")} mode="outlined" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
         <TextInput
-          label="Email"
+          label={t("auth.signUp.email")}
           mode="outlined"
           value={email}
           onChangeText={setEmail}
@@ -88,7 +90,7 @@ export function ParentSignUpScreen({ navigation }: Props) {
           autoCorrect={false}
         />
         <TextInput
-          label="Password"
+          label={t("auth.signUp.password")}
           mode="outlined"
           value={password}
           onChangeText={setPassword}
@@ -100,15 +102,14 @@ export function ParentSignUpScreen({ navigation }: Props) {
           <Checkbox status={acceptedLegal ? "checked" : "unchecked"} onPress={() => setAcceptedLegal((v) => !v)} />
           <View style={styles.legalTextWrap}>
             <Text variant="bodySmall" style={styles.legalText}>
-              I am a parent or legal guardian and I agree to the{" "}
+              {t("auth.signUp.legalPrefix")}
             </Text>
             <View style={styles.legalLinks}>
-              <LegalLinkButton label="Terms & Conditions" onPress={() => openLegalDocument("terms")} />
+              <LegalLinkButton label={t("auth.signUp.terms")} onPress={() => openLegalDocument("terms")} />
               <Text variant="bodySmall" style={styles.legalText}>
-                {" "}
-                and{" "}
+                {t("auth.signUp.and")}
               </Text>
-              <LegalLinkButton label="Privacy Policy" onPress={() => openLegalDocument("privacy")} />
+              <LegalLinkButton label={t("auth.signUp.privacy")} onPress={() => openLegalDocument("privacy")} />
               <Text variant="bodySmall" style={styles.legalText}>
                 .
               </Text>
@@ -117,11 +118,11 @@ export function ParentSignUpScreen({ navigation }: Props) {
         </View>
 
         <PrimaryButton
-          label="Create Account"
+          label={t("auth.signUp.createAccount")}
           onPress={() => void handleSignUp()}
           disabled={isSubmitting || !acceptedLegal}
         />
-        <PrimaryButton label="Back to Login" onPress={() => navigation.navigate("ParentLogin")} mode="text" />
+        <PrimaryButton label={t("auth.signUp.backToLogin")} onPress={() => navigation.navigate("ParentLogin")} mode="text" />
 
         <LegalFooterLinks align="left" />
 

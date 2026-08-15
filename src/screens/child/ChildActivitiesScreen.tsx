@@ -19,6 +19,8 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { radii, shadows } from "@/theme/theme";
 import { useAppColors } from "@/theme/useAppColors";
 import type { ChildActivitiesStackParamList } from "@/types/navigation";
+import { useLocale } from "@/store/LocaleContext";
+import { localizedAgeBand, localizedExercise, localizedResolvedGame } from "@/i18n/helpers";
 type Nav = NativeStackNavigationProp<ChildActivitiesStackParamList, "ActivitiesMain">;
 type Route = RouteProp<ChildActivitiesStackParamList, "ActivitiesMain">;
 
@@ -27,13 +29,18 @@ type Segment = "games" | "movement";
 export function ChildActivitiesScreen() {
   const route = useRoute<Route>();
   const navigation = useNavigation<Nav>();
+  const { t } = useLocale();
   const c = useAppColors();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(c), [c]);
   const { child } = useChildProfile();
   const childAge = child ? getChildAge(child) : null;
   const ageBand = useMemo(() => getAgeBandForChild(childAge), [childAge]);
-  const ageGames = useMemo(() => getGamesForChildAge(childAge), [childAge]);
+  const localizedBand = localizedAgeBand(ageBand.id, t);
+  const ageGames = useMemo(
+    () => getGamesForChildAge(childAge).map((game) => localizedResolvedGame(game, t)),
+    [childAge, t],
+  );
   const [segment, setSegment] = useState<Segment>(route.params?.segment ?? "games");
 
   useEffect(() => {
@@ -94,12 +101,12 @@ export function ChildActivitiesScreen() {
         style={[styles.header, { paddingTop: insets.top + 14 }]}
       >
         <Text variant="headlineSmall" style={styles.headerTitle}>
-          Activities
+          {t("child.activities.title")}
         </Text>
         <Text variant="bodyMedium" style={styles.headerSub}>
           {segment === "games"
-            ? ageBand.gamesHint
-            : "Camera-guided exercises that count your reps automatically."}
+            ? localizedAgeBand(ageBand.id, t).gamesHint
+            : t("child.activities.movementHeaderHint")}
         </Text>
         {segment === "games" ? (
           <View style={styles.bannerWrap}>
@@ -114,13 +121,13 @@ export function ChildActivitiesScreen() {
             style={[styles.segmentBtn, segment === "games" && styles.segmentBtnActive]}
             onPress={() => setSegment("games")}
           >
-            <Text style={[styles.segmentText, segment === "games" && styles.segmentTextActive]}>Learning Games</Text>
+            <Text style={[styles.segmentText, segment === "games" && styles.segmentTextActive]}>{t("child.activities.segmentLearningGames")}</Text>
           </Pressable>
           <Pressable
             style={[styles.segmentBtn, segment === "movement" && styles.segmentBtnActive]}
             onPress={() => setSegment("movement")}
           >
-            <Text style={[styles.segmentText, segment === "movement" && styles.segmentTextActive]}>Movement Activity</Text>
+            <Text style={[styles.segmentText, segment === "movement" && styles.segmentTextActive]}>{t("child.activities.movement")}</Text>
           </Pressable>
         </View>
 
@@ -132,11 +139,14 @@ export function ChildActivitiesScreen() {
               </View>
               <View style={styles.sectionText}>
                 <Text variant="titleMedium" style={styles.sectionTitle}>
-                  {ageBand.heroTitle}
+                  {localizedBand.heroTitle}
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  {ageGames.length} games picked for {ageBand.label.toLowerCase()}s ({ageBand.shortLabel}). Each
-                  round has 10 questions — assigned tasks use your learning level.
+                  {t("child.activities.gamesHint", {
+                    count: ageGames.length,
+                    band: localizedBand.label.toLowerCase(),
+                    shortLabel: localizedBand.shortLabel,
+                  })}
                 </Text>
               </View>
             </View>
@@ -160,10 +170,10 @@ export function ChildActivitiesScreen() {
               </View>
               <View style={styles.sectionText}>
                 <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Movement Activity
+                  {t("child.activities.movement")}
                 </Text>
                 <Text variant="bodySmall" style={styles.sectionHint}>
-                  AI pose tracking counts squats, arm stretches, and jumping jacks from your camera.
+                  {t("child.activities.movementHint")}
                 </Text>
               </View>
             </View>
@@ -172,22 +182,22 @@ export function ChildActivitiesScreen() {
                 <Pressable
                   key={ex.id}
                   style={({ pressed }) => [styles.gridItem, styles.gridItemFill, pressed && styles.pressed]}
-                  onPress={() => openExercise(ex.id, ex.title)}
+                      onPress={() => openExercise(ex.id, localizedExercise(ex.id, t).title)}
                 >
                   <View style={[styles.moveCard, { backgroundColor: c.card, borderColor: c.border }]}>
                     <View style={styles.moveBadge}>
                       <Text style={styles.moveBadgeText}>
-                        {ex.defaultReps} reps · +{ex.defaultPoints} stars
+                        {t("child.activities.repsStars", { reps: ex.defaultReps, stars: ex.defaultPoints })}
                       </Text>
                     </View>
                     <Text style={styles.moveEmoji}>{ex.emoji}</Text>
                     <Text variant="titleSmall" style={styles.moveTitle} numberOfLines={1}>
-                      {ex.title}
+                      {localizedExercise(ex.id, t).title}
                     </Text>
                     <Text variant="bodySmall" style={styles.moveDesc} numberOfLines={3}>
-                      {ex.cardDescription}
+                      {localizedExercise(ex.id, t).cardDescription}
                     </Text>
-                    <Text style={[styles.moveStart, { color: c.primary }]}>Start ›</Text>
+                    <Text style={[styles.moveStart, { color: c.primary }]}>{t("child.activities.startLink")}</Text>
                   </View>
                 </Pressable>
               ))}

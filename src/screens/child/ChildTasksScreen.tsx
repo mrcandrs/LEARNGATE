@@ -22,7 +22,8 @@ import { useChildProfile } from "@/hooks/useChildProfile";
 import { useChildTaskActions } from "@/hooks/useChildTaskActions";
 import { formatAppError } from "@/utils/errors";
 import type { ChildTabParamList } from "@/types/navigation";
-import { taskSubtitle, type ChildTaskCategory, type TaskRow } from "@/utils/childTaskDisplay";
+import { taskActionLabel, taskListSubtitle, type ChildTaskCategory, type TaskRow } from "@/utils/childTaskDisplay";
+import { useLocale } from "@/store/LocaleContext";
 import type { TaskAuditRow } from "@/services/taskAuditTrail";
 import { cacheChildTasks, readCachedChildTasks } from "@/services/offlineCache";
 import { OFFLINE_MSG } from "@/services/offlineMessages";
@@ -33,6 +34,7 @@ type CompletedSort = "newest" | "oldest" | "points" | "title";
 
 export function ChildTasksScreen() {
   const tabNav = useNavigation<NavigationProp<ChildTabParamList>>();
+  const { t } = useLocale();
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const { isSupabaseConfigured } = useAuth();
@@ -157,12 +159,12 @@ export function ChildTasksScreen() {
 
   const sortLabel =
     completedSort === "newest"
-      ? "Newest first"
+      ? t("child.tasks.sortNewest")
       : completedSort === "oldest"
-        ? "Oldest first"
+        ? t("child.tasks.sortOldest")
         : completedSort === "points"
-          ? "Most stars"
-          : "A → Z";
+          ? t("child.tasks.sortPoints")
+          : t("child.tasks.sortTitle");
 
   const openAudit = (task: TaskRow) => {
     if (!child) return;
@@ -183,31 +185,14 @@ export function ChildTasksScreen() {
   };
 
   const renderActiveTask = (task: TaskRow) => {
-    const actionLabel =
-      task.category === "learning"
-        ? "Play"
-        : task.category === "exercise"
-          ? "Start"
-          : task.requires_camera && task.status === "submitted"
-            ? "Waiting"
-            : task.requires_camera
-              ? "Take Photo"
-              : "Complete";
+    const actionLabel = taskActionLabel(task, t);
     const disabled = task.category === "chore" && task.requires_camera && task.status === "submitted";
 
     return (
       <TaskListItem
         key={task.id}
         title={task.title}
-        subtitle={
-          task.category === "learning"
-            ? `Learning · +${task.xp_reward} stars`
-            : task.category === "exercise"
-              ? taskSubtitle(task)
-              : task.requires_camera
-                ? "Camera verification"
-                : `Chore · +${task.xp_reward} stars`
-        }
+        subtitle={taskListSubtitle(task, t)}
         reward={`+${task.xp_reward}`}
         actionLabel={actionLabel}
         actionDisabled={disabled}
@@ -223,11 +208,11 @@ export function ChildTasksScreen() {
         title={task.title}
         subtitle={
           task.completed_at
-            ? `Completed · ${new Date(task.completed_at).toLocaleDateString()}`
-            : "Completed"
+            ? t("child.tasks.completedOn", { date: new Date(task.completed_at).toLocaleDateString() })
+            : t("child.tasks.completed")
         }
         reward={`+${task.xp_reward}`}
-        actionLabel="History"
+        actionLabel={t("child.tasks.history")}
         onActionPress={() => openAudit(task)}
       />
     </View>
@@ -241,7 +226,7 @@ export function ChildTasksScreen() {
         {isLoading && !refreshing ? <ActivityIndicator size="small" color={c.primary} /> : null}
 
         {activeTasks.length === 0 && !isLoading ? (
-          <Text style={styles.empty}>No active tasks right now.</Text>
+          <Text style={styles.empty}>{t("child.tasks.noActive")}</Text>
         ) : (
           activeTasks.map(renderActiveTask)
         )}
@@ -250,7 +235,7 @@ export function ChildTasksScreen() {
           <>
             <View style={styles.completedHeader}>
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Completed ({filteredCompleted.length})
+                {t("child.tasks.completedHeader", { count: filteredCompleted.length })}
               </Text>
               <Menu
                 visible={sortMenuOpen}
@@ -266,15 +251,15 @@ export function ChildTasksScreen() {
                   </Chip>
                 }
               >
-                <Menu.Item onPress={() => { setCompletedSort("newest"); setSortMenuOpen(false); }} title="Newest first" />
-                <Menu.Item onPress={() => { setCompletedSort("oldest"); setSortMenuOpen(false); }} title="Oldest first" />
-                <Menu.Item onPress={() => { setCompletedSort("points"); setSortMenuOpen(false); }} title="Most stars" />
-                <Menu.Item onPress={() => { setCompletedSort("title"); setSortMenuOpen(false); }} title="A → Z" />
+                <Menu.Item onPress={() => { setCompletedSort("newest"); setSortMenuOpen(false); }} title={t("child.tasks.sortNewest")} />
+                <Menu.Item onPress={() => { setCompletedSort("oldest"); setSortMenuOpen(false); }} title={t("child.tasks.sortOldest")} />
+                <Menu.Item onPress={() => { setCompletedSort("points"); setSortMenuOpen(false); }} title={t("child.tasks.sortPoints")} />
+                <Menu.Item onPress={() => { setCompletedSort("title"); setSortMenuOpen(false); }} title={t("child.tasks.sortTitle")} />
               </Menu>
             </View>
 
             <Searchbar
-              placeholder="Search completed tasks"
+              placeholder={t("child.tasks.searchCompleted")}
               value={completedSearch}
               onChangeText={setCompletedSearch}
               style={[styles.search, { backgroundColor: c.card }]}
@@ -293,7 +278,13 @@ export function ChildTasksScreen() {
                   style={completedFilter === key ? { backgroundColor: c.surfaceTint } : { backgroundColor: c.mutedSurface }}
                   textStyle={{ color: c.text }}
                 >
-                  {key === "all" ? "All" : key.charAt(0).toUpperCase() + key.slice(1)}
+                  {key === "all"
+                    ? t("child.tasks.filterAll")
+                    : key === "learning"
+                      ? t("child.tasks.filterLearning")
+                      : key === "exercise"
+                        ? t("child.tasks.filterExercise")
+                        : t("child.tasks.filterChore")}
                 </Chip>
               ))}
             </View>
@@ -301,7 +292,7 @@ export function ChildTasksScreen() {
             {filteredCompleted.length === 0 ? (
               <View style={styles.noResults}>
                 <MaterialCommunityIcons name="magnify-close" size={28} color={c.subtext} />
-                <Text style={styles.empty}>No completed tasks match your search.</Text>
+                <Text style={styles.empty}>{t("child.tasks.noMatch")}</Text>
               </View>
             ) : (
               filteredCompleted.map(renderCompletedTask)
@@ -346,6 +337,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     empty: { color: c.subtext },
     noResults: { alignItems: "center", gap: 8, paddingVertical: 16 },
     doneWrap: { opacity: 0.92 },
-    errorText: { color: "#B91C1C" },
+    errorText: { color: c.danger },
   });
 }
