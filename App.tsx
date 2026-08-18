@@ -15,21 +15,26 @@ import { AuthProvider } from "./src/store/AuthContext";
 import { AudioGuidanceProvider } from "./src/store/AudioGuidanceContext";
 import { ThemeModeProvider, useThemeMode } from "./src/store/ThemeModeContext";
 import { LocaleProvider } from "./src/store/LocaleContext";
+import { AppToastProvider } from "./src/store/AppToastContext";
+import { CameraPhotoCaptureHost } from "./src/components/CameraPhotoCaptureHost";
+import { AppToastHost } from "./src/components/AppToastHost";
+import { RootNavigator } from "./src/navigation/RootNavigator";
 
 WebBrowser.maybeCompleteAuthSession();
-import { CameraPhotoCaptureHost } from "./src/components/CameraPhotoCaptureHost";
-import { RootNavigator } from "./src/navigation/RootNavigator";
 
 function AppShell() {
   const { theme } = useThemeMode();
   return (
     <PaperProvider theme={theme}>
-      <AudioGuidanceProvider>
-        <AuthProvider>
-          <RootNavigator />
-          <CameraPhotoCaptureHost />
-        </AuthProvider>
-      </AudioGuidanceProvider>
+      <AppToastProvider>
+        <AudioGuidanceProvider>
+          <AuthProvider>
+            <RootNavigator />
+            <CameraPhotoCaptureHost />
+            <AppToastHost />
+          </AuthProvider>
+        </AudioGuidanceProvider>
+      </AppToastProvider>
     </PaperProvider>
   );
 }

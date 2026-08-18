@@ -22,6 +22,7 @@ import { signInWithGoogleOAuth } from "@/services/googleOAuth";
 import { formatAppError } from "@/utils/errors";
 import { LegalFooterLinks } from "@/components/legal/LegalFooterLinks";
 import { useLocale } from "@/store/LocaleContext";
+import { useAppToast } from "@/store/AppToastContext";
 import { sendParentSignupVerifyEmail, signInParentWithPassword } from "@/services/parentEmailAuth";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
@@ -36,6 +37,7 @@ const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
 export function ParentLoginScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
+  const { showToast } = useAppToast();
   const { selectRole, isSupabaseConfigured, pendingParentSignup } = useAuth();
   const [email, setEmail] = useState(route.params?.email ?? "");
   const [password, setPassword] = useState("");
@@ -58,8 +60,9 @@ export function ParentLoginScreen({ navigation, route }: Props) {
     }
     if (route.params?.notice) {
       setInfo(route.params.notice);
+      showToast(route.params.notice);
     }
-  }, [route.params?.email, route.params?.notice]);
+  }, [route.params?.email, route.params?.notice, showToast]);
 
   const handleGoogle = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -125,6 +128,7 @@ export function ParentLoginScreen({ navigation, route }: Props) {
       return;
     }
     setInfo(t("auth.signUp.resendSent"));
+    showToast(t("auth.signUp.resendSent"));
   };
 
   return (

@@ -11,7 +11,7 @@ export function formatAppError(error: unknown): string {
   const msg = raw.toLowerCase();
 
   if (status === 504 || status === 502 || status === 503 || msg.includes("504") || msg.includes("gateway timeout") || msg.includes("gateway time-out")) {
-    return "Could not send email (server timed out). In Supabase → Authentication → Emails, set Outlook SMTP port to 587 (not 464), save, then try again.";
+    return "Could not send email (server timed out). In Supabase → Authentication → SMTP, confirm Brevo is enabled (smtp-relay.brevo.com, port 587), the sender is your verified Outlook address, and the password is an SMTP key (not the account password).";
   }
 
   if (msg.includes("network") || msg.includes("fetch") || msg.includes("internet") || msg.includes("failed to fetch") || msg.includes("offline") || msg.includes("timeout") || msg.includes("timed out")) {

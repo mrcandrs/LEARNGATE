@@ -9,6 +9,7 @@ import { LegalLinkButton } from "@/components/legal/LegalLinkButton";
 import { openLegalDocument } from "@/navigation/openLegalDocument";
 import { AuthStackParamList } from "@/types/navigation";
 import { useAuth } from "@/store/AuthContext";
+import { useAppToast } from "@/store/AppToastContext";
 import { colors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
 import { useLocale } from "@/store/LocaleContext";
@@ -19,12 +20,14 @@ type Props = NativeStackScreenProps<AuthStackParamList, "ParentSignUp">;
 type SignUpStep = "email" | "wait" | "complete";
 
 export function ParentSignUpScreen({ navigation }: Props) {
-  const { isSupabaseConfigured, pendingParentSignup, finishParentSignup } = useAuth();
+  const { isSupabaseConfigured, pendingParentSignup, signOut, holdOnAuth, releaseAuthHold } = useAuth();
   const { t } = useLocale();
+  const { showToast } = useAppToast();
   const [step, setStep] = useState<SignUpStep>(pendingParentSignup ? "complete" : "email");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -36,8 +39,9 @@ export function ParentSignUpScreen({ navigation }: Props) {
       setStep("complete");
       setError(null);
       setSuccessMessage(null);
+      showToast(t("auth.signUp.emailVerifiedToast"));
     }
-  }, [pendingParentSignup]);
+  }, [pendingParentSignup, showToast, t]);
 
   const handleSendVerify = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -64,6 +68,7 @@ export function ParentSignUpScreen({ navigation }: Props) {
     setPendingEmail(trimmedEmail);
     setStep("wait");
     setSuccessMessage(t("auth.signUp.waitBody", { email: trimmedEmail }));
+    showToast(t("auth.signUp.verifySentToast"));
   };
 
   const handleResend = async () => {
@@ -80,6 +85,7 @@ export function ParentSignUpScreen({ navigation }: Props) {
       return;
     }
     setSuccessMessage(t("auth.signUp.resendSent"));
+    showToast(t("auth.signUp.resendSent"));
   };
 
   const handleComplete = async () => {
@@ -94,18 +100,34 @@ export function ParentSignUpScreen({ navigation }: Props) {
 
     setError(null);
     setIsSubmitting(true);
+    holdOnAuth();
     const { error: completeError } = await completeParentSignup({
       fullName: fullName.trim(),
       password: password.trim(),
     });
-    setIsSubmitting(false);
 
     if (completeError) {
+      releaseAuthHold();
+      setIsSubmitting(false);
       setError(formatAppError(completeError));
       return;
     }
 
-    await finishParentSignup();
+    const loginEmail = pendingEmail ?? email.trim();
+    await signOut();
+    showToast(t("auth.signUp.accountCreated"));
+    navigation.reset({
+      index: 0,
+      routes: [
+        {
+          name: "ParentLogin",
+          params: {
+            email: loginEmail || undefined,
+            notice: t("auth.signUp.accountCreated"),
+          },
+        },
+      ],
+    });
   };
 
   return (
@@ -148,8 +170,15 @@ export function ParentSignUpScreen({ navigation }: Props) {
               mode="outlined"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               autoCapitalize="none"
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? "eye-off-outline" : "eye-outline"}
+                  onPress={() => setShowPassword((v) => !v)}
+                  accessibilityLabel={showPassword ? t("auth.login.hidePassword") : t("auth.login.showPassword")}
+                />
+              }
             />
             <View style={styles.legalRow}>
               <Checkbox status={acceptedLegal ? "checked" : "unchecked"} onPress={() => setAcceptedLegal((v) => !v)} />

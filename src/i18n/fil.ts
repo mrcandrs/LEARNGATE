@@ -119,6 +119,9 @@ export const fil: EnCatalog = {
         "Nagpadala kami ng verification link sa {{email}}. Buksan ang mensahe at i-tap ang link. Magagawa ang parent account pagkatapos mong mag-verify.",
       resendEmail: "Ipadala ulit ang verification email",
       resendSent: "Naipadala ulit ang verification email. Tingnan ang iyong inbox.",
+      verifySentToast: "Naipadala ang verification email. Tingnan ang iyong inbox.",
+      emailVerifiedToast: "Na-verify na ang email. Tapusin ang paggawa ng account.",
+      accountCreated: "Nagawa na ang account. Mag-sign in para magpatuloy.",
       successMessage: "Tingnan ang iyong email para i-verify, saka tapusin ang sign-up.",
       checkEmailNotEnabled:
         "Hindi naipadala ang verification link. I-enable ang Confirm email / Magic link sa Supabase (Authentication → Providers → Email) at subukan ulit.",
@@ -339,6 +342,8 @@ export const fil: EnCatalog = {
     children: {
       kicker: "Lokasyon ng anak, mga gawain, screen time, at app controls.",
       noChildrenFound: "Wala pang anak na nakita para sa parent account na ito.",
+      emptyChildrenTitle: "Idagdag ang unang anak",
+      emptyChildrenHint: "Magparehistro ng anak para mabuksan ang lokasyon, gawain, screen time, at app controls.",
       selectedChildTitle: "Napiling Anak",
       selectedChildSubtitle: "Pumili ng anak para makita ang PIN at mga kontrol nila.",
       selectChild: "Piliin ang anak",

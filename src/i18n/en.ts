@@ -116,6 +116,9 @@ export const en = {
         "We sent a verification link to {{email}}. Open that message and tap the link. Your parent account is created only after you verify.",
       resendEmail: "Resend verification email",
       resendSent: "Verification email sent again. Check your inbox.",
+      verifySentToast: "Verification email sent. Check your inbox.",
+      emailVerifiedToast: "Email verified. Finish creating your account.",
+      accountCreated: "Account created successfully. Sign in to continue.",
       successMessage: "Check your email to verify your account, then finish sign-up.",
       checkEmailNotEnabled:
         "Could not send a verification link. Enable Confirm email / Magic link in Supabase (Authentication → Providers → Email) and try again.",
@@ -335,6 +338,8 @@ export const en = {
     children: {
       kicker: "Child location, tasks, screen time, and app controls.",
       noChildrenFound: "No children found for this parent account yet.",
+      emptyChildrenTitle: "Add your first child",
+      emptyChildrenHint: "Register a child to unlock location, tasks, screen time, and app controls.",
       selectedChildTitle: "Selected Child",
       selectedChildSubtitle: "Pick a child to view their PIN and controls.",
       selectChild: "Select child",

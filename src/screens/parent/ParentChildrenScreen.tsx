@@ -1085,7 +1085,25 @@ export function ParentChildrenScreen() {
         {t("parent.children.kicker")}
       </Text>
 
-      {isEmpty ? <Text>{t("parent.children.noChildrenFound")}</Text> : null}
+      {isEmpty ? (
+        <Card style={styles.childCard}>
+          <Card.Content style={styles.cardContent}>
+            <ParentSectionHeader
+              icon="account-child"
+              title={t("parent.children.emptyChildrenTitle")}
+              subtitle={t("parent.children.emptyChildrenHint")}
+              style={styles.sectionHeaderInCard}
+            />
+            <Text variant="bodyMedium" style={{ color: c.subtext }}>
+              {t("parent.children.noChildrenFound")}
+            </Text>
+            <PrimaryButton
+              label={t("parent.children.registerChild")}
+              onPress={() => setShowCreateDialog(true)}
+            />
+          </Card.Content>
+        </Card>
+      ) : null}
 
       {children.length > 0 ? (
         <Card style={styles.childCard}>

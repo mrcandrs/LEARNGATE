@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text, TextInput } from "react-native-paper";
+import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Switch, Text, TextInput } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { radii, shadows, type AppColors } from "@/theme/theme";
@@ -14,6 +14,7 @@ import { useThemeMode } from "@/store/ThemeModeContext";
 import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { LegalSectionCard } from "@/components/legal/LegalSectionCard";
 import { useLocale } from "@/store/LocaleContext";
+import { useAppToast } from "@/store/AppToastContext";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { useParentSelectedChild } from "@/store/ParentSelectedChildContext";
 import {
@@ -43,6 +44,7 @@ type ScreenRule = {
 export function ParentSettingsScreen() {
   const { isSupabaseConfigured, signOut } = useAuth();
   const { t } = useLocale();
+  const { showToast } = useAppToast();
   const { selectedChildId, selectChild, clearSelectedChild, syncWithAvailableChildren } = useParentSelectedChild();
   const themeMode = useThemeMode();
   const c = useAppColors();
@@ -53,7 +55,6 @@ export function ParentSettingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [snackbar, setSnackbar] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -172,7 +173,7 @@ export function ParentSettingsScreen() {
       setError(formatAppError(upsertError));
       return;
     }
-    setSnackbar(t("parent.settings.settingsSaved"));
+    showToast(t("parent.settings.settingsSaved"));
     await loadSettings(false);
   };
 
@@ -202,6 +203,7 @@ export function ParentSettingsScreen() {
       return;
     }
     clearSelectedChild();
+    showToast(t("parent.settings.accountDeleted"));
     setDeleteBusy(false);
     setDeleteConfirmVisible(false);
     setDeleteConfirmText("");
@@ -291,7 +293,7 @@ export function ParentSettingsScreen() {
               setPushRegistering(true);
               try {
                 const result = await registerAndSavePushToken();
-                setSnackbar(result.message);
+                showToast(result.message, result.ok ? "success" : "error");
                 if (!result.ok && __DEV__) {
                   console.warn("[push] registration:", result.message);
                 }
@@ -357,9 +359,6 @@ export function ParentSettingsScreen() {
       </Card>
 
       <DestructiveButton label={t("common.logOut")} onPress={() => setConfirmVisible(true)} style={styles.logoutButton} />
-      <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={5000}>
-        {snackbar ?? ""}
-      </Snackbar>
       <Portal>
         <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)} style={{ backgroundColor: c.card }}>
           <Dialog.Title style={{ color: c.text }}>{t("common.logOut")}</Dialog.Title>

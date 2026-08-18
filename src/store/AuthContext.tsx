@@ -1,4 +1,4 @@
-import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from "react";
+import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as Linking from "expo-linking";
 import type { Session } from "@supabase/supabase-js";
 import { AppMode, UserRole } from "@/types/app";
@@ -15,6 +15,9 @@ type AuthContextValue = {
   pendingParentSignup: boolean;
   selectRole: (role: UserRole) => void;
   signOut: () => Promise<void>;
+  /** Keeps the auth stack visible while signup finishes and the session is cleared. */
+  holdOnAuth: () => void;
+  releaseAuthHold: () => void;
   finishParentSignup: () => Promise<void>;
 };
 
@@ -24,6 +27,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [appMode, setAppMode] = useState<AppMode>("auth");
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [pendingParentSignup, setPendingParentSignup] = useState(false);
+  const stayOnAuthRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -98,6 +102,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void bootstrap();
 
     const applySession = (session: Session | null) => {
+      if (stayOnAuthRef.current) {
+        if (!session) {
+          stayOnAuthRef.current = false;
+          setPendingParentSignup(false);
+          setAppMode("auth");
+        }
+        return;
+      }
       if (!session) {
         setPendingParentSignup(false);
         setAppMode("auth");
@@ -161,12 +173,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
       pendingParentSignup,
       selectRole: (role: UserRole) => setAppMode(role),
       signOut: async () => {
+        stayOnAuthRef.current = true;
         if (supabase) {
           await setChildOnlineStatus(false);
           await supabase.auth.signOut();
         }
+        stayOnAuthRef.current = false;
         setPendingParentSignup(false);
         setAppMode("auth");
+      },
+      holdOnAuth: () => {
+        stayOnAuthRef.current = true;
+      },
+      releaseAuthHold: () => {
+        stayOnAuthRef.current = false;
       },
       finishParentSignup: async () => {
         if (!supabase) {
