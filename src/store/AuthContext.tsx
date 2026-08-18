@@ -1,16 +1,21 @@
 import { PropsWithChildren, createContext, useContext, useEffect, useMemo, useState } from "react";
+import * as Linking from "expo-linking";
+import type { Session } from "@supabase/supabase-js";
 import { AppMode, UserRole } from "@/types/app";
 import { supabase } from "@/services/supabase";
 import { setChildOnlineStatus } from "@/services/childPresence";
 import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { isSupabaseConfigured } from "@/config/env";
+import { completeSessionFromUrl, isParentEmailUnconfirmed, isParentSignupPending } from "@/services/parentEmailAuth";
 
 type AuthContextValue = {
   appMode: AppMode;
   isBootstrapping: boolean;
   isSupabaseConfigured: boolean;
+  pendingParentSignup: boolean;
   selectRole: (role: UserRole) => void;
   signOut: () => Promise<void>;
+  finishParentSignup: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -18,6 +23,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [appMode, setAppMode] = useState<AppMode>("auth");
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [pendingParentSignup, setPendingParentSignup] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -47,6 +53,25 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       if (!data.session) {
+        setPendingParentSignup(false);
+        setAppMode("auth");
+        setIsBootstrapping(false);
+        return;
+      }
+
+      if (isParentSignupPending(data.session.user)) {
+        setPendingParentSignup(true);
+        setAppMode("auth");
+        setIsBootstrapping(false);
+        return;
+      }
+
+      if (isParentEmailUnconfirmed(data.session.user)) {
+        await supabase.auth.signOut();
+        if (!mounted) {
+          return;
+        }
+        setPendingParentSignup(false);
         setAppMode("auth");
         setIsBootstrapping(false);
         return;
@@ -72,31 +97,59 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     void bootstrap();
 
+    const applySession = (session: Session | null) => {
+      if (!session) {
+        setPendingParentSignup(false);
+        setAppMode("auth");
+        return;
+      }
+      if (isParentSignupPending(session.user)) {
+        setPendingParentSignup(true);
+        setAppMode("auth");
+        return;
+      }
+      if (isParentEmailUnconfirmed(session.user)) {
+        void supabase?.auth.signOut();
+        setPendingParentSignup(false);
+        setAppMode("auth");
+        return;
+      }
+
+      setPendingParentSignup(false);
+      void resolveModeFromProfile(session.user.id).then((nextMode) => {
+        if (nextMode === "child") {
+          void setChildOnlineStatus(true);
+        }
+        setAppMode(nextMode);
+        if (nextMode !== "auth") {
+          void registerAndSavePushToken().then((result) => {
+            if (!result.ok && __DEV__) {
+              console.warn("[push] auto-register on auth change:", result.message);
+            }
+          });
+        }
+      });
+    };
+
     const { data: authListener } =
       supabase?.auth.onAuthStateChange((_event, session) => {
-        if (!session) {
-          setAppMode("auth");
-          return;
-        }
-
-        void resolveModeFromProfile(session.user.id).then((nextMode) => {
-          if (nextMode === "child") {
-            void setChildOnlineStatus(true);
-          }
-          setAppMode(nextMode);
-          if (nextMode !== "auth") {
-            void registerAndSavePushToken().then((result) => {
-              if (!result.ok && __DEV__) {
-                console.warn("[push] auto-register on auth change:", result.message);
-              }
-            });
-          }
-        });
+        applySession(session);
       }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
+
+    const handleAuthUrl = (url: string | null) => {
+      if (!url || !supabase) {
+        return;
+      }
+      void completeSessionFromUrl(supabase, url);
+    };
+
+    void Linking.getInitialURL().then(handleAuthUrl);
+    const linkingSub = Linking.addEventListener("url", ({ url }) => handleAuthUrl(url));
 
     return () => {
       mounted = false;
       authListener.subscription.unsubscribe();
+      linkingSub.remove();
     };
   }, []);
 
@@ -105,16 +158,44 @@ export function AuthProvider({ children }: PropsWithChildren) {
       appMode,
       isBootstrapping,
       isSupabaseConfigured,
+      pendingParentSignup,
       selectRole: (role: UserRole) => setAppMode(role),
       signOut: async () => {
         if (supabase) {
           await setChildOnlineStatus(false);
           await supabase.auth.signOut();
         }
+        setPendingParentSignup(false);
         setAppMode("auth");
       },
+      finishParentSignup: async () => {
+        if (!supabase) {
+          return;
+        }
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (!session || isParentSignupPending(session.user)) {
+          return;
+        }
+        setPendingParentSignup(false);
+        const nextMode = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .maybeSingle()
+          .then(({ data: profile, error }) => {
+            if (error || !profile?.role) {
+              return "parent" as AppMode;
+            }
+            return profile.role === "child" ? "child" : "parent";
+          });
+        setAppMode(nextMode);
+        if (nextMode !== "auth") {
+          void registerAndSavePushToken();
+        }
+      },
     }),
-    [appMode, isBootstrapping]
+    [appMode, isBootstrapping, pendingParentSignup]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

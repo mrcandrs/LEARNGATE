@@ -81,6 +81,14 @@ export const fil: EnCatalog = {
       googleNeedsSupabase: "I-configure ang Supabase para gamitin ang Google sign-in.",
       supabaseWarning: "Hindi pa na-configure ang Supabase keys. Idagdag ang iyong .env values para gumana ang tunay na authentication.",
       goBack: "Bumalik",
+      checkEmailUnverified:
+        "Hindi pa na-verify ang email na ito. Nagpadala kami ulit ng Verify email link. Buksan ito, saka subukan ulit mag-sign in.",
+      checkEmailLogin:
+        "Tama ang email at password. Nagpadala kami ng sign-in link sa {{email}}. Buksan ang mensahe at i-tap ang link para tapusin ang pag-log in. Walang code na kailangan.",
+      resendLoginLink: "Ipadala ulit ang sign-in link",
+      resendLoginSent: "Naipadala ulit ang sign-in link. Tingnan ang iyong inbox.",
+      sendingLink: "Ipinapadala ang sign-in link…",
+      incompleteSignup: "Na-verify na ang email. Tapusin muna ang paggawa ng account.",
     },
     signUp: {
       title: "Parent Sign Up",
@@ -94,16 +102,32 @@ export const fil: EnCatalog = {
       privacy: "Patakaran sa Privacy",
       createAccount: "Gumawa ng Account",
       backToLogin: "Bumalik sa Login",
+      emailRequired: "Kailangan ang email.",
       emailPasswordRequired: "Kailangan ang email at password.",
       acceptLegalRequired: "Pakisang-ayunan ang Mga Tuntunin at Kondisyon at Patakaran sa Privacy.",
       supabaseNotConfigured: "Hindi pa na-configure ang Supabase. Idagdag muna ang iyong .env keys.",
-      successMessage: "Matagumpay na nagawa ang account. Maaari ka nang mag-sign in.",
+      subtitleEmail: "I-verify muna ang email. Magpapadala kami ng link — magagawa mo lang ang account pagkatapos mong i-tap ito.",
+      sendVerify: "Ipadala ang verification link",
+      sendingVerify: "Ipinapadala ang verification…",
+      waitTitle: "Tingnan ang iyong email",
+      waitBody:
+        "Nagpadala kami ng verification link sa {{email}}. Buksan ang mensahe at i-tap ang link. Bumalik dito para tapusin ang paggawa ng account.",
+      completeTitle: "Tapusin ang paggawa ng account",
+      completeSubtitle: "Na-verify na ang iyong email. Ilagay ang pangalan, password, at sang-ayunan ang mga tuntunin.",
+      checkEmailTitle: "I-verify ang iyong email",
+      checkEmail:
+        "Nagpadala kami ng verification link sa {{email}}. Buksan ang mensahe at i-tap ang link. Magagawa ang parent account pagkatapos mong mag-verify.",
+      resendEmail: "Ipadala ulit ang verification email",
+      resendSent: "Naipadala ulit ang verification email. Tingnan ang iyong inbox.",
+      successMessage: "Tingnan ang iyong email para i-verify, saka tapusin ang sign-up.",
+      checkEmailNotEnabled:
+        "Hindi naipadala ang verification link. I-enable ang Confirm email / Magic link sa Supabase (Authentication → Providers → Email) at subukan ulit.",
     },
   },
   child: {
     tabs: {
       home: "Home",
-      activities: "Mga Aktibidad",
+      activities: "Aktibidad",
     },
     home: {
       tasksTitle: "Mga Gawain Ngayon",
@@ -470,6 +494,17 @@ export const fil: EnCatalog = {
       saveSettings: "I-save ang Mga Setting",
       settingsSaved: "Matagumpay na na-save ang mga setting ng magulang.",
       account: "Account",
+      dangerZone: "Danger Zone",
+      dangerZoneHint:
+        "Permanenteng burahin ang parent account mo, lahat ng child profile, gawain, history ng aktibidad, at mga setting. Hindi na ito puwedeng bawiin.",
+      deleteAccount: "Burahin ang account",
+      deleteAccountTitle: "Burahin ang account mo?",
+      deleteAccountBody:
+        "Permanenteng aalisin nito ang parent account mo at lahat ng child profile na naka-link dito, kasama ang mga gawain, submission, screen rules, at history ng aktibidad. Hindi na gagana ang child login accounts.",
+      deleteAccountConfirmLabel: "I-type ang {{word}} para kumpirmahin",
+      deleteAccountConfirmPlaceholder: "DELETE",
+      deletingAccount: "Binubura…",
+      accountDeleted: "Nabura na ang account mo.",
     },
     overview: {
       childrenManaged: "Mga Anak na Pinamamahalaan",

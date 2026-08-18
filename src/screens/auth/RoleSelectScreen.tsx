@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Dimensions, Image, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -7,6 +8,7 @@ import { AuthStackParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
 import { LanguagePicker } from "@/components/LanguagePicker";
 import { useLocale } from "@/store/LocaleContext";
+import { useAuth } from "@/store/AuthContext";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "RoleSelect">;
 
@@ -23,6 +25,13 @@ const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (1174 / 1080));
 export function RoleSelectScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
+  const { pendingParentSignup } = useAuth();
+
+  useEffect(() => {
+    if (pendingParentSignup) {
+      navigation.navigate("ParentSignUp");
+    }
+  }, [navigation, pendingParentSignup]);
 
   return (
     <View style={styles.screen}>

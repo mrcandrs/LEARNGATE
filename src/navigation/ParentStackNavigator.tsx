@@ -4,6 +4,7 @@ import { LegalDocumentScreen } from "@/screens/legal/LegalDocumentScreen";
 import { legalDocumentLabel } from "@/content/legalDocuments";
 import type { ParentStackParamList } from "@/types/navigation";
 import { colors } from "@/theme/theme";
+import { ParentSelectedChildProvider } from "@/store/ParentSelectedChildContext";
 
 const Stack = createNativeStackNavigator<ParentStackParamList>();
 
@@ -16,7 +17,8 @@ const greenHeader = {
 
 export function ParentStackNavigator() {
   return (
-    <Stack.Navigator>
+    <ParentSelectedChildProvider>
+      <Stack.Navigator>
       <Stack.Screen name="ParentTabs" component={ParentTabsNavigator} options={{ headerShown: false }} />
       <Stack.Screen
         name="LegalDocument"
@@ -27,5 +29,6 @@ export function ParentStackNavigator() {
         })}
       />
     </Stack.Navigator>
+    </ParentSelectedChildProvider>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text } from "react-native-paper";
+import { ActivityIndicator, Button, Card, Chip, Dialog, Divider, Menu, Portal, Snackbar, Switch, Text, TextInput } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScreenContainer } from "@/components/ScreenContainer";
 import { radii, shadows, type AppColors } from "@/theme/theme";
@@ -15,6 +15,11 @@ import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { LegalSectionCard } from "@/components/legal/LegalSectionCard";
 import { useLocale } from "@/store/LocaleContext";
 import { LanguagePicker } from "@/components/LanguagePicker";
+import { useParentSelectedChild } from "@/store/ParentSelectedChildContext";
+import {
+  deleteParentAccount,
+  PARENT_ACCOUNT_DELETE_CONFIRMATION,
+} from "@/services/parentAccountDelete";
 
 type ChildSummary = {
   id: string;
@@ -38,11 +43,11 @@ type ScreenRule = {
 export function ParentSettingsScreen() {
   const { isSupabaseConfigured, signOut } = useAuth();
   const { t } = useLocale();
+  const { selectedChildId, selectChild, clearSelectedChild, syncWithAvailableChildren } = useParentSelectedChild();
   const themeMode = useThemeMode();
   const c = useAppColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const [children, setChildren] = useState<ChildSummary[]>([]);
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childMenuVisible, setChildMenuVisible] = useState(false);
   const [rule, setRule] = useState<ScreenRule | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +55,13 @@ export function ParentSettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [pushRegistering, setPushRegistering] = useState(false);
+
+  const deleteConfirmationMatches =
+    deleteConfirmText.trim() === PARENT_ACCOUNT_DELETE_CONFIRMATION;
 
   const loadSettings = useCallback(async (fromPull = false) => {
     if (!isSupabaseConfigured || !supabase) {
@@ -92,32 +103,31 @@ export function ParentSettingsScreen() {
 
     const list = (childData as ChildSummary[]) ?? [];
     setChildren(list);
+    syncWithAvailableChildren(list.map((item) => item.id));
+    setIsLoading(false);
+    setRefreshing(false);
+  }, [isSupabaseConfigured, syncWithAvailableChildren]);
 
-    const nextChildId = selectedChildId && list.some((item) => item.id === selectedChildId) ? selectedChildId : list[0]?.id ?? null;
-    setSelectedChildId(nextChildId);
-
-    if (!nextChildId) {
+  const loadRulesForChild = useCallback(async (childId: string) => {
+    if (!supabase) {
       setRule(null);
-      setIsLoading(false);
-      setRefreshing(false);
       return;
     }
 
     const { data: rulesData, error: rulesError } = await supabase
       .from("screen_rules")
       .select("child_id, blocked_apps_json, unlock_after_task_count, reward_multiplier, daily_report_enabled, task_reminders_enabled")
-      .eq("child_id", nextChildId)
+      .eq("child_id", childId)
       .maybeSingle();
 
     if (rulesError) {
       setError(formatAppError(rulesError));
-      setIsLoading(false);
-      setRefreshing(false);
+      setRule(null);
       return;
     }
 
     const fallbackRule: ScreenRule = {
-      child_id: nextChildId,
+      child_id: childId,
       blocked_apps_json: [],
       unlock_after_task_count: 3,
       reward_multiplier: 1,
@@ -126,13 +136,19 @@ export function ParentSettingsScreen() {
     };
 
     setRule((rulesData as ScreenRule | null) ?? fallbackRule);
-    setIsLoading(false);
-    setRefreshing(false);
-  }, [isSupabaseConfigured, selectedChildId]);
+  }, []);
 
   useEffect(() => {
     void loadSettings(false);
   }, [loadSettings]);
+
+  useEffect(() => {
+    if (!selectedChildId) {
+      setRule(null);
+      return;
+    }
+    void loadRulesForChild(selectedChildId);
+  }, [selectedChildId, loadRulesForChild]);
 
   const onRefresh = useCallback(() => {
     void loadSettings(true);
@@ -158,6 +174,38 @@ export function ParentSettingsScreen() {
     }
     setSnackbar(t("parent.settings.settingsSaved"));
     await loadSettings(false);
+  };
+
+  const openDeleteAccountDialog = () => {
+    setDeleteConfirmText("");
+    setDeleteConfirmVisible(true);
+  };
+
+  const closeDeleteAccountDialog = () => {
+    if (deleteBusy) {
+      return;
+    }
+    setDeleteConfirmVisible(false);
+    setDeleteConfirmText("");
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (!deleteConfirmationMatches || deleteBusy) {
+      return;
+    }
+    setDeleteBusy(true);
+    setError(null);
+    const result = await deleteParentAccount(deleteConfirmText);
+    if (!result.ok) {
+      setDeleteBusy(false);
+      setError(formatAppError(new Error(result.message)));
+      return;
+    }
+    clearSelectedChild();
+    setDeleteBusy(false);
+    setDeleteConfirmVisible(false);
+    setDeleteConfirmText("");
+    await signOut();
   };
 
   return (
@@ -203,7 +251,7 @@ export function ParentSettingsScreen() {
                   key={child.id}
                   title={child.name}
                   onPress={() => {
-                    setSelectedChildId(child.id);
+                    selectChild(child.id);
                     setChildMenuVisible(false);
                   }}
                 />
@@ -297,6 +345,17 @@ export function ParentSettingsScreen() {
       <LegalSectionCard />
 
       <PrimaryButton label={t("parent.settings.saveSettings")} onPress={() => void saveRules()} disabled={!rule} />
+
+      <Card style={[styles.card, styles.dangerZoneCard]}>
+        <Card.Title title={t("parent.settings.dangerZone")} titleStyle={styles.dangerZoneTitle} />
+        <Card.Content style={styles.block}>
+          <Text variant="bodySmall" style={styles.dangerZoneHint}>
+            {t("parent.settings.dangerZoneHint")}
+          </Text>
+          <DestructiveButton label={t("parent.settings.deleteAccount")} onPress={openDeleteAccountDialog} />
+        </Card.Content>
+      </Card>
+
       <DestructiveButton label={t("common.logOut")} onPress={() => setConfirmVisible(true)} style={styles.logoutButton} />
       <Snackbar visible={Boolean(snackbar)} onDismiss={() => setSnackbar(null)} duration={5000}>
         {snackbar ?? ""}
@@ -318,6 +377,44 @@ export function ParentSettingsScreen() {
                 setConfirmVisible(false);
                 void signOut();
               }}
+            />
+          </Dialog.Actions>
+        </Dialog>
+        <Dialog
+          visible={deleteConfirmVisible}
+          onDismiss={closeDeleteAccountDialog}
+          style={{ backgroundColor: c.card }}
+        >
+          <Dialog.Title style={{ color: c.danger }}>{t("parent.settings.deleteAccountTitle")}</Dialog.Title>
+          <Dialog.Content style={styles.deleteDialogContent}>
+            <Text variant="bodyMedium" style={{ color: c.text }}>
+              {t("parent.settings.deleteAccountBody")}
+            </Text>
+            <Text variant="labelLarge" style={{ color: c.text }}>
+              {t("parent.settings.deleteAccountConfirmLabel", { word: PARENT_ACCOUNT_DELETE_CONFIRMATION })}
+            </Text>
+            <TextInput
+              mode="outlined"
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              placeholder={t("parent.settings.deleteAccountConfirmPlaceholder")}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              editable={!deleteBusy}
+              outlineColor={deleteConfirmationMatches ? c.primary : c.border}
+              activeOutlineColor={deleteConfirmationMatches ? c.primary : c.danger}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button mode="text" onPress={closeDeleteAccountDialog} textColor={c.text} disabled={deleteBusy}>
+              {t("common.cancel")}
+            </Button>
+            <DestructiveButton
+              label={deleteBusy ? t("parent.settings.deletingAccount") : t("parent.settings.deleteAccount")}
+              style={styles.dialogLogout}
+              loading={deleteBusy}
+              disabled={!deleteConfirmationMatches || deleteBusy}
+              onPress={() => void confirmDeleteAccount()}
             />
           </Dialog.Actions>
         </Dialog>
@@ -408,6 +505,20 @@ function createStyles(c: AppColors) {
   },
   logoutButton: {
     marginTop: 4,
+  },
+  dangerZoneCard: {
+    borderWidth: 1,
+    borderColor: c.danger,
+  },
+  dangerZoneTitle: {
+    color: c.danger,
+  },
+  dangerZoneHint: {
+    color: c.subtext,
+    lineHeight: 20,
+  },
+  deleteDialogContent: {
+    gap: 12,
   },
   dialogLogout: {
     marginTop: 0,

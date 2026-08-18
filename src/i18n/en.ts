@@ -78,6 +78,14 @@ export const en = {
       googleNeedsSupabase: "Configure Supabase to use Google sign-in.",
       supabaseWarning: "Supabase keys are not configured yet. Add your .env values to enable real authentication.",
       goBack: "Go back",
+      checkEmailUnverified:
+        "This email is not verified yet. We sent another Verify email link. Open it, then try signing in again.",
+      checkEmailLogin:
+        "Email and password look good. We sent a sign-in link to {{email}}. Open that message and tap the link to finish logging in. No code needed.",
+      resendLoginLink: "Resend sign-in link",
+      resendLoginSent: "Sign-in link sent again. Check your inbox.",
+      sendingLink: "Sending sign-in link…",
+      incompleteSignup: "Your email is verified. Finish creating your account first.",
     },
     signUp: {
       title: "Parent Sign Up",
@@ -91,10 +99,26 @@ export const en = {
       privacy: "Privacy Policy",
       createAccount: "Create Account",
       backToLogin: "Back to Login",
+      emailRequired: "Email is required.",
       emailPasswordRequired: "Email and password are required.",
       acceptLegalRequired: "Please accept the Terms & Conditions and Privacy Policy.",
       supabaseNotConfigured: "Supabase is not configured. Add your .env keys first.",
-      successMessage: "Account created successfully. You can now sign in.",
+      subtitleEmail: "Verify your email first. We will send a link — you can create the account only after you tap it.",
+      sendVerify: "Send verification link",
+      sendingVerify: "Sending verification…",
+      waitTitle: "Check your email",
+      waitBody:
+        "We sent a verification link to {{email}}. Open that message and tap the link. Come back here to finish creating your account.",
+      completeTitle: "Finish creating your account",
+      completeSubtitle: "Your email is verified. Set your name, password, and accept the terms.",
+      checkEmailTitle: "Verify your email",
+      checkEmail:
+        "We sent a verification link to {{email}}. Open that message and tap the link. Your parent account is created only after you verify.",
+      resendEmail: "Resend verification email",
+      resendSent: "Verification email sent again. Check your inbox.",
+      successMessage: "Check your email to verify your account, then finish sign-up.",
+      checkEmailNotEnabled:
+        "Could not send a verification link. Enable Confirm email / Magic link in Supabase (Authentication → Providers → Email) and try again.",
     },
   },
   child: {
@@ -466,6 +490,17 @@ export const en = {
       saveSettings: "Save Settings",
       settingsSaved: "Parent settings saved successfully.",
       account: "Account",
+      dangerZone: "Danger Zone",
+      dangerZoneHint:
+        "Permanently delete your parent account, all child profiles, tasks, activity history, and settings. This cannot be undone.",
+      deleteAccount: "Delete account",
+      deleteAccountTitle: "Delete your account?",
+      deleteAccountBody:
+        "This will permanently remove your parent account and every child profile linked to it, including tasks, submissions, screen rules, and activity history. Child login accounts will stop working.",
+      deleteAccountConfirmLabel: "Type {{word}} to confirm",
+      deleteAccountConfirmPlaceholder: "DELETE",
+      deletingAccount: "Deleting…",
+      accountDeleted: "Your account was deleted.",
     },
     overview: {
       childrenManaged: "Children Managed",

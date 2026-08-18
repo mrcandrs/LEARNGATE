@@ -7,7 +7,7 @@ export type LegalDocumentParams = { documentId: LegalDocumentId };
 
 export type AuthStackParamList = {
   RoleSelect: undefined;
-  ParentLogin: undefined;
+  ParentLogin: { notice?: string; email?: string } | undefined;
   ParentSignUp: undefined;
   ChildAccess: undefined;
   LegalDocument: LegalDocumentParams;

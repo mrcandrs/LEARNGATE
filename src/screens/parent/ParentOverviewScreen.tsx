@@ -38,6 +38,7 @@ import {
 } from "@/services/parentInsights";
 import { fetchLatestWeeklySnapshots, fetchWeeklyStarHistory, type WeeklyStarSnapshot } from "@/services/weeklyStarSnapshots";
 import type { ParentTabParamList } from "@/types/navigation";
+import { useParentSelectedChild } from "@/store/ParentSelectedChildContext";
 import { useLocale } from "@/store/LocaleContext";
 import type { TranslateFn } from "@/i18n/helpers";
 import type { TranslationKey } from "@/i18n/types";
@@ -128,6 +129,7 @@ type ManagedChild = { id: string; name: string; avatar_url: string | null };
 export function ParentOverviewScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { t } = useLocale();
+  const { selectedChildId, selectChild, syncWithAvailableChildren } = useParentSelectedChild();
   const route = useRoute<RouteProp<ParentTabParamList, "Overview">>();
   const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const c = useAppColors();
@@ -142,7 +144,6 @@ export function ParentOverviewScreen() {
   >({});
   const [starHistory, setStarHistory] = useState<WeeklyStarSnapshot[]>([]);
   const [starHistoryLoading, setStarHistoryLoading] = useState(false);
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [monitorMenuVisible, setMonitorMenuVisible] = useState(false);
   const [insightExpanded, setInsightExpanded] = useState(false);
   const [insightGenerating, setInsightGenerating] = useState(false);
@@ -184,7 +185,7 @@ export function ParentOverviewScreen() {
         return;
       }
       if (route.params?.childId) {
-        setSelectedChildId(route.params.childId);
+        selectChild(route.params.childId);
       }
       if (route.params?.expandInsights) {
         setInsightExpanded(true);
@@ -205,6 +206,7 @@ export function ParentOverviewScreen() {
       route.params?.expandInsights,
       route.params?.focusUnlockRequests,
       route.params?.navKey,
+      selectChild,
     ])
   );
 
@@ -426,22 +428,20 @@ export function ParentOverviewScreen() {
       )
     );
     setStoredInsights(Object.fromEntries(stored.map((row) => [row.child_id, row])));
-    setSelectedChildId((prev) =>
-      prev && managed.some((c) => c.id === prev) ? prev : managed[0]?.id ?? null
-    );
-    const activityChildId =
-      selectedChildId && managed.some((c) => c.id === selectedChildId)
-        ? selectedChildId
-        : managed[0]?.id ?? null;
-    if (activityChildId) {
-      await loadRecentActivityForChild(activityChildId);
-    } else {
-      setAppUsage([]);
-      setActivity([]);
-    }
+    syncWithAvailableChildren(managed.map((c) => c.id));
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured, loadRecentActivityForChild, selectedChildId, showError, t]);
+  }, [isSupabaseConfigured, showError, syncWithAvailableChildren, t]);
+
+  useEffect(() => {
+    if (!selectedChildId) {
+      setAppUsage([]);
+      setActivity([]);
+      return;
+    }
+    setActivityExpanded(false);
+    void loadRecentActivityForChild(selectedChildId);
+  }, [selectedChildId, loadRecentActivityForChild]);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -532,7 +532,10 @@ export function ParentOverviewScreen() {
 
   const selectedMonitor = useMemo(() => {
     const childId = selectedChildId ?? analytics?.monitors[0]?.childId;
-    return analytics?.monitors.find((m) => m.childId === childId) ?? analytics?.monitors[0] ?? null;
+    if (!childId || !analytics) {
+      return null;
+    }
+    return analytics.monitors.find((m) => m.childId === childId) ?? null;
   }, [analytics, selectedChildId]);
 
   const selectedStarMeta = useMemo(() => {
@@ -562,11 +565,9 @@ export function ParentOverviewScreen() {
 
   const onSelectChild = useCallback(
     (childId: string) => {
-      setSelectedChildId(childId);
-      setActivityExpanded(false);
-      void loadRecentActivityForChild(childId);
+      selectChild(childId);
     },
-    [loadRecentActivityForChild]
+    [selectChild],
   );
 
   return (

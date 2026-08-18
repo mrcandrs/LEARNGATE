@@ -18,6 +18,7 @@ import { ParentSectionHeader } from "@/components/parent/ParentSectionHeader";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { ParentChildLocationPreview } from "@/components/parent/ParentChildLocationPreview";
 import { getEvidenceSignedUrl } from "@/services/taskEvidence";
+import { useParentSelectedChild } from "@/store/ParentSelectedChildContext";
 import { useAppColors } from "@/theme/useAppColors";
 import type { AppColors } from "@/theme/theme";
 import { supabase } from "@/services/supabase";
@@ -163,6 +164,7 @@ type ChildDraft = {
 export function ParentChildrenScreen() {
   const { isSupabaseConfigured } = useAuth();
   const { t } = useLocale();
+  const { selectedChildId, selectChild, syncWithAvailableChildren } = useParentSelectedChild();
   const route = useRoute<RouteProp<ParentTabParamList, "Children">>();
   const navigation = useNavigation<BottomTabNavigationProp<ParentTabParamList>>();
   const theme = useTheme();
@@ -176,7 +178,6 @@ export function ParentChildrenScreen() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [pinBusyChildId, setPinBusyChildId] = useState<string | null>(null);
   const [saveBusyChildId, setSaveBusyChildId] = useState<string | null>(null);
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [childPickerVisible, setChildPickerVisible] = useState(false);
   const [toast, setToast] = useState<ManageToast | null>(null);
   const [durationPickerOpen, setDurationPickerOpen] = useState(false);
@@ -198,7 +199,7 @@ export function ParentChildrenScreen() {
         return;
       }
       if (route.params?.childId) {
-        setSelectedChildId(route.params.childId);
+        selectChild(route.params.childId);
       }
       let highlightTimer: ReturnType<typeof setTimeout> | undefined;
       if (route.params?.focusSubmissions) {
@@ -215,7 +216,7 @@ export function ParentChildrenScreen() {
           clearTimeout(highlightTimer);
         }
       };
-    }, [navigation, route.params?.childId, route.params?.focusSubmissions, route.params?.navKey])
+    }, [navigation, route.params?.childId, route.params?.focusSubmissions, route.params?.navKey, selectChild])
   );
 
   const showError = useCallback((message: string) => {
@@ -329,10 +330,10 @@ export function ParentChildrenScreen() {
     }, {});
     setChildren(rows);
     setDrafts(nextDrafts);
-    setSelectedChildId((prev) => (prev && rows.some((c) => c.id === prev) ? prev : rows[0]?.id ?? null));
+    syncWithAvailableChildren(rows.map((c) => c.id));
     setIsLoading(false);
     setRefreshing(false);
-  }, [isSupabaseConfigured]);
+  }, [isSupabaseConfigured, syncWithAvailableChildren]);
 
   useEffect(() => {
     void loadChildren(false);
@@ -1068,9 +1069,6 @@ export function ParentChildrenScreen() {
     }
     setChildToDelete(null);
     setChildPickerVisible(false);
-    if (selectedChildId === removedId) {
-      setSelectedChildId(null);
-    }
     showSuccess(t("parent.children.childRemoved", { name: childToDelete.name }));
     await loadChildren(false, true);
   };
@@ -1736,7 +1734,7 @@ export function ParentChildrenScreen() {
                   <Pressable
                     style={styles.pickerRowMain}
                     onPress={() => {
-                      setSelectedChildId(child.id);
+                      selectChild(child.id);
                       setChildPickerVisible(false);
                     }}
                     accessibilityRole="button"

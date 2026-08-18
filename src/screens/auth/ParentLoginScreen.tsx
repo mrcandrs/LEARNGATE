@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -22,6 +22,7 @@ import { signInWithGoogleOAuth } from "@/services/googleOAuth";
 import { formatAppError } from "@/utils/errors";
 import { LegalFooterLinks } from "@/components/legal/LegalFooterLinks";
 import { useLocale } from "@/store/LocaleContext";
+import { sendParentSignupVerifyEmail, signInParentWithPassword } from "@/services/parentEmailAuth";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ParentLogin">;
 
@@ -32,16 +33,33 @@ const CARD_OVERLAP = 20;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (809 / 1080));
 
-export function ParentLoginScreen({ navigation }: Props) {
+export function ParentLoginScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
-  const { selectRole, isSupabaseConfigured } = useAuth();
-  const [email, setEmail] = useState("");
+  const { selectRole, isSupabaseConfigured, pendingParentSignup } = useAuth();
+  const [email, setEmail] = useState(route.params?.email ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(route.params?.notice ?? null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+
+  useEffect(() => {
+    if (pendingParentSignup) {
+      navigation.navigate("ParentSignUp");
+    }
+  }, [navigation, pendingParentSignup]);
+
+  useEffect(() => {
+    if (route.params?.email) {
+      setEmail(route.params.email);
+    }
+    if (route.params?.notice) {
+      setInfo(route.params.notice);
+    }
+  }, [route.params?.email, route.params?.notice]);
 
   const handleGoogle = async () => {
     if (!isSupabaseConfigured || !supabase) {
@@ -49,6 +67,7 @@ export function ParentLoginScreen({ navigation }: Props) {
       return;
     }
     setError(null);
+    setInfo(null);
     setGoogleBusy(true);
     const { error: oauthError } = await signInWithGoogleOAuth(supabase);
     setGoogleBusy(false);
@@ -69,16 +88,43 @@ export function ParentLoginScreen({ navigation }: Props) {
     }
 
     setError(null);
+    setInfo(null);
     setIsSubmitting(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: password.trim(),
-    });
+    const trimmedEmail = email.trim();
+    const result = await signInParentWithPassword(trimmedEmail, password.trim());
     setIsSubmitting(false);
 
-    if (signInError) {
-      setError(formatAppError(signInError));
+    if (result.error) {
+      setError(formatAppError(result.error));
+      return;
     }
+
+    if (result.status === "unverified") {
+      setUnverifiedEmail(trimmedEmail);
+      setInfo(t("auth.login.checkEmailUnverified"));
+      return;
+    }
+
+    if (result.status === "incomplete_signup") {
+      navigation.navigate("ParentSignUp");
+      return;
+    }
+  };
+
+  const handleResendVerify = async () => {
+    const target = unverifiedEmail ?? email.trim();
+    if (!target) {
+      return;
+    }
+    setError(null);
+    setIsSubmitting(true);
+    const { error: resendError } = await sendParentSignupVerifyEmail(target);
+    setIsSubmitting(false);
+    if (resendError) {
+      setError(formatAppError(resendError));
+      return;
+    }
+    setInfo(t("auth.signUp.resendSent"));
   };
 
   return (
@@ -195,7 +241,11 @@ export function ParentLoginScreen({ navigation }: Props) {
               accessibilityLabel={isSupabaseConfigured ? t("auth.login.signIn") : t("auth.login.continueDemo")}
             >
               <Text style={styles.signInLabel}>
-                {isSupabaseConfigured ? (isSubmitting ? t("auth.login.signingIn") : t("auth.login.signIn")) : t("auth.login.continueDemo")}
+                {isSupabaseConfigured
+                  ? isSubmitting
+                    ? t("auth.login.signingIn")
+                    : t("auth.login.signIn")
+                  : t("auth.login.continueDemo")}
               </Text>
             </Pressable>
 
@@ -210,7 +260,20 @@ export function ParentLoginScreen({ navigation }: Props) {
               </Pressable>
             ) : null}
 
+            {info ? <Text style={styles.info}>{info}</Text> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {unverifiedEmail ? (
+              <Pressable
+                onPress={() => void handleResendVerify()}
+                disabled={isSubmitting || googleBusy}
+                style={({ pressed }) => [styles.createBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={t("auth.signUp.resendEmail")}
+              >
+                <Text style={styles.createLabel}>{t("auth.signUp.resendEmail")}</Text>
+              </Pressable>
+            ) : null}
 
             {!isSupabaseConfigured ? (
               <Text style={styles.warning}>
@@ -373,6 +436,12 @@ const styles = StyleSheet.create({
     color: "#B91C1C",
     fontSize: 14,
     textAlign: "center",
+  },
+  info: {
+    color: "#166534",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
   },
   warning: {
     color: colors.warning,
