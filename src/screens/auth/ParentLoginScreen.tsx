@@ -38,7 +38,7 @@ export function ParentLoginScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
   const { showToast } = useAppToast();
-  const { selectRole, isSupabaseConfigured, pendingParentSignup } = useAuth();
+  const { selectRole, isSupabaseConfigured, pendingParentSignup, pendingPasswordReset } = useAuth();
   const [email, setEmail] = useState(route.params?.email ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -49,10 +49,14 @@ export function ParentLoginScreen({ navigation, route }: Props) {
   const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
+    if (pendingPasswordReset) {
+      navigation.navigate("ParentResetPassword");
+      return;
+    }
     if (pendingParentSignup) {
       navigation.navigate("ParentSignUp");
     }
-  }, [navigation, pendingParentSignup]);
+  }, [navigation, pendingParentSignup, pendingPasswordReset]);
 
   useEffect(() => {
     if (route.params?.email) {
@@ -233,6 +237,21 @@ export function ParentLoginScreen({ navigation, route }: Props) {
               </>
             ) : null}
 
+            {isSupabaseConfigured ? (
+              <Pressable
+                onPress={() =>
+                  navigation.navigate("ParentForgotPassword", {
+                    email: email.trim() || undefined,
+                  })
+                }
+                style={({ pressed }) => [styles.forgotBtn, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={t("auth.login.forgotPassword")}
+              >
+                <Text style={styles.forgotLabel}>{t("auth.login.forgotPassword")}</Text>
+              </Pressable>
+            ) : null}
+
             <Pressable
               onPress={() => void handleContinue()}
               disabled={isSubmitting || googleBusy}
@@ -404,6 +423,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1F2937",
     paddingVertical: 12,
+  },
+  forgotBtn: {
+    alignSelf: "flex-end",
+    marginTop: -4,
+    marginBottom: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  forgotLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: GREEN,
   },
   signInBtn: {
     backgroundColor: GREEN,

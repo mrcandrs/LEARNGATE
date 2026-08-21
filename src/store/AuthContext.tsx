@@ -6,18 +6,25 @@ import { supabase } from "@/services/supabase";
 import { setChildOnlineStatus } from "@/services/childPresence";
 import { registerAndSavePushToken } from "@/services/pushNotifications";
 import { isSupabaseConfigured } from "@/config/env";
-import { completeSessionFromUrl, isParentEmailUnconfirmed, isParentSignupPending } from "@/services/parentEmailAuth";
+import {
+  completeSessionFromUrl,
+  isParentEmailUnconfirmed,
+  isParentSignupPending,
+  isPasswordRecoveryUrl,
+} from "@/services/parentEmailAuth";
 
 type AuthContextValue = {
   appMode: AppMode;
   isBootstrapping: boolean;
   isSupabaseConfigured: boolean;
   pendingParentSignup: boolean;
+  pendingPasswordReset: boolean;
   selectRole: (role: UserRole) => void;
   signOut: () => Promise<void>;
-  /** Keeps the auth stack visible while signup finishes and the session is cleared. */
+  /** Keeps the auth stack visible while signup/reset finishes and the session is cleared. */
   holdOnAuth: () => void;
   releaseAuthHold: () => void;
+  clearPasswordReset: () => void;
   finishParentSignup: () => Promise<void>;
 };
 
@@ -27,7 +34,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [appMode, setAppMode] = useState<AppMode>("auth");
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [pendingParentSignup, setPendingParentSignup] = useState(false);
+  const [pendingPasswordReset, setPendingPasswordReset] = useState(false);
   const stayOnAuthRef = useRef(false);
+  const pendingPasswordResetRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
@@ -58,6 +67,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       if (!data.session) {
         setPendingParentSignup(false);
+        setPendingPasswordReset(false);
+        pendingPasswordResetRef.current = false;
         setAppMode("auth");
         setIsBootstrapping(false);
         return;
@@ -101,10 +112,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     void bootstrap();
 
+    const beginPasswordReset = () => {
+      pendingPasswordResetRef.current = true;
+      stayOnAuthRef.current = true;
+      setPendingPasswordReset(true);
+      setPendingParentSignup(false);
+      setAppMode("auth");
+    };
+
     const applySession = (session: Session | null) => {
-      if (stayOnAuthRef.current) {
+      if (stayOnAuthRef.current || pendingPasswordResetRef.current) {
         if (!session) {
           stayOnAuthRef.current = false;
+          pendingPasswordResetRef.current = false;
+          setPendingPasswordReset(false);
           setPendingParentSignup(false);
           setAppMode("auth");
         }
@@ -112,6 +133,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       if (!session) {
         setPendingParentSignup(false);
+        setPendingPasswordReset(false);
+        pendingPasswordResetRef.current = false;
         setAppMode("auth");
         return;
       }
@@ -129,6 +152,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       setPendingParentSignup(false);
       void resolveModeFromProfile(session.user.id).then((nextMode) => {
+        if (pendingPasswordResetRef.current || stayOnAuthRef.current) {
+          return;
+        }
         if (nextMode === "child") {
           void setChildOnlineStatus(true);
         }
@@ -144,13 +170,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
 
     const { data: authListener } =
-      supabase?.auth.onAuthStateChange((_event, session) => {
+      supabase?.auth.onAuthStateChange((event, session) => {
+        if (event === "PASSWORD_RECOVERY") {
+          beginPasswordReset();
+          return;
+        }
         applySession(session);
       }) ?? { data: { subscription: { unsubscribe: () => undefined } } };
 
     const handleAuthUrl = (url: string | null) => {
       if (!url || !supabase) {
         return;
+      }
+      if (isPasswordRecoveryUrl(url)) {
+        beginPasswordReset();
       }
       void completeSessionFromUrl(supabase, url);
     };
@@ -171,6 +204,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isBootstrapping,
       isSupabaseConfigured,
       pendingParentSignup,
+      pendingPasswordReset,
       selectRole: (role: UserRole) => setAppMode(role),
       signOut: async () => {
         stayOnAuthRef.current = true;
@@ -179,6 +213,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
           await supabase.auth.signOut();
         }
         stayOnAuthRef.current = false;
+        pendingPasswordResetRef.current = false;
+        setPendingPasswordReset(false);
         setPendingParentSignup(false);
         setAppMode("auth");
       },
@@ -186,6 +222,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         stayOnAuthRef.current = true;
       },
       releaseAuthHold: () => {
+        stayOnAuthRef.current = false;
+      },
+      clearPasswordReset: () => {
+        pendingPasswordResetRef.current = false;
+        setPendingPasswordReset(false);
         stayOnAuthRef.current = false;
       },
       finishParentSignup: async () => {
@@ -215,7 +256,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
       },
     }),
-    [appMode, isBootstrapping, pendingParentSignup]
+    [appMode, isBootstrapping, pendingParentSignup, pendingPasswordReset]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

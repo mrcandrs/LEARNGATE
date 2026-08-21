@@ -25,13 +25,17 @@ const HERO_HEIGHT = Math.round(SCREEN_WIDTH * (1174 / 1080));
 export function RoleSelectScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
-  const { pendingParentSignup } = useAuth();
+  const { pendingParentSignup, pendingPasswordReset } = useAuth();
 
   useEffect(() => {
+    if (pendingPasswordReset) {
+      navigation.navigate("ParentResetPassword");
+      return;
+    }
     if (pendingParentSignup) {
       navigation.navigate("ParentSignUp");
     }
-  }, [navigation, pendingParentSignup]);
+  }, [navigation, pendingParentSignup, pendingPasswordReset]);
 
   return (
     <View style={styles.screen}>

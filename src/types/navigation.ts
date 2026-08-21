@@ -9,6 +9,8 @@ export type AuthStackParamList = {
   RoleSelect: undefined;
   ParentLogin: { notice?: string; email?: string } | undefined;
   ParentSignUp: undefined;
+  ParentForgotPassword: { email?: string } | undefined;
+  ParentResetPassword: undefined;
   ChildAccess: undefined;
   LegalDocument: LegalDocumentParams;
 };

@@ -89,8 +89,13 @@ export function looksLikeAuthCallback(url: string): boolean {
     url.includes("code=") ||
     url.includes("type=signup") ||
     url.includes("type=magiclink") ||
+    url.includes("type=recovery") ||
     url.includes("type=email")
   );
+}
+
+export function isPasswordRecoveryUrl(url: string): boolean {
+  return url.includes("type=recovery");
 }
 
 export async function completeSessionFromUrl(
@@ -157,6 +162,49 @@ export async function completeParentSignup(params: {
       signup_pending: false,
     },
   });
+  return { error: error ?? null };
+}
+
+export async function sendParentPasswordResetEmail(
+  email: string
+): Promise<{ error: Error | null; reason?: "not_registered" | "lookup_failed" }> {
+  if (!supabase) {
+    return { error: new Error("Supabase is not configured.") };
+  }
+
+  const normalized = email.trim().toLowerCase();
+  const { data: registered, error: lookupError } = await supabase.rpc("parent_email_is_registered", {
+    p_email: normalized,
+  });
+
+  if (lookupError) {
+    const hint = /parent_email_is_registered|schema cache|does not exist/i.test(lookupError.message)
+      ? " Run supabase/step-ap-parent-email-registered.sql in the Supabase SQL Editor."
+      : "";
+    return {
+      error: new Error(`${lookupError.message}${hint}`),
+      reason: "lookup_failed",
+    };
+  }
+
+  if (!registered) {
+    return {
+      error: new Error("NOT_REGISTERED"),
+      reason: "not_registered",
+    };
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(normalized, {
+    redirectTo: getEmailAuthRedirectTo(),
+  });
+  return { error: error ?? null };
+}
+
+export async function updateParentPassword(password: string): Promise<{ error: Error | null }> {
+  if (!supabase) {
+    return { error: new Error("Supabase is not configured.") };
+  }
+  const { error } = await supabase.auth.updateUser({ password });
   return { error: error ?? null };
 }
 
