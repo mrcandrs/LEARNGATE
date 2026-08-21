@@ -746,7 +746,7 @@ export const fil: EnCatalog = {
       streak: "Araw-araw na Streak",
       special: "Level Up",
     },
-    claimStars: "{{count}} Bituin",
+    claimStars: "+{{count}} Bituin",
     starsClaimed: "+{{count}} bituin ang na-claim!",
     ladders: {
       lifetime_stars: {

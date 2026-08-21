@@ -742,7 +742,7 @@ export const en = {
       streak: "Daily Streak",
       special: "Level Up",
     },
-    claimStars: "{{count}} Stars",
+    claimStars: "+{{count}} Stars",
     starsClaimed: "+{{count}} stars claimed!",
     ladders: {
       lifetime_stars: {

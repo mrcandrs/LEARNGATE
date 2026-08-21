@@ -103,11 +103,6 @@ export function ChildActivitiesScreen() {
         <Text variant="headlineSmall" style={styles.headerTitle}>
           {t("child.activities.title")}
         </Text>
-        <Text variant="bodyMedium" style={styles.headerSub}>
-          {segment === "games"
-            ? localizedAgeBand(ageBand.id, t).gamesHint
-            : t("child.activities.movementHeaderHint")}
-        </Text>
         {segment === "games" ? (
           <View style={styles.bannerWrap}>
             <AgeBandGamesBanner band={ageBand} childAge={childAge} />
@@ -172,9 +167,6 @@ export function ChildActivitiesScreen() {
                 <Text variant="titleMedium" style={styles.sectionTitle}>
                   {t("child.activities.movement")}
                 </Text>
-                <Text variant="bodySmall" style={styles.sectionHint}>
-                  {t("child.activities.movementHint")}
-                </Text>
               </View>
             </View>
             <View style={styles.grid}>
@@ -193,9 +185,6 @@ export function ChildActivitiesScreen() {
                     <Text style={styles.moveEmoji}>{ex.emoji}</Text>
                     <Text variant="titleSmall" style={styles.moveTitle} numberOfLines={1}>
                       {localizedExercise(ex.id, t).title}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.moveDesc} numberOfLines={3}>
-                      {localizedExercise(ex.id, t).cardDescription}
                     </Text>
                     <Text style={[styles.moveStart, { color: c.primary }]}>{t("child.activities.startLink")}</Text>
                   </View>
@@ -219,7 +208,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
       ...shadows.card,
     },
     headerTitle: { color: "#FFFFFF", fontWeight: "800" },
-    headerSub: { color: "rgba(255,255,255,0.92)", marginTop: 4 },
     bannerWrap: { marginTop: 12 },
     pad: { paddingHorizontal: 16, paddingBottom: 24, gap: 14 },
     segmentWrap: {
@@ -239,7 +227,7 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     segmentBtnActive: { backgroundColor: c.primaryDark },
     segmentText: { color: c.subtext, fontWeight: "600" },
     segmentTextActive: { color: "#FFFFFF", fontWeight: "700" },
-    sectionHead: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+    sectionHead: { flexDirection: "row", gap: 12, alignItems: "center" },
     sectionIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
     sectionText: { flex: 1 },
     sectionTitle: { color: c.text, fontWeight: "700" },
@@ -256,7 +244,7 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     moveCard: {
       borderRadius: radii.md,
       padding: 12,
-      minHeight: 200,
+      minHeight: 160,
       borderWidth: 1,
       overflow: "hidden",
       justifyContent: "flex-start",
@@ -273,15 +261,6 @@ function createStyles(c: ReturnType<typeof useAppColors>) {
     moveBadgeText: { color: c.subtext, fontSize: 11, fontWeight: "600" },
     moveEmoji: { fontSize: 32, textAlign: "center", marginTop: 2 },
     moveTitle: { color: c.text, fontWeight: "700", textAlign: "center" },
-    moveDesc: {
-      color: c.subtext,
-      textAlign: "center",
-      lineHeight: 18,
-      fontSize: 12,
-      minHeight: 54,
-      paddingHorizontal: 2,
-      flexShrink: 0,
-    },
     moveStart: { fontWeight: "700", marginTop: 4 },
   });
 }

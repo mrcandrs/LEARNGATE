@@ -354,11 +354,21 @@ export function ParentSettingsScreen() {
           <Text variant="bodySmall" style={styles.dangerZoneHint}>
             {t("parent.settings.dangerZoneHint")}
           </Text>
-          <DestructiveButton label={t("parent.settings.deleteAccount")} onPress={openDeleteAccountDialog} />
+          <DestructiveButton
+            label={t("parent.settings.deleteAccount")}
+            icon="delete-outline"
+            tone="critical"
+            onPress={openDeleteAccountDialog}
+          />
         </Card.Content>
       </Card>
 
-      <DestructiveButton label={t("common.logOut")} onPress={() => setConfirmVisible(true)} style={styles.logoutButton} />
+      <DestructiveButton
+        label={t("common.logOut")}
+        mode="outlined"
+        onPress={() => setConfirmVisible(true)}
+        style={styles.logoutButton}
+      />
       <Portal>
         <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)} style={{ backgroundColor: c.card }}>
           <Dialog.Title style={{ color: c.text }}>{t("common.logOut")}</Dialog.Title>
@@ -410,6 +420,8 @@ export function ParentSettingsScreen() {
             </Button>
             <DestructiveButton
               label={deleteBusy ? t("parent.settings.deletingAccount") : t("parent.settings.deleteAccount")}
+              icon="delete-outline"
+              tone="critical"
               style={styles.dialogLogout}
               loading={deleteBusy}
               disabled={!deleteConfirmationMatches || deleteBusy}
