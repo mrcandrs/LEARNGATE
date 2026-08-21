@@ -5,7 +5,6 @@ import type { ExerciseId } from "@/data/exercises";
 import { exerciseFrameMargins } from "@/services/exerciseFrameBounds";
 import {
   formQualityColor,
-  frameTintColor,
   type PoseFormQuality,
 } from "@/services/exercisePoseFormQuality";
 
@@ -23,7 +22,6 @@ export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
 }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const stroke = formQualityColor(quality === "none" ? "red" : quality);
-  const tint = frameTintColor(quality === "none" ? "red" : quality);
   const { marginX, marginY } = exerciseFrameMargins(exerciseId);
 
   const w = size.width;
@@ -46,7 +44,6 @@ export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
     >
       {w > 0 && h > 0 ? (
         <>
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: tint }]} />
           <View
             style={[
               styles.frame,

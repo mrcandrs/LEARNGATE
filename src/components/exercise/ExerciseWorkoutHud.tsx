@@ -2,33 +2,26 @@ import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { formQualityColor, type PoseFormQuality } from "@/services/exercisePoseFormQuality";
 import { useLocale } from "@/store/LocaleContext";
 
 type Props = {
   remaining: number;
   completed: number;
-  /** Kid-facing coaching line (same as the frame status). */
-  statusMessage: string;
-  quality: PoseFormQuality;
+  targetReps: number;
   onStop: () => void;
   done: boolean;
-  /** Optional tracking label (dev builds may include a version stamp). */
-  engineLabel?: string;
 };
 
-/** Compact floating HUD — keeps the camera viewport tall for leg exercises. */
+/** Compact floating HUD — remaining reps, progress bar, stop. */
 export const ExerciseWorkoutHud = memo(function ExerciseWorkoutHud({
   remaining,
   completed,
-  statusMessage,
-  quality,
+  targetReps,
   onStop,
   done,
-  engineLabel,
 }: Props) {
   const { t } = useLocale();
-  const statusColor = formQualityColor(quality === "none" ? "red" : quality);
+  const progress = targetReps > 0 ? Math.min(1, completed / targetReps) : 0;
 
   return (
     <View style={styles.row} pointerEvents="box-none">
@@ -37,11 +30,12 @@ export const ExerciseWorkoutHud = memo(function ExerciseWorkoutHud({
         <Text style={styles.repPillNum}>{String(remaining).padStart(2, "0")}</Text>
       </View>
       <View style={styles.centerPill}>
-        <Text style={styles.centerDone}>{t("child.exercise.doneCount", { count: completed })}</Text>
-        <Text style={[styles.centerStatus, { color: statusColor }]} numberOfLines={2}>
-          {statusMessage || t("child.exercise.getReady")}
+        <Text style={styles.progressLabel}>
+          {completed}/{targetReps}
         </Text>
-        {engineLabel ? <Text style={styles.engineLabel}>{engineLabel}</Text> : null}
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+        </View>
       </View>
       <Pressable
         onPress={onStop}
@@ -78,12 +72,27 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     borderRadius: 14,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: "center",
+    paddingVertical: 10,
+    justifyContent: "center",
+    gap: 6,
   },
-  centerDone: { color: "rgba(255,255,255,0.9)", fontSize: 12, fontWeight: "600" },
-  centerStatus: { fontSize: 14, fontWeight: "800", textAlign: "center" },
-  engineLabel: { color: "rgba(255,255,255,0.65)", fontSize: 9, fontWeight: "600", marginTop: 2 },
+  progressLabel: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  progressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#4CAF50",
+  },
   stopBtn: {
     flexDirection: "row",
     alignItems: "center",

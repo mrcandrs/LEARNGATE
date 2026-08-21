@@ -17,15 +17,13 @@ import { ExerciseMascotDemo } from "@/components/exercise/ExerciseMascotDemo";
 import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCamera";
 import { MASCOT_NAME } from "@/constants/mascot";
 import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
-import { ExercisePoseOverlay } from "@/components/exercise/ExercisePoseOverlay";
 import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
-import { ExerciseRepFlash } from "@/components/exercise/ExerciseRepFlash";
 import { childTabBarHiddenStyle, childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
 import { isFullBodyExercise } from "@/services/exerciseFrameBounds";
 import { supabase } from "@/services/supabase";
 import { useChildProfile } from "@/hooks/useChildProfile";
 import { Camera as VisionCamera } from "react-native-vision-camera";
-import { isStreamPoseAvailable, EXERCISE_AI_BUILD } from "@/services/exercisePoseNative";
+import { isStreamPoseAvailable } from "@/services/exercisePoseNative";
 import { ParentManageToast } from "@/components/parent/ParentManageToast";
 import { formatAppError } from "@/utils/errors";
 import { isLikelyOfflineError, OFFLINE_MSG } from "@/services/offlineMessages";
@@ -126,13 +124,10 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
   }, [targetReps]);
 
   const {
-    moveStatus,
-    detectionMode,
     isEmulator,
     useLegacyCamera,
     formQuality,
     formMessage,
-    poseOverlay,
     feedStreamPose,
   } = useExerciseRepDetector({
     enabled: cameraOn && cameraReady,
@@ -386,16 +381,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        {cameraReady && poseOverlay ? (
-          <ExercisePoseOverlay
-            landmarks={poseOverlay.landmarks}
-            contentWidth={poseOverlay.contentWidth}
-            contentHeight={poseOverlay.contentHeight}
-            quality={formQuality}
-            exerciseId={selectedId}
-          />
-        ) : null}
-
         {cameraReady ? (
           <ExerciseFrameGuide
             quality={formQuality}
@@ -424,26 +409,12 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
             <ExerciseWorkoutHud
               remaining={remaining}
               completed={completed}
-              statusMessage={formMessage || t("child.exercise.getReady")}
-              quality={formQuality}
+              targetReps={targetReps}
               onStop={stopWorkout}
               done={done}
-              engineLabel={
-                detectionMode === "stream"
-                  ? __DEV__
-                    ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
-                    : t("child.exercise.poseTracking")
-                  : detectionMode === "motion"
-                    ? t("child.exercise.motionMode")
-                    : __DEV__
-                      ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
-                      : t("child.exercise.poseTracking")
-              }
             />
           </View>
         ) : null}
-
-        <ExerciseRepFlash triggerKey={completed} label="+1" />
       </View>
     );
 
@@ -471,18 +442,22 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               <Text style={styles.repBigNum}>{String(remaining).padStart(2, "0")}</Text>
             </View>
             <View style={styles.repSideCompact}>
-              <Text style={{ color: c.subtext, fontSize: 13 }}>{t("child.exercise.completedCount", { count: completed })}</Text>
-              <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 18 }}>
-                {moveLabel}
+              <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
+                {completed}/{targetReps}
               </Text>
-              <Text style={{ color: c.subtext, fontSize: 11 }}>
-                {detectionMode === "stream"
-                  ? __DEV__
-                    ? `${t("child.exercise.poseTracking")} · ${EXERCISE_AI_BUILD}`
-                    : t("child.exercise.poseTracking")
-                  : detectionMode === "pose"
-                    ? t("child.exercise.poseTracking")
-                    : t("child.exercise.motionMode")}
+              <View style={styles.bottomProgressTrack}>
+                <View
+                  style={[
+                    styles.bottomProgressFill,
+                    {
+                      width: `${targetReps > 0 ? Math.round(Math.min(1, completed / targetReps) * 100) : 0}%`,
+                      backgroundColor: c.primary,
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 16 }}>
+                {moveLabel}
               </Text>
             </View>
           </View>
@@ -578,6 +553,7 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               label={startingCamera ? t("child.exercise.starting") : t("child.exercise.yourTurnOpenCamera")}
               onPress={() => void beginWorkout()}
               disabled={startingCamera}
+              labelStyle={{ fontWeight: "800", letterSpacing: 1.2 }}
             />
           )}
           <PrimaryButton label={t("child.exercise.watchAgain")} mode="outlined" onPress={startDemo} disabled={!demoFinished} />
@@ -714,7 +690,17 @@ function createStyles(c: ReturnType<typeof useAppColors>, insets: { top: number;
     },
     repBigLabel: { color: "rgba(255,255,255,0.9)", fontWeight: "600", fontSize: 12 },
     repBigNum: { color: "#FFFFFF", fontSize: 32, fontWeight: "900" },
-    repSideCompact: { flex: 1, gap: 2 },
+    repSideCompact: { flex: 1, gap: 6 },
+    bottomProgressTrack: {
+      height: 10,
+      borderRadius: 999,
+      backgroundColor: c.progressTrack,
+      overflow: "hidden",
+    },
+    bottomProgressFill: {
+      height: "100%",
+      borderRadius: 999,
+    },
     completedCard: {
       flex: 1,
       margin: 20,

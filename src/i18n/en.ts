@@ -289,7 +289,7 @@ export const en = {
       niceYourTurn: "Nice! Now it's your turn.",
       standInFrame: "Stand in the frame. Red means start the move. Green means finish it. You get +1 when the rep is complete.",
       watchAgain: "Watch again",
-      yourTurnOpenCamera: "Your turn — open camera",
+      yourTurnOpenCamera: "START",
       demonstrating: "{{name}} is demonstrating…",
       demo: {
         jacksStart: "Start — feet together, arms at your sides",

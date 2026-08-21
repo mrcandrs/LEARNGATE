@@ -34,7 +34,7 @@ export function evaluatePoseFormQuality(
   const id = exerciseId ?? "squats";
 
   if (moveStatus === "Rep!") {
-    return { quality: "green", message: liveHint?.startsWith("+1") ? liveHint : "Nice work!" };
+    return { quality: "green", message: "Nice work!" };
   }
   if (moveStatus === "Move!") {
     return { quality: "green", message: liveHint || GO_HINT[id] };
@@ -66,7 +66,6 @@ export function workoutStatusLine(
   const id = exerciseId ?? "squats";
 
   if (moveStatus === "Rep!") {
-    if (hint && hint.startsWith("+1")) return hint;
     return "Nice work!";
   }
   if (moveStatus === "Move!") {

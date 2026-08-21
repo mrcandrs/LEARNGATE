@@ -293,7 +293,7 @@ export const fil: EnCatalog = {
       niceYourTurn: "Ang galing! Ikaw naman ang susunod.",
       standInFrame: "Tumayo sa loob ng frame. Ibig sabihin ng pula ay simulan ang galaw. Ibig sabihin ng berde ay tapusin ito. Makakakuha ka ng +1 kapag natapos ang ulit.",
       watchAgain: "Panoorin ulit",
-      yourTurnOpenCamera: "Ikaw naman — buksan ang camera",
+      yourTurnOpenCamera: "START",
       demonstrating: "Ipinapakita ni {{name}}…",
       demo: {
         jacksStart: "Simula — magkadikit ang paa, nakababa ang mga braso",
