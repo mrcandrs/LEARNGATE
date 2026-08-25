@@ -18,6 +18,7 @@ import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCame
 import { MASCOT_NAME } from "@/constants/mascot";
 import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
 import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
+import { ExerciseGoalStar } from "@/components/exercise/ExerciseGoalStar";
 import { childTabBarHiddenStyle, childTabBarVisibleStyle } from "@/navigation/childTabBarStyle";
 import { isFullBodyExercise } from "@/services/exerciseFrameBounds";
 import { supabase } from "@/services/supabase";
@@ -410,8 +411,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               remaining={remaining}
               completed={completed}
               targetReps={targetReps}
-              onStop={stopWorkout}
-              done={done}
             />
           </View>
         ) : null}
@@ -445,16 +444,19 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               <Text style={{ color: c.subtext, fontSize: 12, fontWeight: "700" }}>
                 {completed}/{targetReps}
               </Text>
-              <View style={styles.bottomProgressTrack}>
-                <View
-                  style={[
-                    styles.bottomProgressFill,
-                    {
-                      width: `${targetReps > 0 ? Math.round(Math.min(1, completed / targetReps) * 100) : 0}%`,
-                      backgroundColor: c.primary,
-                    },
-                  ]}
-                />
+              <View style={styles.bottomProgressRow}>
+                <View style={styles.bottomProgressTrack}>
+                  <View
+                    style={[
+                      styles.bottomProgressFill,
+                      {
+                        width: `${targetReps > 0 ? Math.round(Math.min(1, completed / targetReps) * 100) : 0}%`,
+                        backgroundColor: c.primary,
+                      },
+                    ]}
+                  />
+                </View>
+                <ExerciseGoalStar reached={completed >= targetReps} size="md" />
               </View>
               <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 16 }}>
                 {moveLabel}
@@ -467,12 +469,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               {t("child.exercise.allRepsDone")}
             </Text>
           ) : null}
-
-          <View style={styles.btnRow}>
-            <View style={styles.flexBtn}>
-              <PrimaryButton label={t("child.exercise.stop")} mode="outlined" onPress={stopWorkout} disabled={done} />
-            </View>
-          </View>
 
           {isEmulator && __DEV__ ? (
             <PrimaryButton
@@ -691,7 +687,13 @@ function createStyles(c: ReturnType<typeof useAppColors>, insets: { top: number;
     repBigLabel: { color: "rgba(255,255,255,0.9)", fontWeight: "600", fontSize: 12 },
     repBigNum: { color: "#FFFFFF", fontSize: 32, fontWeight: "900" },
     repSideCompact: { flex: 1, gap: 6 },
+    bottomProgressRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
     bottomProgressTrack: {
+      flex: 1,
       height: 10,
       borderRadius: 999,
       backgroundColor: c.progressTrack,
