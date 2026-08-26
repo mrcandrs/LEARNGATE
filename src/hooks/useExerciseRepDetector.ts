@@ -14,6 +14,8 @@ import {
 } from "@/services/exercisePoseNative";
 import { streamPoseToLandmarks } from "@/services/exercisePoseLandmarks";
 import {
+  exercisePoseConfidence,
+  isPoseOrientationReady,
   normalizePoseLandmarks,
   resetPoseCoordOrientation,
   type FrameOrientation,
@@ -38,6 +40,8 @@ const CAMERA_WARMUP_MS = 500;
 const SQUAT_SKELETON_UI_MS = 16;
 /** Ignore duplicate onRep callbacks — keep short so fast jacks are not dropped. */
 const REP_UI_DEBOUNCE_MS = 150;
+/** Don't advance the rep state machine on unreliable key joints (cross-phone noise). */
+const MIN_REP_CONFIDENCE = 0.28;
 
 export type ExerciseDetectionMode = "stream" | "pose" | "motion";
 
@@ -153,7 +157,20 @@ export function useExerciseRepDetector({ enabled, exerciseId, cameraRef, onRep }
 
       // Landmarks stay in ML Kit / buffer space. Overlay mirrors X in math for selfie.
       const oriented = normalizePoseLandmarks(raw, frameWidth, frameHeight, orientation);
-      const normalized = oriented.landmarks;
+      // Smooth before detection — raw jitter on some phones was faking full reps.
+      const normalized = smootherRef.current.smooth(oriented.landmarks);
+
+      if (!isPoseOrientationReady()) {
+        lastLandmarksRef.current = normalized;
+        publishHud("Watching", "Stand in the frame", "red", "Stand in the frame");
+        return;
+      }
+
+      if (exercisePoseConfidence(normalized, exerciseId) < MIN_REP_CONFIDENCE) {
+        lastLandmarksRef.current = normalized;
+        publishHud("Watching", "Need more light", "red", "Need more light");
+        return;
+      }
 
       const status = poseDetectorRef.current?.feed(normalized) ?? "Watching";
       const hint = poseDetectorRef.current?.getHint() ?? null;

@@ -20,14 +20,25 @@ export type FrameOrientation =
 /**
  * Sticky upright decision.
  * Default flip=true for this VisionCamera+ML Kit path (unflipped draws upside-down).
- * Locked after a clear head+hips frame — never re-flips when you step close.
+ * Locked after several consistent head+torso frames (hips preferred, shoulders fallback).
  */
 let uprightDecided = false;
 let needYFlip = true;
+let uprightFlipVotes = 0;
+let uprightNoFlipVotes = 0;
+
+const UPRIGHT_VOTE_NEED = 6;
 
 export function resetPoseCoordOrientation() {
   uprightDecided = false;
   needYFlip = true;
+  uprightFlipVotes = 0;
+  uprightNoFlipVotes = 0;
+}
+
+/** True once Y orientation is locked — avoid counting while still guessing. */
+export function isPoseOrientationReady() {
+  return uprightDecided;
 }
 
 export function mlKitContentSize(
@@ -74,15 +85,28 @@ function pickVisible(
 function maybeDecideUpright(landmarks: PoseLandmark[]) {
   if (uprightDecided) return;
 
-  const nose = pickVisible(landmarks, 0, 0.4);
-  const ls = pickVisible(landmarks, 11, 0.4);
-  const rs = pickVisible(landmarks, 12, 0.4);
-  const lh = pickVisible(landmarks, 23, 0.4);
-  const rh = pickVisible(landmarks, 24, 0.4);
-  if (!nose || !lh || !rh) return;
-  if (!ls && !rs) return;
+  const nose = pickVisible(landmarks, 0, 0.35);
+  const ls = pickVisible(landmarks, 11, 0.35);
+  const rs = pickVisible(landmarks, 12, 0.35);
+  const lh = pickVisible(landmarks, 23, 0.35);
+  const rh = pickVisible(landmarks, 24, 0.35);
 
-  needYFlip = nose.y > (lh.y + rh.y) / 2;
+  // Hips are best; shoulders alone work when the kid is close / hips clipped.
+  const torsoY =
+    lh && rh ? (lh.y + rh.y) / 2 : ls && rs ? (ls.y + rs.y) / 2 : ls?.y ?? rs?.y ?? null;
+  if (!nose || torsoY == null) return;
+
+  if (nose.y > torsoY) uprightFlipVotes += 1;
+  else uprightNoFlipVotes += 1;
+
+  const total = uprightFlipVotes + uprightNoFlipVotes;
+  if (total < UPRIGHT_VOTE_NEED) {
+    // Provisional majority while collecting votes.
+    needYFlip = uprightFlipVotes >= uprightNoFlipVotes;
+    return;
+  }
+
+  needYFlip = uprightFlipVotes >= uprightNoFlipVotes;
   uprightDecided = true;
 }
 
@@ -106,6 +130,26 @@ export function averagePoseConfidence(landmarks: PoseLandmark[] | null): number 
     [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26].includes(lm.type),
   );
   const sample = core.length ? core : landmarks;
+  return sample.reduce((sum, lm) => sum + lm.inFrameLikelihood, 0) / sample.length;
+}
+
+/**
+ * Confidence for the joints that matter for this exercise.
+ * Full-body average was blocking squats when knees/ankles flickered on some phones.
+ */
+export function exercisePoseConfidence(
+  landmarks: PoseLandmark[] | null,
+  exerciseId: string,
+): number {
+  if (!landmarks?.length) return 0;
+  const types =
+    exerciseId === "squats"
+      ? [11, 12, 23, 24]
+      : exerciseId === "arm_stretching"
+        ? [11, 12, 13, 14, 15, 16]
+        : [11, 12, 13, 14];
+  const sample = landmarks.filter((lm) => types.includes(lm.type));
+  if (!sample.length) return averagePoseConfidence(landmarks);
   return sample.reduce((sum, lm) => sum + lm.inFrameLikelihood, 0) / sample.length;
 }
 

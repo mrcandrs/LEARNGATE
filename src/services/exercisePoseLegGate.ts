@@ -137,13 +137,16 @@ export function bothKneeAngles(landmarks: PoseLandmark[]): { left: number; right
  * Shoulder–hip–knee angle (works without ankles).
  * Smaller ≈ more bent (squat depth proxy).
  */
-export function bothThighAngles(landmarks: PoseLandmark[]): { left: number; right: number } | null {
-  const ls = pick(landmarks, LM.LEFT_SHOULDER);
-  const rs = pick(landmarks, LM.RIGHT_SHOULDER);
-  const lh = pick(landmarks, LM.LEFT_HIP);
-  const rh = pick(landmarks, LM.RIGHT_HIP);
-  const lk = pick(landmarks, LM.LEFT_KNEE);
-  const rk = pick(landmarks, LM.RIGHT_KNEE);
+export function bothThighAngles(
+  landmarks: PoseLandmark[],
+  min = MIN_VISIBILITY,
+): { left: number; right: number } | null {
+  const ls = pick(landmarks, LM.LEFT_SHOULDER, min);
+  const rs = pick(landmarks, LM.RIGHT_SHOULDER, min);
+  const lh = pick(landmarks, LM.LEFT_HIP, min);
+  const rh = pick(landmarks, LM.RIGHT_HIP, min);
+  const lk = pick(landmarks, LM.LEFT_KNEE, min);
+  const rk = pick(landmarks, LM.RIGHT_KNEE, min);
 
   const left = ls && lh && lk ? angleDeg(ls, lh, lk) : null;
   const right = rs && rh && rk ? angleDeg(rs, rh, rk) : null;

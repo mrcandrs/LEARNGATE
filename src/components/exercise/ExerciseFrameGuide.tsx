@@ -1,6 +1,5 @@
 import { memo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
 import type { ExerciseId } from "@/data/exercises";
 import { exerciseFrameMargins } from "@/services/exerciseFrameBounds";
 import {
@@ -10,14 +9,12 @@ import {
 
 type Props = {
   quality: PoseFormQuality;
-  message: string;
   exerciseId?: ExerciseId;
 };
 
-/** Border + one status line. Taller frame for full-body exercises. */
+/** Border guide only — no coaching text overlay. */
 export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
   quality,
-  message,
   exerciseId,
 }: Props) {
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -78,14 +75,6 @@ export const ExerciseFrameGuide = memo(function ExerciseFrameGuide({
               { left: insetX + frameW - 28, top: insetY + frameH - 28, borderColor: stroke },
             ]}
           />
-
-          {message ? (
-            <View style={[styles.statusBar, { borderColor: stroke }]}>
-              <Text style={[styles.statusText, { color: stroke }]} numberOfLines={2}>
-                {message}
-              </Text>
-            </View>
-          ) : null}
         </>
       ) : null}
     </View>
@@ -123,22 +112,5 @@ const styles = StyleSheet.create({
     borderLeftWidth: 0,
     borderTopWidth: 0,
     borderBottomRightRadius: 8,
-  },
-  statusBar: {
-    position: "absolute",
-    left: "5%",
-    right: "5%",
-    bottom: "4%",
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderRadius: 14,
-    borderWidth: 2,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  statusText: {
-    fontWeight: "800",
-    fontSize: 15,
-    textAlign: "center",
   },
 });

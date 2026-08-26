@@ -22,7 +22,7 @@ import {
 } from "@/services/exercisePoseLegGate";
 import { landmarksUseNormalizedCoords } from "@/services/exercisePoseCoordSpace";
 
-const REP_COOLDOWN_MS = 450;
+const REP_COOLDOWN_MS = 550;
 
 export type PoseDetectionHint =
   | null
@@ -88,12 +88,18 @@ export class PoseExerciseRepDetector {
 
   /** Squat hysteresis: standing ↔ bottom (no long time-lock — that felt laggy). */
   private hipEma = 0;
+  private thighEma = 0;
   private standHipY = 0;
   private bottomHipY = 0;
   private standLocked = false;
   private squatDown = false;
+  /** After +1, hips must return near standing before the next squat can arm. */
+  private squatNeedRest = false;
   /** +1 hips-down-in-frame, -1 if device Y is inverted. */
   private squatSign = 1;
+  /** Peak hip drop this rep — must go deep before a stand-up can score. */
+  private squatPeakDrop = 0;
+  private squatMinThigh = 180;
 
   /** Arm stretch: left pulse ×2 → right pulse ×2. Count at each reach peak. */
   private stretchStep = 0;
@@ -124,11 +130,15 @@ export class PoseExerciseRepDetector {
     this.jackPeakOpen = 0;
     this.jackNeedRest = false;
     this.hipEma = 0;
+    this.thighEma = 0;
     this.standHipY = 0;
     this.bottomHipY = 0;
     this.standLocked = false;
     this.squatDown = false;
+    this.squatNeedRest = false;
     this.squatSign = 1;
+    this.squatPeakDrop = 0;
+    this.squatMinThigh = 180;
     this.resetStretchCycle(true);
   }
 
@@ -179,11 +189,15 @@ export class PoseExerciseRepDetector {
     this.jackPeakOpen = 0;
     this.jackNeedRest = false;
     this.hipEma = 0;
+    this.thighEma = 0;
     this.standHipY = 0;
     this.bottomHipY = 0;
     this.standLocked = false;
     this.squatDown = false;
+    this.squatNeedRest = false;
     this.squatSign = 1;
+    this.squatPeakDrop = 0;
+    this.squatMinThigh = 180;
     // Keep stretchStep — brief gate loss shouldn't wipe a half-finished rep.
     this.stretchWristEma = 0;
     this.stretchPeakY = 0;
@@ -299,14 +313,14 @@ export class PoseExerciseRepDetector {
    * (stops near-camera noise from spamming +1).
    */
   private jacks(landmarks: PoseLandmark[]): MoveStatus {
-    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.08);
-    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.08);
+    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.15);
+    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.15);
     if (!ls || !rs) return this.ready("Show your shoulders");
 
-    const le = pick(landmarks, LM.LEFT_ELBOW, 0.04);
-    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.04);
-    const lw = pick(landmarks, LM.LEFT_WRIST, 0.04) ?? le;
-    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.04) ?? re;
+    const le = pick(landmarks, LM.LEFT_ELBOW, 0.1);
+    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.1);
+    const lw = pick(landmarks, LM.LEFT_WRIST, 0.1) ?? le;
+    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.1) ?? re;
     if (!lw || !rw) return this.ready("Show both arms");
 
     const shoulderY = avg(ls.y, rs.y);
@@ -329,16 +343,16 @@ export class PoseExerciseRepDetector {
     // Both arms must contribute (stops one-arm / jitter opens)
     const bothUp = Math.min(leftUp, rightUp);
     const avgUp = (leftUp + rightUp) * 0.5;
-    const heightScore = Math.max(0, Math.min(1, avgUp / 0.18));
-    const bothUpOk = bothUp > 0.06;
-    const widthScore = Math.max(0, Math.min(1, (spread / shoulderW - 1.05) / 0.55));
+    const heightScore = Math.max(0, Math.min(1, avgUp / 0.22));
+    const bothUpOk = bothUp > 0.12;
+    const widthScore = Math.max(0, Math.min(1, (spread / shoulderW - 1.15) / 0.55));
     const open = bothUpOk ? Math.max(heightScore, widthScore * 0.75) : heightScore * 0.5;
 
     this.jackOpenEma = open;
 
     // After a rep: arms must come down before another open counts
     if (this.jackNeedRest) {
-      if (open <= 0.14 && bothUp < 0.04) {
+      if (open <= 0.12 && bothUp < 0.03) {
         this.jackNeedRest = false;
         this.jackPeakOpen = 0;
         this.phase = "ready";
@@ -352,7 +366,7 @@ export class PoseExerciseRepDetector {
 
     if (this.phase !== "active") {
       // Need a clear open — both arms up and/or clearly wide
-      if (open >= 0.35 && bothUpOk) {
+      if (open >= 0.45 && bothUpOk) {
         this.jackPeakOpen = open;
         this.peakFrames = 1;
         return this.active();
@@ -364,16 +378,16 @@ export class PoseExerciseRepDetector {
     if (open > this.jackPeakOpen) this.jackPeakOpen = open;
 
     // Clear close: dropped a lot from peak AND fairly down, or fully down
-    const dropped = this.jackPeakOpen - open >= 0.2;
-    const downEnough = open <= 0.18;
-    const fullyDown = open <= 0.12 && bothUp < 0.03;
+    const dropped = this.jackPeakOpen - open >= 0.28;
+    const downEnough = open <= 0.14;
+    const fullyDown = open <= 0.1 && bothUp < 0.02;
 
     if ((dropped && downEnough) || fullyDown) {
       this.jackPeakOpen = 0;
       this.peakFrames = 0;
       this.jackNeedRest = true;
       this.jackOpenEma = Math.min(open, 0.1);
-      this.recordRep("+1 Jumping jack!", 350);
+      this.recordRep("+1 Jumping jack!", 500);
       return this.moveStatus;
     }
 
@@ -381,11 +395,9 @@ export class PoseExerciseRepDetector {
   }
 
   /**
-   * Squat with Schmitt-trigger hysteresis (Kids360-style):
-   *   standing → drop past DOWN threshold → green
-   *   bottom → rise under UP threshold → +1, back to standing
-   * Next rep needs a fresh full drop (bounce cannot re-count).
-   * Light EMA + 1-frame confirms keep it snappy.
+   * Squat: one full cycle = one rep.
+   *   standing → go down (arm) → reach bottom → stand up (+1) → rest → next
+   * Never scores on the way down alone (that was double-counting).
    */
   private squats(landmarks: PoseLandmark[]): MoveStatus {
     const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.08);
@@ -407,70 +419,101 @@ export class PoseExerciseRepDetector {
       ls && rs ? Math.max(distance(ls, rs), 1e-3) : Math.max(Math.abs(hpY - shY), 1e-3);
     const torso = Math.max(Math.abs(hpY - shY), 1e-3);
 
-    const thighs = bothThighAngles(landmarks);
+    const thighs = bothThighAngles(landmarks, 0.05);
     const thighAvg = thighs ? avg(thighs.left, thighs.right) : null;
-    const thighBent = thighAvg != null && thighAvg < 138;
-    const thighOpen = thighAvg == null || thighAvg > 150;
+    if (thighAvg != null) {
+      this.thighEma = this.thighEma === 0 ? thighAvg : 0.35 * this.thighEma + 0.65 * thighAvg;
+    }
 
-    // Light EMA — heavy smoothing was the main “lag” feel.
-    this.hipEma = this.hipEma === 0 ? hpY : 0.4 * this.hipEma + 0.6 * hpY;
+    this.hipEma = this.hipEma === 0 ? hpY : 0.25 * this.hipEma + 0.75 * hpY;
 
     const normalized = landmarksUseNormalizedCoords(landmarks);
     const downThresh = Math.max(
-      this.standTorso > 0 ? this.standTorso * 0.12 : torso * 0.12,
-      shoulderW * 0.2,
-      normalized ? 0.035 : 24,
+      this.standTorso > 0 ? this.standTorso * 0.1 : torso * 0.1,
+      shoulderW * 0.15,
+      normalized ? 0.028 : 18,
     );
-    // Must rise clearly above the noise band before the next squat can arm.
-    const upThresh = downThresh * 0.32;
+    // Rise must clear well below the arming band (Schmitt trigger).
+    const upThresh = downThresh * 0.35;
 
     if (!this.standLocked) {
       this.standSamples += 1;
       this.standHipY =
-        this.standSamples === 1 ? this.hipEma : 0.8 * this.standHipY + 0.2 * this.hipEma;
+        this.standSamples === 1 ? this.hipEma : 0.75 * this.standHipY + 0.25 * this.hipEma;
       this.standTorso =
-        this.standSamples === 1 ? torso : 0.8 * this.standTorso + 0.2 * torso;
-      if (this.standSamples < 5) return this.ready("Squat down");
+        this.standSamples === 1 ? torso : 0.75 * this.standTorso + 0.25 * torso;
+      if (this.standSamples < 3) return this.ready("Squat down");
       this.standLocked = true;
     }
 
-    const rawDrop = this.hipEma - this.standHipY; // + = down the frame
+    const rawDrop = this.hipEma - this.standHipY;
+    const thighBent = this.thighEma > 0 && this.thighEma < 140;
+    const thighOpen = this.thighEma <= 0 || this.thighEma > 150;
 
     if (!this.squatDown) {
-      // Adapt standing only when idle near baseline.
-      if (Math.abs(rawDrop) < upThresh && thighOpen) {
-        this.standHipY = 0.94 * this.standHipY + 0.06 * this.hipEma;
-        this.standTorso = 0.94 * this.standTorso + 0.06 * torso;
+      // After a scored rep, wait until nearly standing again.
+      if (this.squatNeedRest) {
+        if (Math.abs(rawDrop) < upThresh) {
+          this.squatNeedRest = false;
+          this.squatPeakDrop = 0;
+          this.squatMinThigh = 180;
+        } else {
+          this.phase = "ready";
+          this.moveStatus = "Watching";
+          this.hint = "Stand up";
+          return this.moveStatus;
+        }
       }
 
-      const downNormal = rawDrop > downThresh || (thighBent && rawDrop > downThresh * 0.5);
-      const downInverted = rawDrop < -downThresh || (thighBent && rawDrop < -downThresh * 0.5);
+      if (Math.abs(rawDrop) < upThresh && thighOpen) {
+        this.standHipY = 0.92 * this.standHipY + 0.08 * this.hipEma;
+        this.standTorso = 0.92 * this.standTorso + 0.08 * torso;
+      }
+
+      // Arm only on a clear descent (thigh assist needs meaningful hip travel).
+      const downNormal =
+        rawDrop > downThresh || (thighBent && rawDrop > downThresh * 0.55);
+      const downInverted =
+        rawDrop < -downThresh || (thighBent && rawDrop < -downThresh * 0.55);
 
       if (downNormal || downInverted) {
         this.squatDown = true;
         this.squatSign = downNormal ? 1 : -1;
         this.bottomHipY = this.hipEma;
+        this.squatPeakDrop = Math.abs(rawDrop);
+        this.squatMinThigh = this.thighEma > 0 ? this.thighEma : 180;
         return this.active();
       }
       return this.ready("Squat down");
     }
 
-    // In the hole — track deepest point along squat direction.
+    // In the hole — track deepest point; do not score yet.
     if (this.squatSign >= 0) {
       if (this.hipEma > this.bottomHipY) this.bottomHipY = this.hipEma;
     } else if (this.hipEma < this.bottomHipY) {
       this.bottomHipY = this.hipEma;
     }
 
-    const signedDrop = this.squatSign * (this.hipEma - this.standHipY);
     const depth = Math.abs(this.bottomHipY - this.standHipY);
-    // Hysteresis alone prevents bounce doubles — no thigh requirement on the way up.
-    const roseEnough = depth >= downThresh * 0.85 && signedDrop < upThresh;
+    if (depth > this.squatPeakDrop) this.squatPeakDrop = depth;
+    if (this.thighEma > 0 && this.thighEma < this.squatMinThigh) {
+      this.squatMinThigh = this.thighEma;
+    }
 
-    if (roseEnough) {
+    const signedDrop = this.squatSign * (this.hipEma - this.standHipY);
+    // Must have gone deep first, then risen near standing — never count mid-descent.
+    const reachedBottom =
+      this.squatPeakDrop >= downThresh * 0.85 ||
+      (this.squatPeakDrop >= downThresh * 0.6 && this.squatMinThigh < 135);
+    const roseEnough = signedDrop < upThresh;
+
+    if (reachedBottom && roseEnough) {
       this.standHipY = 0.75 * this.standHipY + 0.25 * this.hipEma;
       this.standTorso = 0.75 * this.standTorso + 0.25 * torso;
-      this.recordRep("+1 Squat!");
+      this.squatPeakDrop = 0;
+      this.squatMinThigh = 180;
+      this.squatNeedRest = true;
+      this.recordRep("+1 Squat!", 500);
       return this.moveStatus;
     }
 
@@ -480,16 +523,16 @@ export class PoseExerciseRepDetector {
   /**
    * Left ×2 then right ×2.
    *
-   * #1 counts as soon as the arm is overhead (no arms-down needed).
-   * Then a tiny bob (still overhead) re-arms, and reaching up again = #2.
+   * #1 counts after the arm is clearly held overhead (not a 1–2 frame flicker).
+   * Then a real bob (still overhead) re-arms, and reaching up again = #2.
    */
   private armStretching(landmarks: PoseLandmark[]): MoveStatus {
-    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.1);
-    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.1);
-    const le = pick(landmarks, LM.LEFT_ELBOW, 0.08);
-    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.08);
-    const lw = pick(landmarks, LM.LEFT_WRIST, 0.08) ?? le;
-    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.08) ?? re;
+    const ls = pick(landmarks, LM.LEFT_SHOULDER, 0.15);
+    const rs = pick(landmarks, LM.RIGHT_SHOULDER, 0.15);
+    const le = pick(landmarks, LM.LEFT_ELBOW, 0.1);
+    const re = pick(landmarks, LM.RIGHT_ELBOW, 0.1);
+    const lw = pick(landmarks, LM.LEFT_WRIST, 0.1) ?? le;
+    const rw = pick(landmarks, LM.RIGHT_WRIST, 0.1) ?? re;
     if (!ls || !rs) return this.ready("Show your shoulders");
     if (!lw || !rw) return this.ready("Show both arms");
 
@@ -510,20 +553,21 @@ export class PoseExerciseRepDetector {
 
     const shoulderY = avg(ls.y, rs.y);
     const shoulderW = Math.max(distance(ls, rs), 1e-3);
-    this.stretchWristEma = 0.35 * this.stretchWristEma + 0.65 * tipY;
+    this.stretchWristEma = 0.5 * this.stretchWristEma + 0.5 * tipY;
 
     const norm = landmarksUseNormalizedCoords(landmarks);
-    const bob = norm ? 0.012 : Math.max(shoulderW * 0.03, 8);
-    const overhead = this.stretchWristEma < shoulderY - (norm ? 0.03 : shoulderW * 0.04);
+    const bob = norm ? 0.04 : Math.max(shoulderW * 0.08, 12);
+    const overheadGap = norm ? 0.07 : shoulderW * 0.1;
+    const overhead = this.stretchWristEma < shoulderY - overheadGap;
 
     const otherOverhead =
-      otherTipY < shoulderY - (norm ? 0.03 : shoulderW * 0.04) &&
-      otherTipY < this.stretchWristEma - (norm ? 0.02 : shoulderW * 0.04);
+      otherTipY < shoulderY - overheadGap &&
+      otherTipY < this.stretchWristEma - (norm ? 0.03 : shoulderW * 0.06);
     if (otherOverhead && !overhead && this.stretchPhase === "ready") {
       return this.ready(needed === "left" ? "Use your left arm" : "Use your right arm");
     }
 
-    // Just scored: need a tiny ease from the peak (can stay well above shoulders)
+    // Just scored: need a clear ease from the peak (can stay well above shoulders)
     if (this.stretchPhase === "after_count") {
       if (this.stretchWristEma > this.stretchPeakY + bob) {
         this.stretchValleyY = this.stretchWristEma;
@@ -543,10 +587,10 @@ export class PoseExerciseRepDetector {
       }
     }
 
-    // ready: count as soon as arm is held overhead
+    // ready: hold overhead ~200–250ms so jitter cannot pulse-count
     if (overhead) {
       this.stretchHoldFrames += 1;
-      if (this.stretchHoldFrames >= 2) {
+      if (this.stretchHoldFrames >= 7) {
         return this.recordPulse();
       }
       this.phase = "active";

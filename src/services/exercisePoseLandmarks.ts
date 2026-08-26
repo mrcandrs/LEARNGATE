@@ -90,7 +90,8 @@ export function streamPoseToLandmarks(pose: StreamPose | null | undefined): Pose
       x: lm.x,
       y: lm.y,
       z: lm.z ?? 0,
-      inFrameLikelihood: lm.inFrameLikelihood ?? 0.9,
+      // Missing confidence used to default to 0.9 and let noisy joints count as “sure”.
+      inFrameLikelihood: lm.inFrameLikelihood ?? 0.35,
     });
   }
 

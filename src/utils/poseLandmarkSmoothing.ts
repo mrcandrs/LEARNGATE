@@ -3,16 +3,17 @@ import type { PoseLandmark } from "@mefitzgerald/expo-pose-detection";
 type SmoothPoint = { x: number; y: number };
 
 /**
- * Lightweight One Euro filter for skeleton overlay smoothness.
- * Rep detection uses raw landmarks; overlay uses smoothed positions.
+ * Lightweight One Euro filter — cuts landmark jitter before rep detection
+ * (and keeps any overlay drawing steadier on noisy cameras).
  */
 export class PoseLandmarkSmoother {
   private readonly state = new Map<number, { point: SmoothPoint; dx: number; dy: number }>();
   private lastTime = 0;
 
   constructor(
-    private readonly minCutoff = 0.7,
-    private readonly beta = 0.012,
+    /** Higher = less lag (still filters phone jitter via beta). */
+    private readonly minCutoff = 1.1,
+    private readonly beta = 0.03,
     private readonly dCutoff = 1.0,
   ) {}
 

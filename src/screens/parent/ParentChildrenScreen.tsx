@@ -234,14 +234,14 @@ export function ParentChildrenScreen() {
   const [exerciseTarget, setExerciseTarget] = useState<ChildRow | null>(null);
   const [exerciseId, setExerciseId] = useState<ExerciseId>("jumping_jacks");
   const [exerciseReps, setExerciseReps] = useState("10");
-  const [exercisePoints, setExercisePoints] = useState("20");
+  const [exercisePoints, setExercisePoints] = useState("10");
   const [assigning, setAssigning] = useState(false);
   const [learningTarget, setLearningTarget] = useState<ChildRow | null>(null);
   const [learningGameId, setLearningGameId] = useState<GameId>("alphabet");
   const [learningDifficulty, setLearningDifficulty] = useState<DifficultyTier>("medium");
   const [choreTarget, setChoreTarget] = useState<ChildRow | null>(null);
   const [choreTitle, setChoreTitle] = useState("");
-  const [chorePoints, setChorePoints] = useState("30");
+  const [chorePoints, setChorePoints] = useState("15");
   const [assigningLearning, setAssigningLearning] = useState(false);
   const [assigningChore, setAssigningChore] = useState(false);
   const [screenRule, setScreenRule] = useState<ScreenRule | null>(null);
@@ -928,7 +928,7 @@ export function ParentChildrenScreen() {
   const openAssignChore = (child: ChildRow) => {
     setChoreTarget(child);
     setChoreTitle("");
-    setChorePoints("30");
+    setChorePoints("15");
   };
 
   const assignChore = async () => {

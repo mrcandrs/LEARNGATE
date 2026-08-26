@@ -9,7 +9,7 @@ import {
   type PoseDetectionHint,
 } from "@/services/exercisePoseRepDetection";
 
-const MIN_CONFIDENCE = 0.2;
+const MIN_CONFIDENCE = 0.28;
 
 export type PoseFormQuality = "none" | "red" | "green";
 

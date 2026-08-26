@@ -15,7 +15,6 @@ import { getExerciseById, normalizeExerciseId } from "@/data/exercises";
 import { useExerciseRepDetector } from "@/hooks/useExerciseRepDetector";
 import { ExerciseMascotDemo } from "@/components/exercise/ExerciseMascotDemo";
 import { ExerciseWorkoutCamera } from "@/components/exercise/ExerciseWorkoutCamera";
-import { MASCOT_NAME } from "@/constants/mascot";
 import { ExerciseFrameGuide } from "@/components/exercise/ExerciseFrameGuide";
 import { ExerciseWorkoutHud } from "@/components/exercise/ExerciseWorkoutHud";
 import { ExerciseGoalStar } from "@/components/exercise/ExerciseGoalStar";
@@ -128,7 +127,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     isEmulator,
     useLegacyCamera,
     formQuality,
-    formMessage,
     feedStreamPose,
   } = useExerciseRepDetector({
     enabled: cameraOn && cameraReady,
@@ -318,8 +316,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
     }
   };
 
-  const moveLabel = formMessage || (cameraOn && cameraReady ? t("child.exercise.getReady") : t("child.exercise.starting"));
-
   if (!permission) {
     return (
       <View style={[styles.centered, { backgroundColor: c.background }]}>
@@ -385,7 +381,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         {cameraReady ? (
           <ExerciseFrameGuide
             quality={formQuality}
-            message={formMessage}
             exerciseId={selectedId}
           />
         ) : null}
@@ -458,9 +453,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
                 </View>
                 <ExerciseGoalStar reached={completed >= targetReps} size="md" />
               </View>
-              <Text style={{ color: formQuality === "green" ? c.primary : c.text, fontWeight: "800", fontSize: 16 }}>
-                {moveLabel}
-              </Text>
             </View>
           </View>
 
@@ -507,7 +499,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               <Pressable
                 style={[styles.stepBtn, { backgroundColor: c.primary }]}
                 onPress={() => setTargetReps((n) => Math.max(1, n - 1))}
-                disabled={!demoFinished}
               >
                 <Text style={styles.stepBtnText}>−</Text>
               </Pressable>
@@ -515,7 +506,6 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
               <Pressable
                 style={[styles.stepBtn, { backgroundColor: c.primary }]}
                 onPress={() => setTargetReps((n) => Math.min(50, n + 1))}
-                disabled={!demoFinished}
               >
                 <Text style={styles.stepBtnText}>+</Text>
               </Pressable>
@@ -542,17 +532,13 @@ export function ChildExerciseSessionScreen({ route, navigation }: Props) {
         )}
 
         <View style={[styles.controlCard, { backgroundColor: c.card }]}>
-          {!demoFinished ? (
-            <PrimaryButton label={t("child.exercise.demonstrating", { name: MASCOT_NAME })} disabled onPress={() => {}} />
-          ) : (
-            <PrimaryButton
-              label={startingCamera ? t("child.exercise.starting") : t("child.exercise.yourTurnOpenCamera")}
-              onPress={() => void beginWorkout()}
-              disabled={startingCamera}
-              labelStyle={{ fontWeight: "800", letterSpacing: 1.2 }}
-            />
-          )}
-          <PrimaryButton label={t("child.exercise.watchAgain")} mode="outlined" onPress={startDemo} disabled={!demoFinished} />
+          <PrimaryButton
+            label={startingCamera ? t("child.exercise.starting") : t("child.exercise.yourTurnOpenCamera")}
+            onPress={() => void beginWorkout()}
+            disabled={startingCamera}
+            labelStyle={{ fontWeight: "800", letterSpacing: 1.2 }}
+          />
+          <PrimaryButton label={t("child.exercise.watchAgain")} mode="outlined" onPress={startDemo} />
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
       </ScrollView>
